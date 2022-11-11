@@ -93,7 +93,7 @@ draw_graph(results)
 # getting prepositions
 word_lfs = extract_from_lexicon3.get_prep_lfs()
 phenom = extract_from_lexicon3.Phenomenon('Prepositions', word_lfs, '(PP/NP)', \
-                                     ['(PP/NP)', "(PP\NP)"])
+                                     ['(PP/NP)', "(PP\\NP)"])
 words = ['in','on','by','about']
 results = draw_lf_given_w(phenom,words,filenames)
 draw_graph(results)
@@ -110,8 +110,8 @@ draw_graph(results)
 phenom = extract_from_lexicon3.get_dax_phenom()
 word_lfs = [('daxed', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.v|dax&PAST($1,$0,$2)'),\
                 ('dax', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.v|dax($1,$0,$2)')]
-phenom = extract_from_lexicon3.Phenomenon('Daxed', word_lfs, '((S\NP)/NP)',\
-                          ['((S\NP)/NP)', "((S/NP)/NP)", "((S\NP)\NP)", "((S/NP)\NP)"],\
+phenom = extract_from_lexicon3.Phenomenon('Daxed', word_lfs, '((S\\NP)/NP)',\
+                          ['((S\\NP)/NP)', "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"],\
                           ['daxed','dax'])
 words = ['daxed','dax']
 results = {}

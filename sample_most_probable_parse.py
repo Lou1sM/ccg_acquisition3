@@ -30,31 +30,31 @@ def sample_most_probable_parse(sentence_charts,RuleSet,lexicon,output,sem_store)
 """
 
 
-def sample(entry,sentence_chart,RuleSet):
+def sample(entry, sentence_chart, RuleSet):
     """
     Tom's code. It is supposed to return the most likely parse after the inside_outside chart has
     been filled out.
     """
     children = []
     children.append((entry.word_score+entry.sem_score+\
-                         RuleSet.return_log_prob(entry.syn_key,entry.syn_key+'_LEX'),'LEX'))
+                         RuleSet.return_log_prob(entry.syn_key, entry.syn_key+'_LEX'), 'LEX'))
     for pair in entry.children:
         left_syn = pair[0][0]
         right_syn = pair[1][0]
         target = left_syn+'#####'+right_syn
-        children.append((RuleSet.return_log_prob(entry.syn_key,target) + \
+        children.append((RuleSet.return_log_prob(entry.syn_key, target) + \
                      sentence_chart[pair[0][3]-pair[0][2]][pair[0]].inside_score + \
-                     sentence_chart[pair[1][3]-pair[1][2]][pair[1]].inside_score,pair))
+                     sentence_chart[pair[1][3]-pair[1][2]][pair[1]].inside_score, pair))
     children.sort()
     children.reverse()
     if children[0][1] == 'LEX':
-        return [(entry.word_target,entry.syn_key,entry.sem_key)]
+        return [(entry.word_target, entry.syn_key, entry.sem_key)]
     else:
         pair = children[0][1]
         left_syn = pair[0][0]
         right_syn = pair[1][0]
         target = left_syn+'#####'+right_syn
-        pl = sample(sentence_chart[pair[0][3]-pair[0][2]][pair[0]],sentence_chart,RuleSet)
-        pr = sample(sentence_chart[pair[1][3]-pair[1][2]][pair[1]],sentence_chart,RuleSet)
+        pl = sample(sentence_chart[pair[0][3]-pair[0][2]][pair[0]], sentence_chart, RuleSet)
+        pr = sample(sentence_chart[pair[1][3]-pair[1][2]][pair[1]], sentence_chart, RuleSet)
         pl.extend(pr)
         return pl

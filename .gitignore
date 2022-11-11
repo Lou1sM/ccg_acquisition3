@@ -1,9 +1,4 @@
-.idea/*
+tags
+tmp/**/*
 *.pyc
-.idea/langacq.iml
-my_test/*
-my_test_31:3/*
-my_test_backup/*
-.DS_Store
-hagar1.sh
-
+my_test/**

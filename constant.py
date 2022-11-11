@@ -10,7 +10,7 @@ class constant(exp):
     def makeCompNameSet(self):
         self.names = [self.name]
 
-    def addCompName(self,n):
+    def addCompName(self, n):
         self.names.append(n)
         self.names.sort()
         self.name=""
@@ -26,13 +26,13 @@ class constant(exp):
         if self in expDict:
             c = expDict[self]
         else:
-            c = constant("placeholderC",self.numArgs,self.argTypes,self.posType)
+            c = constant("placeholderC", self.numArgs, self.argTypes, self.posType)
             c.makeCompNameSet()
             expDict[self] = c
         return c
 
     def copy(self):
-        c = constant(self.name,self.numArgs,self.argTypes,self.posType)
+        c = constant(self.name, self.numArgs, self.argTypes, self.posType)
         c.makeCompNameSet()
         c.linkedVar = self.linkedVar
         return c
@@ -45,7 +45,7 @@ class constant(exp):
     # def isEntity(self):
     #     return True
 
-    def equalsPlaceholder(self,other):
+    def equalsPlaceholder(self, other):
         if other.__class__ != constant:
             return False
         if other.name!=self.name and not \
@@ -54,20 +54,20 @@ class constant(exp):
             return False
         return True
 
-    def equals(self,other):
+    def equals(self, other):
         if other.__class__ != constant:
             return False
         if other.name!=self.name:
             return False
         return True
 
-    def addArg(self,arg):
-        print "error, trying to add arg to const"
+    def addArg(self, arg):
+        print("error, trying to add arg to const")
         error("error, trying to add arg to const")
 
-    def toStringUBL(self,top):
-        n = self.name.replace(":","#")
+    def toStringUBL(self, top):
+        n = self.name.replace(":", "#")
         return n+":e"
 
-    def toStringShell(self,top):
+    def toStringShell(self, top):
         return "placeholderC"

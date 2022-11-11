@@ -14,14 +14,14 @@ class conjunction(exp):
         self.isNull = False
         self.inout = None
 
-    def setType(self,name):
+    def setType(self, name):
         self.name = name
 
     def type(self):
         t = None
         for a in self.arguments:
             if t and t!=a.getReturnType():
-                print "bad type for conj, ",self.toString(True)," t was ",t.toString()," t now ",a.type().toString()
+                print("bad type for conj, ", self.toString(True), " t was ", t.toString(), " t now ", a.type().toString())
                 return None
             else: t = a.getReturnType()
             return t
@@ -64,8 +64,8 @@ class conjunction(exp):
             c.setArg(i, a2)
         return c
 
-    def addArg(self,arg):
-        if isinstance(arg,conjunction):
+    def addArg(self, arg):
+        if isinstance(arg, conjunction):
             for a in arg.arguments:
                 self.addArg(a)
                 a.remove_parent(arg)
@@ -76,24 +76,24 @@ class conjunction(exp):
 
         return True
 
-    def removeArg(self,arg):
+    def removeArg(self, arg):
         for i in range(len(self.arguments)):
             a = self.arguments[i]
             if a==arg:
                 self.arguments.pop(i)
                 return
 
-    def replace2(self,e1,e2):
+    def replace2(self, e1, e2):
         if e1==self:
             return e2
         newargset = []
         for a in self.arguments:
-            newargset.append(a.replace2(e1,e2))
+            newargset.append(a.replace2(e1, e2))
         for i, a in enumerate(newargset):
             self.setArg(i, a)
         return self
 
-    def setArg(self,position,argument):
+    def setArg(self, position, argument):
         self.arguments[position]=argument
 
     def checkIfVerb(self):
@@ -101,43 +101,43 @@ class conjunction(exp):
             if a.checkIfVerb(): return True
         return False
 
-    def hasArg(self,arg):
+    def hasArg(self, arg):
         for a in self.arguments:
             if a.equals(arg):
                 return True
-        print "fail on ",arg.toString(True)
+        print("fail on ", arg.toString(True))
         return False
 
-    def hasArgP(self,arg):
+    def hasArgP(self, arg):
         for a in self.arguments:
             if a.equalsPlaceholder(arg):
                 return True
-        print "failP on ",arg.toString(True),"  ",self.toString(True)
+        print("failP on ", arg.toString(True), "  ", self.toString(True))
         return False
 
-    def equalsPlaceholder(self,other):
+    def equalsPlaceholder(self, other):
         if other.__class__!=conjunction:
             return False
         if len(self.arguments)!=len(other.arguments):
-            print "conj fail1 ",len(self.arguments),len(other.arguments)," on ",self.toString(True)
+            print("conj fail1 ", len(self.arguments), len(other.arguments), " on ", self.toString(True))
             return False
         for a in self.arguments:
             if not other.hasArgP(a):
-                print "conj fail on ",self.toString(True)
-                print "comparing to ",other.toString(True)
+                print("conj fail on ", self.toString(True))
+                print("comparing to ", other.toString(True))
                 return False
         return True
 
-    def equals(self,other):
+    def equals(self, other):
         if other.__class__!=conjunction:
             return False
         if len(self.arguments)!=len(other.arguments):
-            print "conj fail1 ",len(self.arguments),len(other.arguments)," on ",self.toString(True)
+            print("conj fail1 ", len(self.arguments), len(other.arguments), " on ", self.toString(True))
             return False
         for a in self.arguments:
             if not other.hasArg(a):
-                print "conj fail on ",self.toString(True)
-                print "comparing to ",other.toString(True)
+                print("conj fail on ", self.toString(True))
+                print("comparing to ", other.toString(True))
                 return False
         return True
 
@@ -148,7 +148,7 @@ class conjunction(exp):
             subexps.extend(a.allExtractableSubExps())
         return subexps
 
-    def toString(self,top):
+    def toString(self, top):
         s="and("
         for i in range(len(self.arguments)):
             s=s+self.arguments[i].toString(False)
@@ -161,7 +161,7 @@ class conjunction(exp):
             # self.clearNames()
         return s
 
-    def toStringShell(self,top):
+    def toStringShell(self, top):
         s="and("
         for i in range(len(self.arguments)):
             s=s+self.arguments[i].toStringShell(False)
@@ -174,7 +174,7 @@ class conjunction(exp):
             # self.clearNames()
         return s
 
-    def toStringUBL(self,top):
+    def toStringUBL(self, top):
         s="(and "
         for i in range(len(self.arguments)):
             s = s + self.arguments[i].toStringUBL(False)

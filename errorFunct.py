@@ -16,7 +16,7 @@ f = error_flag()
 
 
 def error(string):
-    print "ERROR " + string
+    print("ERROR " + string)
     f.set_flag()
 
 

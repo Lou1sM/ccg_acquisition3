@@ -2,12 +2,12 @@ from exp import *
 # from eventMarker import *
 
 class neg(exp):
-    def __init__(self,arg,numArgs):
+    def __init__(self, arg, numArgs):
         self.name="not"
         self.numArgs=numArgs
         self.nounMod = False
         if numArgs == 2:
-            self.arguments=[arg,eventMarker()]
+            self.arguments=[arg, eventMarker()]
         else:
             self.arguments=[arg]
             # self.nounMod = arg.isNounMod()
@@ -53,7 +53,7 @@ class neg(exp):
         n.linkedVar = self.linkedVar
         return n
 
-    def toStringShell(self,top):
+    def toStringShell(self, top):
         s="not"
         #if self.checkIfVerb():
             ##self.getEvent().setName("e"+str(exp.eventNum))
@@ -62,7 +62,7 @@ class neg(exp):
         #print "tring for ",self.name
         if len(self.arguments)>0: s=s+"("
         for a in self.arguments:
-            if isinstance(a,exp): s=s+str(a.toStringShell(False))
+            if isinstance(a, exp): s=s+str(a.toStringShell(False))
             if self.arguments.index(a)<self.numArgs-1: s=s+","
         if len(self.arguments)>0: s=s+")"
         #if self.event:
@@ -74,8 +74,8 @@ class neg(exp):
         #print "returning "+s
         return s
 
-    def setEvent(self,event):
-        self.setArg(1,event)
+    def setEvent(self, event):
+        self.setArg(1, event)
 
     def checkIfVerb(self):
         return self.arguments[0].checkIfVerb()
@@ -95,10 +95,10 @@ class neg(exp):
     def type(self):
         return semType.tType()
 
-    def equalsPlaceholder(self,other):
+    def equalsPlaceholder(self, other):
         if other.__class__!=neg: return False
         return other.arguments[0].equalsPlaceholder(self.arguments[0])
 
-    def equals(self,other):
+    def equals(self, other):
         if other.__class__!=neg: return False
         return other.arguments[0].equals(self.arguments[0])

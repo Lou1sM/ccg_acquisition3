@@ -1330,3 +1330,6 @@ Sent : Adam 's doggie ?
 Sent : the baby doggie is a puppy .
 Sent : how many tummies do you have ?
 Sent : which one is Mr Walter ?
+Sent : your busy little horse ?
+Sent : what kind of syrup ?
+Sent : I don 't have no many babies .

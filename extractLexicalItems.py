@@ -25,7 +25,7 @@ def levenshtein_distance(word1, word2):
     if len(word2) == 0:
         return len(word1)
 
-    previous_row = range(len(word2) + 1)
+    previous_row = list(range(len(word2) + 1))
     for i, c1 in enumerate(word1):
         current_row = [i + 1]
         for j, c2 in enumerate(word2):
@@ -71,7 +71,7 @@ for i in range(1, 56):
 
 for d, f in  zip([adjDict, detDict, nounDict, prepDict, verbDict], [adjFile, detFile, nounFile, prepFile, verbFile]):
 # for d, f in [(nounDict, nounFile)]:
-    for w, lf in d.items():
+    for w, lf in list(d.items()):
         f.write(w + " " + lf + "\n")
 
 

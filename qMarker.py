@@ -2,7 +2,7 @@ from exp import *
 # from eventMarker import *
 
 class qMarker(exp):
-    def __init__(self,rep):
+    def __init__(self, rep):
         #print "making Q for ",rep.toString(True)
         # second arg is event
         self.linkedVar = None
@@ -22,13 +22,13 @@ class qMarker(exp):
         self.doubleQuant = False
         self.nounMod = False
 
-    def setEvent(self,event):
-        self.setArg(1,event)
+    def setEvent(self, event):
+        self.setArg(1, event)
 
     def isQ(self):
         return True
 
-    def toString(self,top):
+    def toString(self, top):
         # s = "Q("+self.arguments[0].toString(False)+","+self.arguments[1].toString(False)+")"
         s = "Q("+self.arguments[0].toStringUBL(False)+")"
         if top:
@@ -38,7 +38,7 @@ class qMarker(exp):
             # self.clearNames()
         return s
 
-    def toStringShell(self,top):
+    def toStringShell(self, top):
         # s = "Q("+self.arguments[0].toStringShell(False)+","+self.arguments[1].toStringShell(False)+")"
         s = "Q("+self.arguments[0].toStringUBL(False)+")"
         if top:
@@ -48,7 +48,7 @@ class qMarker(exp):
             # self.clearNames()
         return s
 
-    def toStringUBL(self,top):
+    def toStringUBL(self, top):
         # s = "(Q:t "+self.arguments[0].toStringUBL(False)+" "+self.arguments[1].toStringUBL(False)+")"
         s = "(Q:t "+self.arguments[0].toStringUBL(False)+")"
         if top:
@@ -88,13 +88,13 @@ class qMarker(exp):
         # q.setEvent(self.arguments[1].copyNoVar())
         return q
 
-    def equals(self,other):
+    def equals(self, other):
         if other.__class__ != qMarker or \
         not other.arguments[0].equals(self.arguments[0]):
             return False
         return True
 
-    def equalsPlaceholder(self,other):
+    def equalsPlaceholder(self, other):
         if other.__class__ != qMarker or \
         not other.arguments[0].equalsPlaceholder(self.arguments[0]):
             return False

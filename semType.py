@@ -14,7 +14,7 @@ class eType:
 		return False
 	def isEvent(self):
 		return False
-	def equals(self,e):
+	def equals(self, e):
 		if e.isE(): return True
 		return False
 	def atomic(self):
@@ -33,7 +33,7 @@ class tType:
 		return True
 	def isEvent(self):
 		return False
-	def equals(self,e):
+	def equals(self, e):
 		if e.isT(): return True
 		return False
 	def atomic(self):
@@ -52,7 +52,7 @@ class eventType:
 		return False
 	def isEvent(self):
 		return True
-	def equals(self,e):
+	def equals(self, e):
 		if e.isEvent(): return True
 		return False
 	def atomic(self):
@@ -65,7 +65,7 @@ class semType:
 	e = eType()
 	t = tType()
 	event = eventType()
-	def __init__(self,argType,functType):
+	def __init__(self, argType, functType):
 		#eType = "e"
 		#tType = "t"		
 		self.argType = argType
@@ -77,7 +77,7 @@ class semType:
 		elif typestring=="r": return semType.event
 		# elif typestring=="ev": return semType.event
 		elif typestring[0]!="<":
-			print "type error ",typestring
+			print("type error ", typestring)
 			error('tye error')
 		typestring = typestring[1:-1]
 		leftbrack = 0		
@@ -89,7 +89,7 @@ class semType:
 			i+=1
 		argstring = typestring[:i]
 		functstring = typestring[i+1:]
-		t = semType(semType.makeType(argstring),semType.makeType(functstring))
+		t = semType(semType.makeType(argstring), semType.makeType(functstring))
 		return t
 	def getArity(self):
 		if self.atomic(): return 1
@@ -113,7 +113,7 @@ class semType:
 		return self.functType
 	def getArg(self):
 		return self.argType
-	def equals(self,e):
+	def equals(self, e):
 		#print "comparing ",self.toString(),
 		#print " to ",e.toString()
 		if e.isE() or e.isT() or e.isEvent(): return False

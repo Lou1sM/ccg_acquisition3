@@ -78,10 +78,10 @@ if __name__ == '__main__':
     words = options.words.split(':')
 
     word_lfs = extract_from_lexicon3.get_transitive_lfs()
-    phenom = extract_from_lexicon3.Phenomenon('Transitives', word_lfs, '((S\NP)/NP)', \
-                                              ["((S\NP)/NP)", "((S/NP)/NP)", "((S\NP)\NP)", "((S/NP)\NP)"], \
+    phenom = extract_from_lexicon3.Phenomenon('Transitives', word_lfs, '((S\\NP)/NP)', \
+                                              ["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], \
                                               two_LFs=True, \
-                                              flipped_target_syn="((S/NP)\NP)", \
+                                              flipped_target_syn="((S/NP)\\NP)", \
                                               target_shells=[
                                                   'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.placeholderP($0,$1,$2)', \
                                                   'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.placeholderP($1,$0,$2)'])

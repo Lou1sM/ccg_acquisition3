@@ -136,13 +136,13 @@ def doTrans(probdir,ax1,numreps,marker):
     ovs = []
     
     # ((S/NP)/NP) [0, 1, 2] vso
-    # ((S/NP)\NP) [0, 1, 2] svo
-    # ((S\NP)/NP) [0, 1, 2] ovs
-    # ((S\NP)\NP) [0, 1, 2] sov
+    # ((S/NP)\\NP) [0, 1, 2] svo
+    # ((S\\NP)/NP) [0, 1, 2] ovs
+    # ((S\\NP)\\NP) [0, 1, 2] sov
     # ((S/NP)/NP) [1, 0, 2] vos
-    # ((S/NP)\NP) [1, 0, 2] ovs
-    # ((S\NP)/NP) [1, 0, 2] svo
-    # ((S\NP)\NP) [1, 0, 2] osv
+    # ((S/NP)\\NP) [1, 0, 2] ovs
+    # ((S\\NP)/NP) [1, 0, 2] svo
+    # ((S\\NP)\\NP) [1, 0, 2] osv
     
     verborders = ["vso", "svo","ovs", "sov","vos", "ovs","svo", "osv" ]
     tvcats = ["","","","","","","",""] # fix

@@ -8,7 +8,7 @@
 ## want ONE function to check parses (deal with search problem)
 ## MAKE INTO SEPARATE FILES
 
-import cPickle
+import pickle
 import sys
 import verb_repo
 from optparse import OptionParser
@@ -33,8 +33,8 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                 min_lex_dump=0, max_lex_dump=1000000, dump_lexicons=False,
                 dump_interval=100, dump_out='lexicon_dump', f_out_additional=None, truncate_complex_exps=True,
                 verb_repository=None, dump_verb_repo=False, analyze_lexicons=False, genoutfile=None):
-    print "testout = ", test_out
-    print "put in sent coutn = ", sentence_count
+    print("testout = ", test_out)
+    print("put in sent coutn = ", sentence_count)
     datasize = 10000
     lexicon.set_learning_rates(datasize)
     # wordstocheck = []
@@ -157,15 +157,15 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                 try:
                     sem, _ = expFunctions.makeExpWithArgs(semstring, {})
                 except (AttributeError, IndexError):
-                    print >> output, "LF could not be parsed\nSent : " + sentence
-                    print >> output, "Sem: " + semstring + "\n\n"
+                    print("LF could not be parsed\nSent : " + sentence, file=output)
+                    print("Sem: " + semstring + "\n\n", file=output)
                     continue
                 if not sem:
-                    raise (StandardError("could not make exp"))
+                    raise Exception
                 reject = (sentence.count(" ") > max_sentence_length) or \
                          (len(sem.allExtractableSubExps()) > 9 and truncate_complex_exps)
                 if reject:
-                    print "rejecting: example too long ", sent_line + sem_line
+                    print("rejecting: example too long ", sent_line + sem_line)
                     continue
 
                 ########################
@@ -201,16 +201,16 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                 try:
                     chart = build_chart(topCatList, words, RuleSet, lexicon, catStore, sem_store, oneWord)
                 except (AttributeError, IndexError):
-                    print >> failed_out, "Sent : " + sentence
+                    print("Sent : " + sentence, file=failed_out)
                     continue
-                print "got chart"
+                print("got chart")
 
                 ####################################
                 # Run inside-outside calculations
                 ####################################
                 # if chart is not None:
                 i_o_oneChart(chart, sem_store, lexicon, RuleSet, True, 0.0, sentence_count)
-                print "done io"
+                print("done io")
                 sentence_count += 1
 
                 ####################################
@@ -241,11 +241,11 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                     generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store,
                                        oneWord, genoutfile, sentence_count)
 
-                print "done with sent\n\n"
+                print("done with sent\n\n")
                 if sentence_count == train_limit:
                     return sentence_count
 
-        print "returning sentence count ", sentence_count
+        print("returning sentence count ", sentence_count)
     return sentence_count
 
 def get_top_cat(sem):
@@ -262,38 +262,38 @@ def get_top_cat(sem):
 
 def print_sent_info(sentence, output, sentence_count, lexicon, topCatList):
     if topCatList:
-        print "sentence is ", sentence
-        print '\ngot training pair'
-        print "Sent : " + sentence
-    print >> output, "Sent : " + sentence
-    print >> output, "update weight = ", lexicon.get_learning_rate(sentence_count)
-    print >> output, sentence_count
+        print("sentence is ", sentence)
+        print('\ngot training pair')
+        print("Sent : " + sentence)
+    print("Sent : " + sentence, file=output)
+    print("update weight = ", lexicon.get_learning_rate(sentence_count), file=output)
+    print(sentence_count, file=output)
     if topCatList:
         for topCat in topCatList:
-            print "Cat : " + topCat.toString()
-            print >> output, "Cat : " + topCat.toString()
+            print("Cat : " + topCat.toString())
+            print("Cat : " + topCat.toString(), file=output)
     else:
-        print "couldn't determine syntactic category"
-        print >> output, "couldn't determine syntactic category"
+        print("couldn't determine syntactic category")
+        print("couldn't determine syntactic category", file=output)
 
 def test_during_training(test_out, sem, words, sem_store, RuleSet, lexicon, sentence_count):
-    print >> test_out, "\n****************\n", words
+    print("\n****************\n", words, file=test_out)
     (retsem, top_parse, topcat) = parse(words, sem_store, RuleSet, lexicon, sentence_count, test_out)
-    print >> test_out, "\n", words
+    print("\n", words, file=test_out)
     if retsem and sem and retsem.equals(sem):
-        print >> test_out, "CORRECT\n" + retsem.toString(True) + "\n" + topcat.toString()
+        print("CORRECT\n" + retsem.toString(True) + "\n" + topcat.toString(), file=test_out)
     elif not retsem:
-        print >> test_out, "NO PARSE"
+        print("NO PARSE", file=test_out)
     else:
-        print >> test_out, "WRONG"
-        print >> test_out, retsem.toString(True) + "\n" + topcat.toString()
-        print >> test_out, sem.toString(True)
+        print("WRONG", file=test_out)
+        print(retsem.toString(True) + "\n" + topcat.toString(), file=test_out)
+        print(sem.toString(True), file=test_out)
 
-        print >> test_out, 'top parse:'
-        print >> test_out, top_parse
-        print >> test_out, "\n"
+        print('top parse:', file=test_out)
+        print(top_parse, file=test_out)
+        print("\n", file=test_out)
         if sem and retsem.equalsPlaceholder(sem):
-            print >> test_out, "CORRECTPlaceholder\n" + retsem.toString(True) + "\n" + topcat.toString()
+            print("CORRECTPlaceholder\n" + retsem.toString(True) + "\n" + topcat.toString(), file=test_out)
 
 def pickle_lexicon(max_lex_dump, sentence_count, min_lex_dump, dump_out, sem_store, lexicon, RuleSet):
     if max_lex_dump >= sentence_count >= min_lex_dump:
@@ -301,7 +301,7 @@ def pickle_lexicon(max_lex_dump, sentence_count, min_lex_dump, dump_out, sem_sto
        # sentence_count % dump_interval == 0:
         f_lexicon = open(dump_out + '_' + str(sentence_count), 'wb')
         to_pickle_obj = (lexicon, sentence_count, sem_store, RuleSet)
-        cPickle.dump(to_pickle_obj, f_lexicon, cPickle.HIGHEST_PROTOCOL)
+        pickle.dump(to_pickle_obj, f_lexicon, pickle.HIGHEST_PROTOCOL)
         f_lexicon.close()
 
 def analyze_lexicon(dump_out, sentence_count, lexicon, sem_store, RuleSet):
@@ -311,40 +311,40 @@ def analyze_lexicon(dump_out, sentence_count, lexicon, sem_store, RuleSet):
 
 def save_verb_repo(dump_out, sentence_count, verb_repository):
     f_repo = open(dump_out + '_' + str(sentence_count) + '.verb_repo', 'wb')
-    cPickle.dump(verb_repository, f_repo, cPickle.HIGHEST_PROTOCOL)
+    pickle.dump(verb_repository, f_repo, pickle.HIGHEST_PROTOCOL)
     f_repo.close()
 
 def watch_selected_rules(lexicon, sem_store, RuleSet, sentence_count, sentence):
     # added 14/8/2014 for debugging purposes
-    target_syn_keys = ["((S\NP)/NP)", "((S/NP)/NP)", "((S\NP)\NP)", "((S/NP)\NP)"]
+    target_syn_keys = ["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"]
     syn_distribution = extract_from_lexicon3.get_synt_distribution(target_syn_keys, \
                                                                    lexicon, sem_store, RuleSet,
                                                                    sentence_count)
-    print('WATCH' + '\t' + sentence)
-    for k, v in syn_distribution.items():
-        print('WATCH' + '\t' + str(sentence_count) + '\t' + str(k) + '\t' + str(v))
+    print(('WATCH' + '\t' + sentence))
+    for k, v in list(syn_distribution.items()):
+        print(('WATCH' + '\t' + str(sentence_count) + '\t' + str(k) + '\t' + str(v)))
 
 def print_top_parse(chart, RuleSet, output, f_out_additional):
-    print "getting topparses"
+    print("getting topparses")
     topparses = []
     for entry in chart[len(chart)]:
         top = chart[len(chart)][entry]
         topparses.append((top.inside_score, top))
 
     top_parse = sample(sorted(topparses)[-1][1], chart, RuleSet)
-    print >> output, 'top parse:'
-    print >> output, top_parse
-    print >> output, top.inside_score
-    print >> output, "\n"
+    print('top parse:', file=output)
+    print(top_parse, file=output)
+    print(top.inside_score, file=output)
+    print("\n", file=output)
 
     if f_out_additional:
-        print >> f_out_additional, '\ntop parse:'
-        print >> f_out_additional, top_parse
-        print >> f_out_additional, top.inside_score
-        print >> f_out_additional, "\n"
+        print('\ntop parse:', file=f_out_additional)
+        print(top_parse, file=f_out_additional)
+        print(top.inside_score, file=f_out_additional)
+        print("\n", file=f_out_additional)
 
 def print_cat_probs(cats_to_check, lexicon, sem_store, RuleSet):
-    print "outputting cat probs"
+    print("outputting cat probs")
     # this samples the probabilities of each of the syn cat for a given type
     for c in cats_to_check:
         posType = c[0]
@@ -366,7 +366,7 @@ def generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store, oneWor
         else:
             sc = synCat.allSynCats(gensem.type())[0]
         genCat = cat.cat(sc, gensem)
-        print "gonna generate sentence ", gensent
+        print("gonna generate sentence ", gensent)
         generateSent(lexicon, RuleSet, genCat, catStore, sem_store, oneWord, gensent, genoutfile,
                      sentence_count, sentnum)
         sentnum += 1
@@ -398,8 +398,8 @@ def test(test_file, sem_store, RuleSet, Current_Lex, test_out, sentence_count):
             try:
                 sem = expFunctions.makeExpWithArgs(line[5:].strip().rstrip(), {})[0]
             except IndexError:
-                print >> errors_out, sentence
-                print >> errors_out, line
+                print(sentence, file=errors_out)
+                print(line, file=errors_out)
                 continue
                 #sem = expFunctions.makeExpWithArgs(line[5:].strip().rstrip(), {})[0]
             if not sem.isQ() and sentence[-1] in [".", "?"]:
@@ -408,7 +408,7 @@ def test(test_file, sem_store, RuleSet, Current_Lex, test_out, sentence_count):
                 sem = None
                 sentence = None
                 continue
-            print >> test_out, sentence
+            print(sentence, file=test_out)
             retsem = None
             top_parse = None
             try:
@@ -416,21 +416,21 @@ def test(test_file, sem_store, RuleSet, Current_Lex, test_out, sentence_count):
             except (AttributeError, IndexError):
                 pass
             if retsem and sem and retsem.equals(sem):
-                print >> test_out, "CORRECT\n" + retsem.toString(True) + "\n" + topcat.toString()
+                print("CORRECT\n" + retsem.toString(True) + "\n" + topcat.toString(), file=test_out)
 
             elif not retsem:
-                print >> test_out, "NO PARSE"
+                print("NO PARSE", file=test_out)
                 continue
             else:
-                print >> test_out, "WRONG"
-                print >> test_out, retsem.toString(True) + "\n" + topcat.toString()
-                print >> test_out, sem.toString(True)
+                print("WRONG", file=test_out)
+                print(retsem.toString(True) + "\n" + topcat.toString(), file=test_out)
+                print(sem.toString(True), file=test_out)
                 if sem and retsem.equalsPlaceholder(sem):
-                    print >> test_out, "CORRECTPlaceholder\n" + retsem.toString(True) + "\n" + topcat.toString()
+                    print("CORRECTPlaceholder\n" + retsem.toString(True) + "\n" + topcat.toString(), file=test_out)
 
-            print >> test_out, 'top parse:'
-            print >> test_out, top_parse
-            print >> test_out, "\n"
+            print('top parse:', file=test_out)
+            print(top_parse, file=test_out)
+            print("\n", file=test_out)
 
 
 ###########################################
@@ -439,7 +439,7 @@ def test(test_file, sem_store, RuleSet, Current_Lex, test_out, sentence_count):
 ###########################################
 
 def main(argv, options):
-    print argv
+    print(argv)
     build_or_check = argv[1]
     if len(argv) > 2:
         To = argv[2]
@@ -449,7 +449,7 @@ def main(argv, options):
         k = argv[3]
     else:
         k = None
-    print "build or check is ", build_or_check
+    print("build or check is ", build_or_check)
 
     if build_or_check == "i_n":  # train on months 1..i, test on the n-th
         exp.exp.allowTypeRaise = False
@@ -461,7 +461,7 @@ def main(argv, options):
         numreps = 1
         if len(argv) > 3:
             numreps = int(argv[3])
-            print('Number of possible LFs in training:' + str(numreps))
+            print(('Number of possible LFs in training:' + str(numreps)))
         if len(argv) > 4:
             extra = argv[4]
         else:
@@ -504,7 +504,7 @@ def main(argv, options):
 
         if options.continued:
             dump_file = open(options.continued, "rb")
-            model_dict = cPickle.load(dump_file)
+            model_dict = pickle.load(dump_file)
             sem_store = model_dict["sem_store"]
             RuleSet = model_dict["RuleSet"]
             Current_Lex = model_dict["Current_Lex"]
@@ -554,7 +554,7 @@ def main(argv, options):
             output = open(outfile, "w")
 
             sentence_count = train_rules(sem_store, RuleSet, Current_Lex, oneWord, inputpairs,
-                                         cats_to_check, output, None, False , sentence_count,
+                                         cats_to_check, output, None, False, sentence_count,
                                          min_lex_dump=options.min_lex_dump,
                                          max_lex_dump=options.max_lex_dump,
                                          dump_lexicons=options.dump_lexicons,
@@ -564,12 +564,12 @@ def main(argv, options):
                                          dump_verb_repo=options.dump_verb_repo,
                                          analyze_lexicons=options.analyze_lexicons)
 
-            print "returned sentence count = ", sentence_count
+            print("returned sentence count = ", sentence_count)
 
             dotest = options.dotest
             if dotest:
                 test_out = open(testoutfile, "w")
-                print >> test_out, "trained on up to ", input_file, " testing on ", test_file
+                print("trained on up to ", input_file, " testing on ", test_file, file=test_out)
                 test_file = open(test_file, "r")
                 test(test_file, sem_store, RuleSet, Current_Lex, test_out, sentence_count)
                 test_out.close()
@@ -577,27 +577,27 @@ def main(argv, options):
                 pickle_prefix = "_".join(options.test_parses.split("_")[-3:-1]) + "_"+str(i)
 
                 f = open(pickle_prefix+"_sem_store", "wb")
-                cPickle.dump(sem_store, f, protocol=cPickle.HIGHEST_PROTOCOL)
+                pickle.dump(sem_store, f, protocol=pickle.HIGHEST_PROTOCOL)
                 f.close()
                 print("\n\n\n**************************\nPICKLED sem_store\n**************************\n")
                 f2 = open(pickle_prefix + "_RuleSet", "wb")
-                cPickle.dump(RuleSet, f2, protocol=cPickle.HIGHEST_PROTOCOL)
+                pickle.dump(RuleSet, f2, protocol=pickle.HIGHEST_PROTOCOL)
                 f2.close()
                 print("\n\n\n**************************\nPICKLED RuleSet\n**************************\n")
                 f3 = open(pickle_prefix + "_Current_Lex", "wb")
-                cPickle.dump(Current_Lex, f3, protocol=cPickle.HIGHEST_PROTOCOL)
+                pickle.dump(Current_Lex, f3, protocol=pickle.HIGHEST_PROTOCOL)
                 f3.close()
                 print("\n\n\n**************************\nPICKLED Current_Lex\n**************************\n")
                 f4 = open(pickle_prefix + "_cats_to_check", "wb")
-                cPickle.dump(cats_to_check, f4, protocol=cPickle.HIGHEST_PROTOCOL)
+                pickle.dump(cats_to_check, f4, protocol=pickle.HIGHEST_PROTOCOL)
                 f4.close()
                 print("\n\n\n**************************\nPICKLED cats_to_check\n**************************\n")
                 f5 = open(pickle_prefix + "_sentence_count", "wb")
-                cPickle.dump(sentence_count, f5, protocol=cPickle.HIGHEST_PROTOCOL)
+                pickle.dump(sentence_count, f5, protocol=pickle.HIGHEST_PROTOCOL)
                 f5.close()
                 print("\n\n\n**************************\nPICKLED sentence count\n**************************\n")
                 f6 = open(pickle_prefix + "_session_no", "wb")
-                cPickle.dump(i, f6, protocol=cPickle.HIGHEST_PROTOCOL)
+                pickle.dump(i, f6, protocol=pickle.HIGHEST_PROTOCOL)
                 f6.close()
                 print("\n\n\n**************************\nPICKLED session no\n**************************\n")
 
@@ -617,7 +617,7 @@ def main(argv, options):
                 # f = open(pickle_file, "wb")
                 # cPickle.dump(dict_to_pickle, f)
                 # f.close()
-        print "at end, lexicon size is ", len(Current_Lex.lex)
+        print("at end, lexicon size is ", len(Current_Lex.lex))
 
 
 def cmd_line_parser():

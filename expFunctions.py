@@ -22,22 +22,22 @@ def makeExp(predString, expString, expDict):
     numArgs = len(args)
 
     if numArgs == 0:
-        e = constant(nameNoIndex,numArgs,argTypes,pos)
+        e = constant(nameNoIndex, numArgs, argTypes, pos)
         e.makeCompNameSet()
-    elif numArgs in [2,3]:
+    elif numArgs in [2, 3]:
         is_quant = isQuant(args)
         if pos in ['conj', 'coord']:
             e = conjunction()
             e.setType(name)
         elif is_quant:
-            e = predicate(nameNoIndex,numArgs,argTypes,pos,bindVar=True,args=args)
+            e = predicate(nameNoIndex, numArgs, argTypes, pos, bindVar=True, args=args)
         else:
-            e = predicate(nameNoIndex,numArgs,argTypes,pos,args=args)
+            e = predicate(nameNoIndex, numArgs, argTypes, pos, args=args)
     else:
-        e = predicate(nameNoIndex,numArgs,argTypes,pos,args=args)
+        e = predicate(nameNoIndex, numArgs, argTypes, pos, args=args)
 
     for i, arg in enumerate(args):
-        e.setArg(i,arg)
+        e.setArg(i, arg)
     e.setString()
 
     expDict[predString] = [e, getCoveredString(expString, expStringRemaining)]
@@ -66,7 +66,7 @@ def isQuant(args):
         return False
 
 def makeExpWithArgs(expString, expDict):
-    print "making ",expString
+    print("making ", expString)
     is_lambda = expString[:6]=="lambda"
     arguments_present = -1<expString.find("(")<expString.find(")")
     no_commas = expString.find(",")==-1
@@ -79,7 +79,7 @@ def makeExpWithArgs(expString, expDict):
     else:
         e, expStringRemaining = makeVarOrConst(expString, expDict)
 
-    return e,expStringRemaining
+    return e, expStringRemaining
 
 def makeLambda(expString, expDict):
     vname = expString[7:expString.find("_{")]
@@ -92,15 +92,15 @@ def makeLambda(expString, expDict):
     expDict[vname] = v
     v.name = vname
     expString = expString[expString.find("}.")+2:]
-    (f,expStringRemaining) = makeExpWithArgs(expString, expDict)
+    (f, expStringRemaining) = makeExpWithArgs(expString, expDict)
     e = lambdaExp()
     e.setFunct(f)
     e.setVar(v)
     e.setString()
-    return e,expStringRemaining
+    return e, expStringRemaining
 
 def makeComplexExpression(expString, expDict):
-    predstring, expString = expString.split("(",1)
+    predstring, expString = expString.split("(", 1)
     if predstring in ["and", "and_comp", "not", "Q"]:
         e, expStringRemaining = makeLogExp(predstring, expString, expDict)
     elif predstring[0]=="$":
@@ -108,14 +108,14 @@ def makeComplexExpression(expString, expDict):
     else:
         e, expStringRemaining = makeExp(predstring, expString, expDict)
     if e is None:
-        print "none e for |" + predstring + "|"
-    return e,expStringRemaining
+        print("none e for |" + predstring + "|")
+    return e, expStringRemaining
 
 def makeVarOrConst(expString, expDict):
     if expString.__contains__(",") and expString.__contains__(")"):
-        constend = min(expString.find(","),expString.find(")"))
+        constend = min(expString.find(","), expString.find(")"))
     else:
-        constend = max(expString.find(","),expString.find(")"))
+        constend = max(expString.find(","), expString.find(")"))
     if constend == -1:
         constend = len(expString)
     conststring = expString[:constend]
@@ -123,7 +123,7 @@ def makeVarOrConst(expString, expDict):
         e, expStringRemaining = makeVars(conststring, expString[constend:], expDict, parse_args=False)
     else:
         e, expStringRemaining = makeExp(conststring, "", expDict)
-    return e,expStringRemaining
+    return e, expStringRemaining
 
 def extractArguments(expString, expDict):
     finished = False if expString else True
@@ -134,7 +134,7 @@ def extractArguments(expString, expDict):
     while not finished:
         if numBrack==0:
             finished = True
-        elif expString[i] in [",",")"] and numBrack==1:
+        elif expString[i] in [",", ")"] and numBrack==1:
             if i>j:
                 a, _ = makeExpWithArgs(expString[j:i], expDict)
                 if not a:
@@ -150,7 +150,7 @@ def extractArguments(expString, expDict):
 
 
 def makeVars(predstring,expString,vardict,parse_args=True):
-    if not vardict.has_key(predstring):
+    if predstring not in vardict:
         if "_{" in predstring:
             vname = predstring[:predstring.find("_{")]
             tstring = predstring[predstring.find("_{")+2:predstring.find("}")]
@@ -173,13 +173,13 @@ def makeVars(predstring,expString,vardict,parse_args=True):
     return e, expString
 
 
-def makeLogExp(predstring,expString,vardict):
+def makeLogExp(predstring, expString, vardict):
     e = None
     if predstring=="and" or predstring=="and_comp":
         e = conjunction()
         args, expString = extractArguments(expString, vardict)
         for i, arg in enumerate(args):
-            e.setArg(i,arg)
+            e.setArg(i, arg)
         e.setString()
 
     elif predstring=="not":
@@ -187,7 +187,7 @@ def makeLogExp(predstring,expString,vardict):
         while expString[0]!=")":
             if expString[0]==",":
                 expString = expString[1:]
-            a, expString = makeExpWithArgs(expString,vardict)
+            a, expString = makeExpWithArgs(expString, vardict)
             negargs.append(a)
         else:
             e = neg(negargs[0], len(negargs))
@@ -201,7 +201,7 @@ def makeLogExp(predstring,expString,vardict):
         while expString[0]!=")":
             if expString[0]==",":
                 expString = expString[1:]
-            a, expString = makeExpWithArgs(expString,vardict)
+            a, expString = makeExpWithArgs(expString, vardict)
             qargs.append(a)
         if len(qargs)!=1:
             error(str(len(qargs))+"args for Q")
@@ -209,7 +209,7 @@ def makeLogExp(predstring,expString,vardict):
             e = qMarker(qargs[0])
         expString = expString[1:]
 
-    return e,expString
+    return e, expString
 
 
 #IDA: generic expression parsing code; use if simplification of the old code doesn't work out

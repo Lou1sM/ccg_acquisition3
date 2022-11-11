@@ -12,7 +12,7 @@ class predicate(exp):
         self.name = name
         self.numArgs = numArgs
         if numArgs!=len(argTypes):
-            print "error, not right number of args"
+            print("error, not right number of args")
         self.argTypes = argTypes
         self.arguments = []
         self.parents = []
@@ -47,12 +47,12 @@ class predicate(exp):
 
     def setArgHelper(self, position, argument):
         self.arguments.pop(position)
-        self.arguments.insert(position,argument)
-        if isinstance(argument,exp):
+        self.arguments.insert(position, argument)
+        if isinstance(argument, exp):
             argument.add_parent(self)
             self.argSet = True
 
-    def setArg(self,position,argument):
+    def setArg(self, position, argument):
         if not self.bindVar:
             self.setArgHelper(position, argument)
         else:
@@ -104,16 +104,16 @@ class predicate(exp):
         if self in expDict:
             e = expDict[self]
         elif self.bindVar and len(args) > 1:
-            e = predicate("placeholderP",self.numArgs,self.argTypes,self.posType,
+            e = predicate("placeholderP", self.numArgs, self.argTypes, self.posType,
                           bindVar=self.bindVar, returnType=self.returnType)
         elif self.bindVar:
-            e = predicate("placeholderP",self.numArgs,self.argTypes,self.posType,
-                          bindVar=self.bindVar,varIsConst=self.varIsConst, returnType=self.returnType)
+            e = predicate("placeholderP", self.numArgs, self.argTypes, self.posType,
+                          bindVar=self.bindVar, varIsConst=self.varIsConst, returnType=self.returnType)
         else:
-            e = predicate("placeholderP",self.numArgs,self.argTypes,self.posType, returnType=self.returnType)
+            e = predicate("placeholderP", self.numArgs, self.argTypes, self.posType, returnType=self.returnType)
         i=0
         for a in args:
-            e.setArg(i,a)
+            e.setArg(i, a)
             i+=1
         expDict[self] = e
         return e
@@ -123,22 +123,22 @@ class predicate(exp):
             args = []
             for a in self.arguments:
                 args.append(a.copy())
-            e = predicate(self.name,self.numArgs,self.argTypes,self.posType, returnType=self.returnType)
+            e = predicate(self.name, self.numArgs, self.argTypes, self.posType, returnType=self.returnType)
             e.linkedVar = self.linkedVar
             for i, a in enumerate(args):
-                e.setArg(i,a)
+                e.setArg(i, a)
         else:
             if not self.varIsConst:
                 newvar = variable(None)
                 self.arguments[0].setVarCopy(newvar)
-                e = predicate(self.name,self.numArgs,self.argTypes,self.posType,bindVar=True, returnType=self.returnType)
+                e = predicate(self.name, self.numArgs, self.argTypes, self.posType, bindVar=True, returnType=self.returnType)
             else:
                 newvar = self.arguments[0].copy()
-                e = predicate(self.name,self.numArgs,self.argTypes,self.posType,bindVar=True,varIsConst=self.varIsConst, returnType=self.returnType)
+                e = predicate(self.name, self.numArgs, self.argTypes, self.posType, bindVar=True, varIsConst=self.varIsConst, returnType=self.returnType)
             args = [newvar]
             args.extend([a.copy() for a in self.arguments[1:]])
             for i, a in enumerate(args):
-                e.setArg(i,a)
+                e.setArg(i, a)
             e.linkedVar = self.linkedVar
         return e
 
@@ -147,22 +147,22 @@ class predicate(exp):
             args = []
             for a in self.arguments:
                 args.append(a.copyNoVar())
-            e = predicate(self.name,self.numArgs,self.argTypes,self.posType,returnType=self.returnType)
+            e = predicate(self.name, self.numArgs, self.argTypes, self.posType, returnType=self.returnType)
             e.linkedVar = self.linkedVar
             i=0
             for a in args:
-                e.setArg(i,a)
+                e.setArg(i, a)
                 i+=1
         else:
             if self.varIsConst:
                 args = [a.copyNoVar() for a in self.arguments]
-                e = predicate(self.name,self.numArgs,self.argTypes,self.posType,bindVar=True,varIsConst=self.varIsConst, returnType=self.returnType)
+                e = predicate(self.name, self.numArgs, self.argTypes, self.posType, bindVar=True, varIsConst=self.varIsConst, returnType=self.returnType)
             else:
                 args = [self.arguments[0]]
                 args.extend([a.copyNoVar() for a in self.arguments[1:]])
-                e = predicate(self.name,self.numArgs,self.argTypes,self.posType,bindVar=True, returnType=self.returnType)
+                e = predicate(self.name, self.numArgs, self.argTypes, self.posType, bindVar=True, returnType=self.returnType)
             for i, a in enumerate(args):
-                e.setArg(i,a)
+                e.setArg(i, a)
             e.linkedVar = self.linkedVar
         return e
 
@@ -184,7 +184,7 @@ class predicate(exp):
         return self.returnType
         # return semType.tType()
 
-    def equalsPlaceholder(self,other):
+    def equalsPlaceholder(self, other):
         if other.__class__ != predicate or \
         (other.name!=self.name and not (("placeholderP" in self.name) or ("placeholderP" in other.name))) or \
         len(other.arguments)!=len(self.arguments):
@@ -194,7 +194,7 @@ class predicate(exp):
                 return False
         return True
 
-    def equals(self,other):
+    def equals(self, other):
         if other.__class__ != predicate or \
         other.name!=self.name or \
         len(other.arguments)!=len(self.arguments):
@@ -209,11 +209,11 @@ class predicate(exp):
                 return False
         return True
 
-    def toString(self,top):
+    def toString(self, top):
         s=self.name
         if len(self.arguments)>0: s=s+"("
         for a in self.arguments:
-            if isinstance(a,exp): s=s+str(a.toString(False))
+            if isinstance(a, exp): s=s+str(a.toString(False))
             if self.arguments.index(a)<self.numArgs-1: s=s+","
         if len(self.arguments)>0: s=s+")"
         if top:
@@ -222,11 +222,11 @@ class predicate(exp):
             exp.emptyNum = 0
         return s
 
-    def toStringShell(self,top):
+    def toStringShell(self, top):
         s="placeholderP"
         if len(self.arguments)>0: s=s+"("
         for a in self.arguments:
-            if isinstance(a,exp): s=s+str(a.toStringShell(False))
+            if isinstance(a, exp): s=s+str(a.toStringShell(False))
             if self.arguments.index(a)<self.numArgs-1: s=s+","
         if len(self.arguments)>0: s=s+")"
         if top:
@@ -235,11 +235,11 @@ class predicate(exp):
             exp.emptyNum = 0
         return s
 
-    def toStringUBL(self,top):
+    def toStringUBL(self, top):
         s=self.name
         if len(self.arguments)>0: s="("+s+str(len(self.arguments))+":t "
         for a in self.arguments:
-            if isinstance(a,exp): s=s+str(a.toStringUBL(False))
+            if isinstance(a, exp): s=s+str(a.toStringUBL(False))
             if self.arguments.index(a)<self.numArgs-1: s=s+" "
         if len(self.arguments)>0: s=s+")"
         if top:

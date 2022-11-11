@@ -20,8 +20,8 @@ noQ = False
 
 def train_rules(sem_store, RuleSet, lexicon, inputpairs, output,
                 test_out=None, dotest=False, sentence_count=0, truncate_complex_exps=True):
-    print "testout = ", test_out
-    print "put in sent coutn = ", sentence_count
+    print("testout = ", test_out)
+    print("put in sent coutn = ", sentence_count)
     if not sentence_count:
         sentence_count = 0
     datasize = 10000
@@ -40,7 +40,7 @@ def train_rules(sem_store, RuleSet, lexicon, inputpairs, output,
             if line[:5] == "Sent:":
                 sentence = line[6:].strip().rstrip()
                 if sentence.count(" ") > sentence_limit:
-                    print "rejecting ", line
+                    print("rejecting ", line)
                     sentence = None
                     continue
                 topCatList = []
@@ -50,9 +50,9 @@ def train_rules(sem_store, RuleSet, lexicon, inputpairs, output,
                 sem, expString = expFunctions.makeExpWithArgs(semstring, {})
                 subexpressions = sem.allExtractableSubExps()
                 if len(subexpressions) > 9 and truncate_complex_exps:
-                    print "rejecting ", sem.toString(True)
+                    print("rejecting ", sem.toString(True))
                     for e in subexpressions:
-                        print e.toString(True)
+                        print(e.toString(True))
                     sem, expString = None, ""
                     sentence = None
                     continue
@@ -84,7 +84,7 @@ def train_rules(sem_store, RuleSet, lexicon, inputpairs, output,
                     if not isQ and words[-1] in ["?", "."]:
                         words = words[:-1]
                     else:
-                        print "Is Q"
+                        print("Is Q")
                     if len(words) == 0:
                         words = None
                         sentence = None
@@ -92,20 +92,20 @@ def train_rules(sem_store, RuleSet, lexicon, inputpairs, output,
                         sc = None
                         continue
 
-                    print "sentence is ", sentence
+                    print("sentence is ", sentence)
                     topCat = cat.cat(sc, sem)
                     topCatList.append(topCat)
 
             if sentence and line[:11] == "example_end":
                 if sc:
-                    print '\ngot training pair'
-                    print "Sent : " + sentence
-                    print >> output, "Sent : " + sentence
-                    print >> output, "update weight = ", lexicon.get_learning_rate(sentence_count)
-                    print >> output, sentence_count
+                    print('\ngot training pair')
+                    print("Sent : " + sentence)
+                    print("Sent : " + sentence, file=output)
+                    print("update weight = ", lexicon.get_learning_rate(sentence_count), file=output)
+                    print(sentence_count, file=output)
                     for topCat in topCatList:
-                        print "Cat : " + topCat.toString()
-                        print >> output, "Cat : " + topCat.toString()
+                        print("Cat : " + topCat.toString())
+                        print("Cat : " + topCat.toString(), file=output)
 
                     # if len(words) > 8 or (noQ and "?" in sentence):
                     #     sentence = []
@@ -115,7 +115,7 @@ def train_rules(sem_store, RuleSet, lexicon, inputpairs, output,
                     sentence_count += 1
                     num_reps += len(sem.allExtractableSubExps())
 
-    print "returning sentence count ", sentence_count
+    print("returning sentence count ", sentence_count)
     return sentence_count, num_reps
 
 ###########################################
@@ -124,9 +124,9 @@ def train_rules(sem_store, RuleSet, lexicon, inputpairs, output,
 ###########################################
 
 def main(argv, opts):
-    print argv
+    print(argv)
     build_or_check = argv[1]
-    print "build or check is ", build_or_check
+    print("build or check is ", build_or_check)
 
     if build_or_check == "i_n":  # train on months 1..i, test on the n-th
         exp.allowTypeRaise = False
@@ -158,11 +158,11 @@ def main(argv, opts):
         sentence_count, num_reps_for_section = train_rules(sem_store, RuleSet, Current_Lex, inputpairs,
                                                            output, None, False, sentence_count)
 
-        print "XXX returned sentence count = ", sentence_count
-        print "XXX prev sentence count = ", prev_sentence_count
-        print "XXX num of sub-reps per section = ", num_reps_for_section
-        print "XXX avg num of sub-reps per section = ", 1.0 * num_reps_for_section / (
-            sentence_count - prev_sentence_count)
+        print("XXX returned sentence count = ", sentence_count)
+        print("XXX prev sentence count = ", prev_sentence_count)
+        print("XXX num of sub-reps per section = ", num_reps_for_section)
+        print("XXX avg num of sub-reps per section = ", 1.0 * num_reps_for_section / (
+            sentence_count - prev_sentence_count))
         prev_sentence_count = sentence_count
 
 

@@ -130,10 +130,10 @@ if __name__ == '__main__':
 
     if options.phenom_type == 'trans':
         word_lfs = extract_from_lexicon3.get_transitive_lfs()
-        phenom = extract_from_lexicon3.Phenomenon('Transitives', word_lfs, '((S\NP)/NP)', \
-                                                  ["((S\NP)/NP)", "((S/NP)/NP)", "((S\NP)\NP)", "((S/NP)\NP)"], \
+        phenom = extract_from_lexicon3.Phenomenon('Transitives', word_lfs, '((S\\NP)/NP)', \
+                                                  ["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], \
                                                   two_LFs=True, \
-                                                  flipped_target_syn="((S/NP)\NP)", \
+                                                  flipped_target_syn="((S/NP)\\NP)", \
                                                   target_shells=[
                                                       'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.placeholderP($0,$1,$2)', \
                                                       'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.placeholderP($1,$0,$2)'])
@@ -141,8 +141,8 @@ if __name__ == '__main__':
         phenom = extract_from_lexicon3.get_dax_phenom()
         word_lfs = [('daxed', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.v|dax&PAST($1,$0,$2)'), \
                     ('dax', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.v|dax($1,$0,$2)')]
-        phenom = extract_from_lexicon3.Phenomenon('Daxed', word_lfs, '((S\NP)/NP)', \
-                                                  ['((S\NP)/NP)', "((S/NP)/NP)", "((S\NP)\NP)", "((S/NP)\NP)"], \
+        phenom = extract_from_lexicon3.Phenomenon('Daxed', word_lfs, '((S\\NP)/NP)', \
+                                                  ['((S\\NP)/NP)', "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], \
                                                   ['daxed', 'dax'])
         words = ['daxed', 'dax']
     elif options.phenom_type == 'det':
@@ -165,11 +165,11 @@ if __name__ == '__main__':
     elif options.phenom_type == 'prep':
         word_lfs = extract_from_lexicon3.get_prep_lfs()
         phenom = extract_from_lexicon3.Phenomenon('Prepositions', word_lfs, '(PP/NP)', \
-                                                  ['(PP/NP)', "(PP\NP)"], sem_type='(PP|NP)')
+                                                  ['(PP/NP)', "(PP\\NP)"], sem_type='(PP|NP)')
     elif options.phenom_type == 'prep_dax':
         word_lfs = [('ax', "lambda $0_{e}.lambda $1_{ev}.prep|ax($0,$1)")]
         phenom = extract_from_lexicon3.Phenomenon('Ax Prepositions', word_lfs, '(PP/NP)', \
-                                                  ['(PP/NP)', "(PP\NP)"], sem_type='(PP|NP)')
+                                                  ['(PP/NP)', "(PP\\NP)"], sem_type='(PP|NP)')
         words = ['ax']
     else:
         sys.stderr.write('Error: phenom type not supported\n')

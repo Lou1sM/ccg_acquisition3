@@ -28,16 +28,16 @@ class SemStore:
 
     def check(self, sem_key):
         if not isinstance(sem_key, str):
-            raise (StandardError('key isnt string'))
+            raise Exception
 
-        if not self.store.has_key(sem_key):
+        if sem_key not in self.store:
             return False
         else:
             return True
 
     def get_log_prior(self, sem_key):
         if not self.check(sem_key):
-            print "not got ", sem_key
+            print("not got ", sem_key)
             sem = expFunctions.makeExpWithArgs(sem_key, {})
             # OMRI ADDED THE NEXT TWO LINES
             if isinstance(sem, tuple):
@@ -48,11 +48,11 @@ class SemStore:
 
     def add(self, sem):
         self.store[sem.toString(True)] = sem
-        if not self.store.has_key(sem.toStringShell(True)):
+        if sem.toStringShell(True) not in self.store:
             self.store[sem.toStringShell(True)] = sem.makeShell({})
 
     def get(self, sem_key):
-        if self.store.has_key(sem_key):
+        if sem_key in self.store:
             return self.store[sem_key]
         else:
             return None
@@ -183,14 +183,14 @@ def expand_chart(entry, chart, catStore, sem_store, RuleSet, lexicon, oneWord, c
 
                 # sem_store
 
-                if not chart[d - entry.p].has_key((l_syn, l_sem, entry.p, d)):
+                if (l_syn, l_sem, entry.p, d) not in chart[d - entry.p]:
                     cl = chart_entry(l_cat, entry.p, d, entry.sentence)
                     chart[d - entry.p][(l_syn, l_sem, entry.p, d)] = cl
                     # print "added entry ",(l_syn,l_sem,entry.p,d)
                     expand_chart(cl, chart, catStore, sem_store, RuleSet, lexicon, oneWord, correct_index)
                 # else: print "already there"
                 chart[d - entry.p][(l_syn, l_sem, entry.p, d)].add_parent(entry, 'l')
-                if not chart[entry.q - d].has_key((r_syn, r_sem, d, entry.q)):
+                if (r_syn, r_sem, d, entry.q) not in chart[entry.q - d]:
                     cr = chart_entry(r_cat, d, entry.q, entry.sentence)
                     chart[entry.q - d][(r_syn, r_sem, d, entry.q)] = cr
                     # print "added entry ",(r_syn,r_sem,d,entry.q)
@@ -289,14 +289,14 @@ def build_chart(topCatList, sentence, RuleSet, lexicon, catStore, sem_store, one
     chart = {}
     for i in range(1, len(sentence) + 1):
         chart[i] = {}
-    print 'sentence is ', sentence
+    print('sentence is ', sentence)
     # for sem in sem_list:
     # NEED START SYMBOL
     # cat = syn_cat(sem_store.get(sem).type,[])
     # need to fix outside probs too!
     correct_index = (len(topCatList) - 1) / 2  # the index of the correct semantics
     for ind, topCat in enumerate(topCatList):
-        print 'sem is ', topCat.sem.toString(True)
+        print('sem is ', topCat.sem.toString(True))
         c1 = chart_entry(topCat, 0, len(sentence), sentence)
         if not sem_store.check(topCat.sem.toString(True)):
             sem_store.add(topCat.sem)
@@ -310,5 +310,5 @@ def build_chart(topCatList, sentence, RuleSet, lexicon, catStore, sem_store, one
     chart_size = 0
     for level in chart:
         chart_size += len(chart[level])
-    print 'size of chart is ', chart_size
+    print('size of chart is ', chart_size)
     return chart

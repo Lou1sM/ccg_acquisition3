@@ -7,7 +7,7 @@ sems = []
 infile = "trainFiles/trainPairs.adam.ready"
 numreps = 7
 
-for session_no in range(1,42):
+for session_no in range(1, 42):
 
     for line in open(infile+"_"+str(session_no)):
         line = line.strip().rstrip()
@@ -17,10 +17,10 @@ for session_no in range(1,42):
     output = open(infile+str(numreps)+"reps_"+str(session_no), "w")
     i=0
     for sent in sents:
-        print >> output, sent
+        print(sent, file=output)
         for j in range(numreps):
             index=(i-int(numreps/2)+j)%len(sems)
-            print >> output,sems[index]
+            print(sems[index], file=output)
         i+=1
-        print >> output,"example_end\n"
+        print("example_end\n", file=output)
     

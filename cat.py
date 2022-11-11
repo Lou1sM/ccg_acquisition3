@@ -395,7 +395,7 @@ class cat:
         if retsem:
             newcat = cat(newsyn, retsem)
         else:
-            print "compfuckup"
+            print("compfuckup")
         return newcat
 
     def combine(self, c):
@@ -414,7 +414,7 @@ class cat:
         return self.sem.toString(True)
 
     def allPairs(self, catStore):
-        if catStore.has_key(self.toString()): return catStore[self.toString()]
+        if self.toString() in catStore: return catStore[self.toString()]
         pairs = []
 
         # really want to know :
@@ -600,18 +600,18 @@ class cat:
                 childCat = cat(sc, childSem)
 
                 if not canDoComp or canDoComp == "fwd":
-                    if istyperaised: print "typeraised"
+                    if istyperaised: print("typeraised")
                     parentCat = cat(pscf, parentSem)
                     if not pscf.getType().equals(parentSem.type()):
-                        print "types dont match 2 : ", parentCat.toString(), \
+                        print("types dont match 2 : ", parentCat.toString(), \
                             " ", pscf.getType().toString(), " ", parentSem.type().toString(), \
-                            " comp is ", canDoComp, "\n"
-                        print parentCat.toString(), childCat.toString()
-                        print "NOT ADDING THIS"
+                            " comp is ", canDoComp, "\n")
+                        print(parentCat.toString(), childCat.toString())
+                        print("NOT ADDING THIS")
                     elif not istyperaised:
                         append_pairs(pairs, (parentCat, childCat, "fwd", numByComp))
                     else:
-                        if canDoComp: raise (StandardError("typeraise on comp"))
+                        if canDoComp: raise Exception
                         # want the parent to be looking in the opposite way from the
                         # child
                         parentCat = cat(pscf, childSem)
@@ -622,17 +622,17 @@ class cat:
                         parentCat = typeRaisedChild
 
                 if not canDoComp or canDoComp == "back":
-                    if istyperaised: print "typeraised"
+                    if istyperaised: print("typeraised")
                     parentCat = cat(pscb, parentSem)
                     if not pscb.getType().equals(parentSem.type()):
-                        print "types dont match 3 : ", parentCat.toString(), \
+                        print("types dont match 3 : ", parentCat.toString(), \
                             " ", pscb.getType().toString(), " ", parentSem.type().toString(), \
-                            " comp is ", canDoComp, "\n"
-                        print "NOT ADDING THIS"
+                            " comp is ", canDoComp, "\n")
+                        print("NOT ADDING THIS")
                     elif not istyperaised:
                         append_pairs(pairs, (childCat, parentCat, "back", numByComp))
                     else:
-                        if canDoComp: raise (StandardError("typeraise on comp"))
+                        if canDoComp: raise Exception
                         parentCat = cat(pscb, childSem)
                         typeRaisedChildSyn = synCat(returncat, pscb, "fwd")
                         typeRaisedChild = cat(typeRaisedChildSyn, parentSem)
@@ -652,7 +652,7 @@ class cat:
                             # print "not back to orig, should be ", self.toString()
                             pass
                     else:
-                        print "got back to orig "
+                        print("got back to orig ")
                 else:
                     pc = parentCat.copy()
                     cc = childCat.copy()
@@ -714,7 +714,7 @@ def check_restrictions(cur_cat):
         if len(order_var) < 2:
             return True
         if any([len(x) < 2 for x in order_var]):
-            print('VIOLATION: vacuous variable found in ' + cur_cat.synString() + ' ' + cur_cat.semString())
+            print(('VIOLATION: vacuous variable found in ' + cur_cat.synString() + ' ' + cur_cat.semString()))
             return False
         rightOrder = (order_var[-1][1] > order_var[-2][1])
         if rightOrder and (directions[-2:] == ['back', 'fwd'] or \
@@ -735,7 +735,7 @@ def orderOfVariables(cur_cat):
         cur = D.get(v, [])
         cur.append(ind)
         D[v] = cur
-    return D.values()
+    return list(D.values())
 
 
 
@@ -767,15 +767,15 @@ def main(argv=None):
     catstring = "S :: lambda $0_{ev}.and(v|go&PAST(n:prop|Momma,$0),prep|to(n:prop|Boston,$0))"
     catstring = "S :: lambda $0_{ev}.and(v|put&ZERO(pro|you,pro|them,$0),prep|on(det|the($1,n|table($1)),$0))"
 
-    # (S\NP) :: lambda $0_{e}.not(adj|sure($0))"
+    # (S\\NP) :: lambda $0_{e}.not(adj|sure($0))"
     c = cat.readCat(catstring)
-    if c: print "cat is : ", c.toString()
+    if c: print("cat is : ", c.toString())
     pairs = c.allPairs({})
-    print len(pairs), " splits"
-    print "splits are :: "
+    print(len(pairs), " splits")
+    print("splits are :: ")
     for pair in pairs:
-        print pair[0].toString(), " ", pair[1].toString()
-    print "\n"
+        print(pair[0].toString(), " ", pair[1].toString())
+    print("\n")
 
     # catstring = "(((Syn\(S/S))\(((S/S)/(S/S))/S))/S) :: lambda $0_{<ev,t>}.lambda $1_{<<ev,t>,<<<ev,t>,t>,<<ev,t>,t>>>}.$1($0)"
     # c = cat.readCat(catstring)
@@ -795,7 +795,7 @@ def main(argv=None):
     # print pair[0].toString()," ",pair[1].toString()
     # print "\n"
 
-    # catstring = "(S\\NP) :: lambda $0_{e}.lambda $1_{ev}.v|have($0,det|a($2,n|hat($2)),$1)"
+    # catstring = "(S\\\NP) :: lambda $0_{e}.lambda $1_{ev}.v|have($0,det|a($2,n|hat($2)),$1)"
     # c = cat.readCat(catstring)
     # if c : print "cat is : ",c.toString()
     # print "splits are :: "

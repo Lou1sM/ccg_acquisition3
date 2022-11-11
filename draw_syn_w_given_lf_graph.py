@@ -28,14 +28,14 @@ def draw_w_given_lf(phenom, words, filenames, field_names, row_type):
         for line in f:
             line = line.strip()
             if (row_type in line):
-                fields = dict(zip(field_names, line.split('\t')))
+                fields = dict(list(zip(field_names, line.split('\t'))))
                 seen_sentence_counts.update([int(fields['sentence count'])])
                 if fields['word'] in words and \
                                 phenom.target_lf(fields['word']) == fields['LF']:
                     entry = results[fields['word']]
                     entry.append((int(fields['sentence count']), float(fields['prob'])))
                     results[fields['word']] = entry
-    for w, res in results.items():
+    for w, res in list(results.items()):
         if res == []:
             del results[w]
         else:
@@ -54,13 +54,13 @@ def draw_syn_cats(target_syn_cats, filenames, field_names):
         for line in f:
             line = line.strip()
             if "Pr(syn|all relevant syns)" in line:
-                fields = dict(zip(field_names, line.split('\t')))
+                fields = dict(list(zip(field_names, line.split('\t'))))
                 seen_sentence_counts.update([int(fields['sentence count'])])
                 if fields['syn_cat'] in target_syn_cats:
                     entry = results[fields['syn_cat']]
                     entry.append((int(fields['sentence count']), float(fields['prob'])))
                     results[fields['syn_cat']] = entry
-    for syncat, res in results.items():
+    for syncat, res in list(results.items()):
         cur_sentence_counts = set([int(r[0]) for r in res])
         for sc in seen_sentence_counts - cur_sentence_counts:
             res.append((sc, 0.0))
@@ -81,13 +81,13 @@ def draw_graph(results, options, show_plot=True, save_plot=None, suffixes=None, 
                ylabel=None, title_text=None, xlim=None, \
                const_occ=None, phenom=None, draw_markers=False):
     def _convert_to_legend(s):
-        if s == "((S\NP)/NP)":
+        if s == "((S\\NP)/NP)":
             return 'Subject-Verb-Object'
         elif s == "((S/NP)/NP)":
             return 'Verb initial'
-        elif s == "((S\NP)\NP)":
+        elif s == "((S\\NP)\\NP)":
             return "Verb final"
-        elif s == "((S/NP)\NP)":
+        elif s == "((S/NP)\\NP)":
             return 'Object-Verb-Subject'
         elif s == "(NP/N)":
             return "Pre-nominal"
@@ -95,7 +95,7 @@ def draw_graph(results, options, show_plot=True, save_plot=None, suffixes=None, 
             return "Post-nominal"
         elif s == "(PP/NP)":
             return "Preposition"
-        elif s == "(PP\NP)":
+        elif s == "(PP\\NP)":
             return "Postposition"
         else:
             return s
@@ -104,7 +104,7 @@ def draw_graph(results, options, show_plot=True, save_plot=None, suffixes=None, 
     # legend = []
     ind = 0
 
-    for w, res in results.items():
+    for w, res in list(results.items()):
         arr = np.array(res)
         arr = arr[arr[:, 0].argsort(),]
         arr[arr == 0] = 0.01
@@ -169,10 +169,10 @@ def get_all_phenoms():
     all_phenoms = {}
 
     word_lfs = extract_from_lexicon3.get_transitive_lfs()
-    phenom = extract_from_lexicon3.Phenomenon('Transitives', word_lfs, '((S\NP)/NP)', \
-                                              ["((S\NP)/NP)", "((S/NP)/NP)", "((S\NP)\NP)", "((S/NP)\NP)"], \
+    phenom = extract_from_lexicon3.Phenomenon('Transitives', word_lfs, '((S\\NP)/NP)', \
+                                              ["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], \
                                               two_LFs=True, \
-                                              flipped_target_syn="((S/NP)\NP)", \
+                                              flipped_target_syn="((S/NP)\\NP)", \
                                               target_shells=[
                                                   'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.placeholderP($0,$1,$2)', \
                                                   'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.placeholderP($1,$0,$2)'])
@@ -181,8 +181,8 @@ def get_all_phenoms():
     phenom = extract_from_lexicon3.get_dax_phenom()
     word_lfs = [('daxed', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.v|dax&PAST($1,$0,$2)'), \
                 ('dax', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.v|dax($1,$0,$2)')]
-    phenom = extract_from_lexicon3.Phenomenon('Nonce Transitive', word_lfs, '((S\NP)/NP)', \
-                                              ['((S\NP)/NP)', "((S/NP)/NP)", "((S\NP)\NP)", "((S/NP)\NP)"], \
+    phenom = extract_from_lexicon3.Phenomenon('Nonce Transitive', word_lfs, '((S\\NP)/NP)', \
+                                              ['((S\\NP)/NP)', "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], \
                                               ['daxed', 'dax'], two_LFs=True)
     all_phenoms['trans_dax'] = phenom
 
@@ -206,22 +206,22 @@ def get_all_phenoms():
 
     word_lfs = extract_from_lexicon3.get_prep_lfs()
     phenom = extract_from_lexicon3.Phenomenon('Prepositions', word_lfs, '(PP/NP)', \
-                                              ['(PP/NP)', "(PP\NP)"], sem_type='(PP|NP)')
+                                              ['(PP/NP)', "(PP\\NP)"], sem_type='(PP|NP)')
     all_phenoms['prep'] = phenom
 
     word_lfs = [('ax', "lambda $0_{e}.lambda $1_{r}.prep|ax($0,$1)")]
     phenom = extract_from_lexicon3.Phenomenon('Nonce Preposition', word_lfs, '(PP/NP)', \
-                                              ['(PP/NP)', "(PP\NP)"], sem_type='(PP|NP)')
+                                              ['(PP/NP)', "(PP\\NP)"], sem_type='(PP|NP)')
     all_phenoms['prep_dOBax'] = phenom
 
     word_lfs = extract_from_lexicon3.get_intransitive_lfs()
-    phenom = extract_from_lexicon3.Phenomenon('Intransitives', word_lfs, '(S\NP)', \
-                                              ['(S\NP)', "(S/NP)"], sem_type='(S|NP)')
+    phenom = extract_from_lexicon3.Phenomenon('Intransitives', word_lfs, '(S\\NP)', \
+                                              ['(S\\NP)', "(S/NP)"], sem_type='(S|NP)')
     all_phenoms['intrans'] = phenom
 
     word_lfs = [('corp', "lambda $0_{e}.lambda $1_{r}.prep|corp($0,$1)")]
     phenom = extract_from_lexicon3.Phenomenon('Nonce Preposition', word_lfs, '(PP/NP)', \
-                                              ['(PP/NP)', "(PP\NP)"], sem_type='(PP|NP)')
+                                              ['(PP/NP)', "(PP\\NP)"], sem_type='(PP|NP)')
     all_phenoms['corp_prep'] = phenom
 
     word_lfs = [('corp', 'lambda $0_{e}.n|corp($0)')]
@@ -240,17 +240,17 @@ def add_curve(results, fns, suffix, phenom, words):
                                         row_type="Pr(correct word|LF1 or LF2)")
         pr_syn_given_lf = draw_w_given_lf(phenom, words, fns, FIELD_NAMES_SYN_GIVEN_LF,
                                           row_type="Pr(correct syn|LF1 or LF2)")
-        for w in pr_w_given_lf.keys():
+        for w in list(pr_w_given_lf.keys()):
             r_w_given_lf = dict(pr_w_given_lf[w])
             r_syn_given_lf = dict(pr_syn_given_lf[w])
             joint_syn_w_prob = \
                 [(sent_count, r_w_given_lf[sent_count] * r_syn_given_lf.get(sent_count, 0.0)) \
-                 for sent_count in r_w_given_lf.keys()]
+                 for sent_count in list(r_w_given_lf.keys())]
             results[(suffix, w)] = joint_syn_w_prob
     else:
         pr_w_given_lf = draw_w_given_lf(phenom, words, fns, FIELD_NAMES_W_GIVEN_LF, row_type="Pr(correct word|LF)")
         pr_correct_syn = dict(pr_syn[phenom.target_syn()])
-        for w, r in pr_w_given_lf.items():
+        for w, r in list(pr_w_given_lf.items()):
             joint_syn_w_prob = \
                 [(sent_count, pr_w_given_lf * pr_correct_syn.get(sent_count, 0.0)) \
                  for sent_count, pr_w_given_lf in r]
@@ -308,7 +308,7 @@ if __name__ == '__main__':
         filenames = [[direc + '/' + fn for fn in os.listdir(direc) if options.infix in fn]]
 
     all_phenoms = get_all_phenoms()
-    if options.phenom_type in all_phenoms.keys():
+    if options.phenom_type in list(all_phenoms.keys()):
         phenom = all_phenoms[options.phenom_type]
     else:
         sys.stderr.write('Error: phenom type not supported\n')
@@ -356,7 +356,7 @@ if __name__ == '__main__':
     if not options.occ_lines:
         draw_markers = False
 
-    print(phenom.name())
+    print((phenom.name()))
     results = {}
     for fns, suffix in zip(filenames, suffixes):
         results, pr_syn = add_curve(results, fns, suffix, phenom, words)

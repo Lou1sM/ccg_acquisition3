@@ -16,8 +16,8 @@ from math import exp
 def xcombinations(items, n):
 	if n==0: yield []
 	else:
-		for i in xrange(len(items)):
-			for cc in xcombinations(items[:i]+items[i+1:],n-1):
+		for i in range(len(items)):
+			for cc in xcombinations(items[:i]+items[i+1:], n-1):
 				yield [items[i]]+cc
 
 				
@@ -40,7 +40,7 @@ def give_comb_numbs(len_sen, len_sem):
 			comb_numbs_temp = []
 			comb_numbs_temp = give_comb_numbs(len_sen-i, len_sem-1)
 			if len(comb_numbs_temp) == 0:
-				print 'ERROR - give_comb_numbs'
+				print('ERROR - give_comb_numbs')
 			else:
 				for item in comb_numbs_temp:
 					item.append(i)
@@ -58,7 +58,7 @@ def give_comb_numbs(len_sen, len_sem):
 # atomic semantic components given by     #
 # max_sem.						          #
 ###########################################
-def generate_wordset(sentence,max_sem):
+def generate_wordset(sentence, max_sem):
 	wordset = {}
 	for i in range(1, max_sem+1):
 		wordset[i] = []
@@ -83,12 +83,12 @@ def generate_wordset(sentence,max_sem):
 ###########################################
 # Check for loops in the semantics.       #
 ###########################################
-def check_for_self_loop(semantic_components,head,seen):
+def check_for_self_loop(semantic_components, head, seen):
 	seen.append(head)
 	for dep in semantic_components[head].Dependents:
 		if dep in seen:
 			return True
-		elif check_for_self_loop(semantic_components,dep,seen):
+		elif check_for_self_loop(semantic_components, dep, seen):
 			return True
 	return False
 ###########################################
@@ -97,7 +97,7 @@ def check_for_self_loop(semantic_components,head,seen):
 ###########################################
 # Log Sum (log(x),log(y)) = 			  #
 ###########################################
-def log_sum(a,b):	
+def log_sum(a, b):	
 	if a==-inf:	return b;
 	elif b==-inf: return a 
 	else:
@@ -110,11 +110,11 @@ def log_sum(a,b):
 ###########################################
 # Log Diff 	log(a-b)			          #
 ###########################################
-def log_diff(a,b):	
+def log_diff(a, b):	
 	if b==-inf:	return a;
 	elif a<b:
-		print "a = ",a
-		print "b = ",b
+		print("a = ", a)
+		print("b = ", b)
 		return float("NaN")
 	elif a==b:
 		return -inf
