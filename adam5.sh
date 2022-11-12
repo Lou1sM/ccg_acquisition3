@@ -1,1 +1,0 @@
-python -u SemLearn.py i_n - 5 -i trainFiles/trainPairs.adam.ready -t my_test/train_test_parses_adam_reps5_ -n my_test/train_train_parses_adam_reps5_ --dump_vr --dinter 100 --analyze -s 41 --dump_out my_test/train_test_parses_adam_reps5_dump_ --dotest
