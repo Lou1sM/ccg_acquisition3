@@ -115,6 +115,6 @@ OBSELETE PREV VERSION 14/5/15
             if not first_occurrance.has_key(instance[1]):
                 first_occurrance[instance[1]] = instance[0]
             output.append((instance[1],num_occurrance[instance[1]],first_occurrance[instance[1]],\
-                              freqs[instance[1]],instance[5]*instance[6]['((S\\\NP)/NP)']))
+                              freqs[instance[1]],instance[5]*instance[6]['((S\\NP)/NP)']))
         return output
 """

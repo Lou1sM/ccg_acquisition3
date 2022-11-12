@@ -190,14 +190,14 @@ def get_transitive_cats(lexicon, sentence_count, sem_store, RuleSet, syn_cat_dis
         (math.exp(log_pr_aligned) + math.exp(log_pr_notaligned))
     pr_notaligned = 1 - pr_aligned
     output = {}
-    output['SVO'] = syn_cat_distribution['((S\\\NP)/NP)']
+    output['SVO'] = syn_cat_distribution['((S\\NP)/NP)']
     output['weird SVO'] = 0.0
-    output['OVS'] = syn_cat_distribution['((S/NP)\\\NP)']
+    output['OVS'] = syn_cat_distribution['((S/NP)\\NP)']
     output['weird OVS'] = 0.0
     output['VSO'] = syn_cat_distribution['((S/NP)/NP)'] * pr_aligned
     output['VOS'] = syn_cat_distribution['((S/NP)/NP)'] * pr_notaligned
-    output['OSV'] = syn_cat_distribution['((S\\\NP)\\\NP)'] * pr_aligned
-    output['SOV'] = syn_cat_distribution['((S\\\NP)\\\NP)'] * pr_notaligned
+    output['OSV'] = syn_cat_distribution['((S\\NP)\\NP)'] * pr_aligned
+    output['SOV'] = syn_cat_distribution['((S\\NP)\\NP)'] * pr_notaligned
     return output
 
 def get_adjective_order(lexicon, sentence_count, sem_store, RuleSet, syn_cat_distribution):
@@ -225,14 +225,14 @@ def get_adjective_order(lexicon, sentence_count, sem_store, RuleSet, syn_cat_dis
         (math.exp(log_pr_aligned) + math.exp(log_pr_notaligned))
     pr_notaligned = 1 - pr_aligned
     output = {}
-    output['SVO'] = syn_cat_distribution['((S\\\NP)/NP)']
+    output['SVO'] = syn_cat_distribution['((S\\NP)/NP)']
     output['weird SVO'] = 0.0
-    output['OVS'] = syn_cat_distribution['((S/NP)\\\NP)']
+    output['OVS'] = syn_cat_distribution['((S/NP)\\NP)']
     output['weird OVS'] = 0.0
     output['VSO'] = syn_cat_distribution['((S/NP)/NP)'] * pr_aligned
     output['VOS'] = syn_cat_distribution['((S/NP)/NP)'] * pr_notaligned
-    output['OSV'] = syn_cat_distribution['((S\\\NP)\\\NP)'] * pr_aligned
-    output['SOV'] = syn_cat_distribution['((S\\\NP)\\\NP)'] * pr_notaligned
+    output['OSV'] = syn_cat_distribution['((S\\NP)\\NP)'] * pr_aligned
+    output['SOV'] = syn_cat_distribution['((S\\NP)\\NP)'] * pr_notaligned
     return output
 
 def orderOfVariables(sem_str):
@@ -361,7 +361,7 @@ def get_phenomena():
     # getting adjectives
     word_lfs = get_adjective_lfs()
     phenomena.append(Phenomenon('Adjectives', word_lfs, '(N/N)', \
-                                    ['(N\N)', '(N/N)'], sem_type='(N|N)'))
+                                    ['(N\\N)', '(N/N)'], sem_type='(N|N)'))
     
     # getting prepositions
     word_lfs = get_prep_lfs()
@@ -373,7 +373,7 @@ def get_phenomena():
     # getting determiners
     word_lfs = get_det_lfs()
     phenomena.append(Phenomenon('Determiners', word_lfs, '(NP/N)', \
-                                    ['(NP/N)', "(NP\N)"], sem_type='(NP|N)'))
+                                    ['(NP/N)', "(NP\\N)"], sem_type='(NP|N)'))
     
     # getting nouns
     word_lfs = get_noun_lfs()
@@ -384,8 +384,8 @@ def get_phenomena():
 
 def get_bax_phenom():
     word_lfs = [('bax', 'lambda $0_{<e,t>}.lambda $1_{e}.and(adj|bax($1),$0($1))')]
-    return Phenomenon('Adjectives', word_lfs, '(N\N)', \
-                                    ['(N\N)', "(N/N)"], sem_type='(N|N)')
+    return Phenomenon('Adjectives', word_lfs, '(N\\N)', \
+                                    ['(N\\N)', "(N/N)"], sem_type='(N|N)')
     
 def get_dax_phenom():
     word_lfs = [('daxed', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.v|dax&PAST($1,$0,$2)')]
@@ -425,7 +425,7 @@ def get_gax_phenom():
 def get_jax_phenom():
     word_lfs = [('jax', 'lambda $0_{<e,t>}.det|jax($1,$0($1))')]
     return Phenomenon('Jax (deter.)', word_lfs, '(NP/N)', \
-                                    ['(NP/N)', "(NP\N)"], sem_type='(NP|N)')
+                                    ['(NP/N)', "(NP\\N)"], sem_type='(NP|N)')
 
 def get_pronoun_phenom():
     # getting pronouns

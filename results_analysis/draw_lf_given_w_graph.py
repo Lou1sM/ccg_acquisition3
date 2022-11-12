@@ -101,7 +101,7 @@ draw_graph(results)
 # getting determiners
 word_lfs = extract_from_lexicon3.get_det_lfs()
 phenom = extract_from_lexicon3.Phenomenon('Determiners', word_lfs, '(NP/N)', \
-                                              ['(NP/N)', "(NP\N)"])
+                                              ['(NP/N)', "(NP\\N)"])
 words = ['the','a','any','his']
 results = draw_lf_given_w(phenom,words,filenames)
 draw_graph(results)

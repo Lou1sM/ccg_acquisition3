@@ -148,11 +148,11 @@ if __name__ == '__main__':
     elif options.phenom_type == 'det':
         word_lfs = extract_from_lexicon3.get_det_lfs()
         phenom = extract_from_lexicon3.Phenomenon('Determiners', word_lfs, '(NP/N)', \
-                                                  ['(NP/N)', "(NP\N)"], sem_type='(NP|N)')
+                                                  ['(NP/N)', "(NP\\N)"], sem_type='(NP|N)')
     elif options.phenom_type == 'dax_det':
         word_lfs = [('jax', 'lambda $0_{<e,t>}.det|jax($1,$0($1))')]
         phenom = extract_from_lexicon3.Phenomenon('Jax (deter.)', word_lfs, '(NP/N)', \
-                                                  ['(NP/N)', "(NP\N)"], sem_type='(NP|N)')
+                                                  ['(NP/N)', "(NP\\N)"], sem_type='(NP|N)')
         words = ['jax']
     elif options.phenom_type == 'nouns':
         word_lfs = extract_from_lexicon3.get_noun_lfs()

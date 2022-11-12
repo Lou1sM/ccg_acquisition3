@@ -795,7 +795,7 @@ def main(argv=None):
     # print pair[0].toString()," ",pair[1].toString()
     # print "\n"
 
-    # catstring = "(S\\\NP) :: lambda $0_{e}.lambda $1_{ev}.v|have($0,det|a($2,n|hat($2)),$1)"
+    # catstring = "(S\\NP) :: lambda $0_{e}.lambda $1_{ev}.v|have($0,det|a($2,n|hat($2)),$1)"
     # c = cat.readCat(catstring)
     # if c : print "cat is : ",c.toString()
     # print "splits are :: "

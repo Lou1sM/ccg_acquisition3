@@ -91,7 +91,7 @@ def draw_graph(results, options, show_plot=True, save_plot=None, suffixes=None, 
             return 'Object-Verb-Subject'
         elif s == "(NP/N)":
             return "Pre-nominal"
-        elif s == "(NP\N)":
+        elif s == "(NP\\N)":
             return "Post-nominal"
         elif s == "(PP/NP)":
             return "Preposition"
@@ -188,12 +188,12 @@ def get_all_phenoms():
 
     word_lfs = extract_from_lexicon3.get_det_lfs()
     phenom = extract_from_lexicon3.Phenomenon('Determiners', word_lfs, '(NP/N)', \
-                                              ['(NP/N)', "(NP\N)"], sem_type='(NP|N)')
+                                              ['(NP/N)', "(NP\\N)"], sem_type='(NP|N)')
     all_phenoms['det'] = phenom
 
     word_lfs = [('jax', 'lambda $0_{<e,t>}.det|jax($1,$0($1))')]
     phenom = extract_from_lexicon3.Phenomenon('Jax (deter.)', word_lfs, '(NP/N)', \
-                                              ['(NP/N)', "(NP\N)"], sem_type='(NP|N)')
+                                              ['(NP/N)', "(NP\\N)"], sem_type='(NP|N)')
     all_phenoms['dax_det'] = phenom
 
     word_lfs = extract_from_lexicon3.get_noun_lfs()
