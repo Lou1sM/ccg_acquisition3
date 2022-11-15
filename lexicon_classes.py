@@ -13,7 +13,7 @@ from tools import inf
 import scipy.special
 from cat import synCat
 from collections import defaultdict
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 from errorFunct import error
 
 ########################################
@@ -23,13 +23,13 @@ from errorFunct import error
 class lambda_op:
     def __init__(self, dep, separator):
         self.type = dep.type
-        
+
         # only attach dep for use in building reps
         # as it lets us make sure that the lambda
         # reps point to the right place.
-        # nullify before saving        
+        # nullify before saving
         self.dep = dep
-        
+
         # separator is:
         #        None iff l refers to direct child
         #         dep iff l refers to child of dep
@@ -39,7 +39,7 @@ class lambda_op:
         self.separators.append(separator)
     def nullify(self):
         self.dep = None
-        
+
 
 ########################################
 # sem_rep is used to represent the l.f #
@@ -58,7 +58,7 @@ class sem_rep:
         self.lambdas = []
         self.all_pairs = []
         self.sem_key = ''
-        
+
     def set_key(self):
         self.sem_key = self.return_key(True)
     def build_rep(self, sem_c, sem_comps, comps):
@@ -88,9 +88,9 @@ class sem_rep:
     def copy(self):
         s = copy.deepcopy(self)
         return s
-    def print_self(self):    
+    def print_self(self):
         for l in self.lambdas:
-            pass 
+            pass
             print('lambda_'+l.type, '.', end=' ')
         print(self.name+'(', end=' ')
         for l in self.lambdas:
@@ -114,17 +114,17 @@ class sem_rep:
                 #print  >> lo,'is :: \\\\'
                 #print  >> lo,'$'+s.return_key(True)+'~~~~~~'+d.return_key(True)+'$'
                 #print >> lo,'\\vspace{1cm} \\\\'
-                s.nullify_lambdas()                
-                
+                s.nullify_lambdas()
+
                 self.all_pairs.append((s.return_key(True), d.return_key(True)))
-                
+
                 s.set_key()
                 s.set_prior()
-                
+
                 if not sem_store.check(s.sem_key):
                     s.make_pairs(sem_store, lo)
                     sem_store.add(s)
-                
+
                 d.set_key()
                 d.set_prior()
                 if not sem_store.check(d.sem_key):
@@ -132,7 +132,7 @@ class sem_rep:
                     sem_store.add(d)
             else:
             #    print 'got issues'
-                # most of which chime nicely with those 
+                # most of which chime nicely with those
                 # things that CCG also has issues with
             #    print self.return_key(True)
             #    print d.return_key(True)
@@ -154,24 +154,24 @@ class sem_rep:
         ## node commands the piece of   #
         ## l.f. itself.                    #
         #################################
-        
+
         if self.parents == []:
             return True
-    
+
         pb = False
         for p in self.parents:
             if p != parent:
                 if p.check_parent_branch(parent):
                     pb = True
         return pb
-        
-        
+
+
     def make_var(self):
-        
+
         ####################################
-        # This is to check if any of the 
+        # This is to check if any of the
         # dependents are called by another
-        # branch of the semantic graph in 
+        # branch of the semantic graph in
         # which case we do not want to make
         # this a variable until they've been
         # dealt with.
@@ -181,7 +181,7 @@ class sem_rep:
             if d.check_parent_branch(self):
                 other_branch = True
         ####################################
-        
+
         if not other_branch:
             for p in self.parents:
                 if p.make_lambda(self, None) is None:
@@ -194,16 +194,16 @@ class sem_rep:
             #for d in self.all_deps:
                 #print d.return_key(True)
             return False
-            
+
     def make_lambda(self, dep, separator):
-        if dep in self.all_deps:            
+        if dep in self.all_deps:
             ##########################################
             # separator is the !node! that separates #
             # the dependent from the parent (often   #
             # None).                                 #
             ##########################################
             del_deps = []
-            
+
             ##########################################
             # need to also delete lambdas shared with#
             # the child lambda list                     #
@@ -211,24 +211,24 @@ class sem_rep:
 
             self.lambdas.reverse()
             dep.lambdas.reverse()
-                
+
             subs = False
-            
+
             i = 0
             del_lambdas = []
             for l in dep.lambdas:
-                
-                if l.type == self.lambdas[i].type and (len(self.lambdas[i].separators) == 1): 
+
+                if l.type == self.lambdas[i].type and (len(self.lambdas[i].separators) == 1):
                     # check that the lambda is of the correct type and
                     # that it only points to one place before deleting
                     # it
                     del_lambdas.append(i)
                 else:
                     return None
-                    
+
                 # Need to sort out substitution stuff here #
                 # DON'T GIVE UP #
-                    
+
                 #elif l.type == self.lambdas[i].type:# and (len(dep.lambdas) == len(self.lambdas) ==1) and (len(self.lambdas[i].separators) == 2):
                     #del_seps = []
                     #j = 0
@@ -250,23 +250,23 @@ class sem_rep:
                     #print 'shared between more than two'
                     #error()
                 #else:
-                
+
                     #return None
-                    
+
                     # all the existing lambda
                     # terms for the dependent
                     # should have a counterpart
-                    # at front up top. 
+                    # at front up top.
                     #        If not :: FAIL
                 i+=1
-        
+
             self.lambdas.reverse()
             dep.lambdas.reverse()
-            
+
             orig_length = len(self.lambdas)
             for i in del_lambdas:
                 del self.lambdas[orig_length-1-i]
-                
+
                 #else:
                     #for s in self.lambdas[orig_length-1-i].separators:
                         #if s == dep:
@@ -274,17 +274,17 @@ class sem_rep:
                             #del_s.append(j)
                         #else:
                             #print 'not equal'
-                #j += 1        
+                #j += 1
 
                 #for s in del_s.reverse():
-                    #del.self.lambdas[orig_length-1-i].separators        
-                
+                    #del.self.lambdas[orig_length-1-i].separators
+
                 #if len
 
             self.lambdas.append(lambda_op(dep, separator))
 
             ###########################################
-            # This is only for substitution type rules# 
+            # This is only for substitution type rules#
             # and swaps the order of the (now 2) lamda#
             # terms.                                  #
             ###########################################
@@ -295,14 +295,14 @@ class sem_rep:
                     error("not 2. this is mental")
                 self.lambdas.reverse()
             ###########################################
-            
+
             ###########################################
             if dep in self.dependents:
                 del self.dependents[self.dependents.index(dep)]
             del self.all_deps[self.all_deps.index(dep)]
             ###########################################
-            
-            
+
+
             ###########################################
             # Under_Deps are given the binary option  #
             # to go or stay                              #
@@ -311,24 +311,24 @@ class sem_rep:
                 if d in dep.all_deps:
                     #if d in self.dependents
                     del_deps.append(d)
-                    
-                    #if 
+
+                    #if
                     # but if it's in dependents (direct)
                     # too then it will need a lambda term
-                    # _or_ it should stay here and the 
+                    # _or_ it should stay here and the
                     # other thing should get a lambda
             ##############################
             # should there be something  #
             # to deal with more complex  #
             # semantic possibilities?    #
-            ##############################        
+            ##############################
             for p in self.parents:
                 pr = p.make_lambda(dep, self)
                 if pr is None:
-                    
+
                     return None
             # delete from all_deps here #
-        
+
             for d in del_deps:
                 del self.all_deps[self.all_deps.index(d)]
         #for d in self.dependents:
@@ -345,29 +345,29 @@ class sem_rep:
             return True
     # why does doing it like this help ? #
     # buddy, I'm not sure that it does.  #
-    
+
     # have just recreated what I had before
-    # need to support lx.f(x(a)) which I 
+    # need to support lx.f(x(a)) which I
     # don't
-    
+
     # do I really need to support this?
-    # KIND OF IS SUPPORTED. SUBJ STILL 
+    # KIND OF IS SUPPORTED. SUBJ STILL
     # THERE
-    
-    # NEED TO SPLIT SHARED ITEMS WHEN 
-    # NECCESSARY. WOULD BE WELL NICE 
-    # IF THIS WAS OPTIONAL TOO 
-        
-        
-        
-        
+
+    # NEED TO SPLIT SHARED ITEMS WHEN
+    # NECCESSARY. WOULD BE WELL NICE
+    # IF THIS WAS OPTIONAL TOO
+
+
+
+
     def combine(self, target):
         # THIS ONLY DOES SEMANTIC COMBINATION #
         if self.lambdas[-1].type == target.type:
             for s in self.lambdas[-1].separators:
                 if s is None:
                     self.dependents.append(target)
-                
+
                 else:
                     s.combine(target)
             self.lambdas.pop()
@@ -375,7 +375,7 @@ class sem_rep:
         else:
             return False
             #self.dep
-    
+
     def return_key(self, top):
         key = ''
         if top:
@@ -383,7 +383,7 @@ class sem_rep:
             for l in self.lambdas:
                 key = key+'\lambda_{'+l.type+'}'
             self.lambdas.reverse()
-            
+
             if len(self.lambdas)!=0:
                 key = key+'.'
         key = key+self.name+'_{'+self.type+'}'
@@ -395,14 +395,14 @@ class sem_rep:
             if i < len(self.dependents)-1:
                 key = key+','
             i += 1
-        
+
         #key = key+')'
         lambda_done = False
         for l in self.lambdas:
             if None in l.separators:
                 lambda_done = True
                 key = key+','+l.type
-            
+
         #if top:
         if self.dependents != [] or lambda_done:
             key = key+')'
@@ -462,8 +462,6 @@ def make_reps(sem_c, sem_comps, Parent, targ_rep, sem_store, lo):
     sem_store.add(rep)
     return rep.sem_key
 ########################################
-    
-
 
 
 ########################################
@@ -484,7 +482,7 @@ class lexical_item:
 
     def set_word_prior(self):
         no_char = len(self.word) - self.word.count(' ')
-        no_bound = self.word_count(' ')        
+        no_bound = self.word_count(' ')
         w_prior = pow((float(499)/(26*500)), no_char)*pow(float(1/500), no_bound)
         return w_prior
     def increment_num_seen(self):
@@ -498,24 +496,24 @@ class lexical_item:
             print("negative alpha for ", self.toString())
             print("alpha is ", self.alpha)
             error("alpha is negative")
-            
+
     def update_bleurgh_alpha(self, alpha):
         self.bleurgh_alpha = self.bleurgh_alpha+alpha
     def set_bleurgh_alpha(self):
         self.bleurgh_alpha = self.alpha
     def print_alpha(self, out):
         print('<', self.word, ',', self.sem, ',', self.syn, '>   ::  a = ', self.alpha, file=out)
-        
+
     def update_p(self, prob):
         self.top_term += prob
     def set_last_used(self, sentence_count):
             self.last_used = sentence_count
     def clear_probs(self):
-        self.top_term = 0    
+        self.top_term = 0
     def toString(self):
         return self.word+" : "+ self.syn+" : "+self.sem_key
 ########################################
-        
+
 class sem_to_word:
     def __init__(self, sem_key, word):
         self.sem_key = sem_key
@@ -541,25 +539,25 @@ syn_to_type = lambda syn_key: (typing_regexp.sub("|", syn_key) if syn_key is not
 class sem_distribution:
 
     def __init__(self, alpha_shell, alpha_shell_to_sem):
-        
+
         self.type_to_count = {}
         self.type_shell_to_count = {}
         self.type_shell_sem_to_count = {}
         self.sem_to_pairs = defaultdict(list) # maps a sem_key to all the pairs (type,shell) with which it appears
         self.alpha_shell = alpha_shell # the alpha_0 of the type->shell distribution
         self.alpha_shell_to_sem = alpha_shell_to_sem # the alpha_0 of the shell->sem distribution
-        
+
         self.use_special_alpha_o = False
         self.special_alpha_o = 100 * alpha_shell
-        
+
         self.ignore_shells = False # generates the sem_key directly from the type
         self.alpha_type_to_sem = alpha_shell # the alpha_0 of the type->sem distribution; only used when ignore_shells is True
-        
+
         #self.total_alpha = 0.0
         #self.sem_to_count = {}
         #self.sem_to_last_used = {}
         #self.type_sem_to_last_used = {}
-        
+
     """
     def del_entry(self,syn_key,shell_sem_key,sem_key):
         "deletes the relevant entry from the distribution"
@@ -571,7 +569,7 @@ class sem_distribution:
             self._update(self.type_shell_sem_to_count,(sem_type,shell_sem_key,sem_key),-cur_alpha)
             #del self.type_shell_sem_to_count[(sem_type,shell_sem_key,sem_key)]
     """
-    
+
     def check(self, syn_key, shell_sem_key, sem_key):
         sem_type = syn_to_type(syn_key)
         if (sem_type, shell_sem_key, sem_key) not in self.type_shell_to_count:
@@ -597,7 +595,7 @@ class sem_distribution:
         """
         all_pairs = self.sem_to_pairs[sem_key]
         return [x[0] for x in all_pairs]
-                                            
+
     def all_shells_alphas(self, syn_key):
         """
         Returns all the shell semantic forms for a given syn_key and their alphas.
@@ -611,7 +609,7 @@ class sem_distribution:
     def has_key(self, syn_key, shell_sem, sem_key):
         sem_type = syn_to_type(syn_key)
         return (sem_type, shell_sem, sem_key) in self.type_shell_sem_to_count
-    
+
     def has_key_shell(self, syn_key, shell_sem):
         sem_type = syn_to_type(syn_key)
         return (sem_type, shell_sem) in self.type_shell_to_count
@@ -636,7 +634,7 @@ class sem_distribution:
     def _log_sem_given_shell_prob(self, syn_key, shell_sem_key, sem_key, sem_store, sentence_count, psi_or_log):
         """
         returns the probability Pr(sem_key|shell,type) where type is determined by syn_key.
-        if psi_or_log equals 'log', it returns the MAP estimator, otherwise it returns the 
+        if psi_or_log equals 'log', it returns the MAP estimator, otherwise it returns the
         estimator using psi (i.e., with the log-parametrization).
         """
         sem_type = syn_to_type(syn_key)
@@ -684,7 +682,7 @@ class sem_distribution:
             alpha_o = self.special_alpha_o
         else:
             alpha_o = self.alpha_type_to_sem
-        
+
         log_prior = sem_store.get_log_prior(sem_key)
         scale = 1.0
         func = (scipy.special.psi if psi_or_log == 'psi' else math.log)
@@ -700,7 +698,7 @@ class sem_distribution:
             seen_log_prob = 0.0
         log_prob = log_sum(log_prob, seen_log_prob)
         return log_prob
-        
+
 
     """
     def _multiply_param(self,D,last_used,key,learning_rates,sentence_count):
@@ -709,7 +707,7 @@ class sem_distribution:
             factor = factor * (1 - learning_rates[i])
         D[key] = D[key] * factor
         return max(last_used,sentence_count)
-    
+
     def refresh_sem_params(self,syn_key,shell_sem_key,sem_key,learning_rates,sentence_count):
         sem_type = self.syn_to_type(syn_key)
         if self.type_shell_sem_to_count.has_key((sem_type,shell_sem_key,sem_key)):
@@ -730,7 +728,7 @@ class sem_distribution:
     def refresh(self, learning_rate):
         for my_dict in [self.type_to_count, self.type_shell_to_count, self.type_shell_sem_to_count]:
             my_dict.update((x, y*(1-learning_rate)) for x, y in list(my_dict.items()))
-    
+
     def alpha_type_shell_sem(self, sem_type, shell_sem_key, sem_key):
         return self.type_shell_sem_to_count[(sem_type, shell_sem_key, sem_key)]
 
@@ -755,18 +753,16 @@ class sem_distribution:
 
     #def all_alphas(self):
     #    return self.sem_to_count.items()
-    
+
     #def alpha(self,sem_key):
     #    return self.sem_to_count[sem_key]
-    
+
 
 
 ########################################
 class Lexicon:
-    mwe = True
-    extrascale = 1.0
-    
-    def __init__(self, type_to_shell_alpha_o, shell_to_sem_alpha_o, word_alpha_o):
+
+    def __init__(self, type_to_shell_alpha_o, shell_to_sem_alpha_o, word_alpha_o, mwe):
         self.word_alpha_o = word_alpha_o
         self.sentence_count = 0
         self.learningrates = []
@@ -774,18 +770,18 @@ class Lexicon:
         self.wordprobfile = None
         self.wordstocheck = None
         self.fastMapFile = None
-        self.mwe = Lexicon.mwe
+        self.mwe = mwe
         self.cur_cats = []
-        
+
         self.lex = {}  # a mapping of (word,syn_key,sem_key) to lexical item
         self.words = {} # a mapping of words and MWEs to a list of triplets (word,syntax,semantcs) in which they occur
         self.sem_to_word = {} # maps a lambda expression and a word/MWE into a sem_to_word, which keeps the distribution of Pr(word|sem)
-        
+
         self.semtoshell = {} # a mapping from a sem_key to a shell logical form
         self.catcounts = {} # exactly the same as lexicon.syntax[syn_key].alpha_top
         self.sem_distribution = sem_distribution(type_to_shell_alpha_o, shell_to_sem_alpha_o)
         self.updates = {} # a temporary lexicon in which updates to be made in the M step are saved
-        
+
         # COMMENTED OUT BY OMRI
         #        self.categories = {} # ???
         #self.catToRepShell = {} # maps a syntactic category to a dict mapping logical forms to counts
@@ -800,14 +796,14 @@ class Lexicon:
         #syn_sem.syn_sem_top = syn_sem_top
         #self.all_cur_lfs = set() # temporary storage
         #self.sem_alpha_o = sem_alpha_o
-        
+
     def set_words_to_check(self, wordstocheck):
         self.wordstocheck = wordstocheck
 
     def get_log_shell_given_type_prob(self, syn_key, shell_sem_key, sem_store, sentence_count):
         return self.sem_distribution._log_shell_given_type_prob(syn_key,\
                           shell_sem_key, sem_store, sentence_count, 'log')
-        
+
     def get_map_word_given_shell(self, word, syn_key, shell_key, sentence_count, sem_store):
         log_probs = []
         # adding the new sem prob
@@ -817,7 +813,7 @@ class Lexicon:
             log_probs.append(self.get_map_log_word_prob(word, syn_key, old_sem, sentence_count, psi_or_log='log') + \
                                  self.get_map_log_sem_prob(syn_key, old_sem, sem_store))
         return scipy.misc.logsumexp(log_probs)
-    
+
     def check(self, word, syn_key, sem_key, sem):
         """
         OMRI:
@@ -827,14 +823,14 @@ class Lexicon:
         if "placeholderW" in word:
             return
         key = (word, syn_key, sem_key)
-        
+
         if key not in self.lex:
             li = lexical_item(word, syn_key, sem_key)
             self.lex[key] = li
         else:
             li = self.lex[key]
             return
-        
+
         if (sem_key, word) not in self.sem_to_word:
             sw = sem_to_word(sem_key, word)
             sw.add_lex_item(li)
@@ -842,22 +838,22 @@ class Lexicon:
         else:
             sw = self.sem_to_word[(sem_key, word)]
             sw.add_lex_item(li)
-        
+
         # if a new syntax has appeared
         if syn_key not in self.catcounts:
             self.catcounts[syn_key] = 0.0
-        
+
         if sem is not None:
             shell_sem_key = sem.toStringShell(True)
         else:
             shell_sem_key = sem_key
-        
+
         if not self.sem_distribution.has_key(syn_key, shell_sem_key, sem_key):
             self.sem_distribution.check(syn_key, shell_sem_key, sem_key)
-        
+
         if sem_key not in self.semtoshell:
             self.semtoshell[sem_key] = shell_sem_key
-        
+
         if word not in self.words:
             self.words[word] = [key]
         else:
@@ -879,7 +875,7 @@ class Lexicon:
             wr.append(words[i][1].split())
         return wr
     """
-    
+
     def get_lex_items(self,word,test_out=None,guess=False,sem_store=None,beamsize=None):
         """
         Returns the most common lexical items with this specific word.
@@ -924,18 +920,18 @@ class Lexicon:
             print(('Sem key error:'+sem_key))
             return 0.0
         sem_type = syn_to_type(syn_key)
-        
+
         func = (math.log if psi_or_log == 'log' else scipy.special.psi)
         scale = 1.0
         if self.sem_distribution.has_key(syn_key, shell_sem_key, sem_key):
             if (sem_key, word) in self.sem_to_word:
-            
+
                 sum_alpha = self.sem_distribution.alpha_type_shell_sem(sem_type, shell_sem_key, sem_key)
                 alpha = self.sem_to_word[(sem_key, word)].alpha
-            
+
                 log_prior = Lexicon.log_word_prior(word) + \
                     func(scale*self.word_alpha_o) - func(scale*sum_alpha + scale*self.word_alpha_o)
-            
+
                 if word.find(" ")!=-1 and not self.mwe: log_prior = -inf
                 seen_log_prob = -inf
                 if alpha > 0:
@@ -952,13 +948,13 @@ class Lexicon:
                 return log_prior
         else:
             error("sem distribution doesn't have the required key")
-    
+
     def get_log_word_prob(self, word, syn_key, sem_key, sentence_count):
         """
         OMRI: This is the method actually used in inside_outside_calc for computing the chart.
         """
         return self.get_map_log_word_prob(word, syn_key, sem_key, sentence_count, psi_or_log='psi')
-    
+
     def get_map_log_sem_prob(self, syn_key, sem_key, sem_store):
         """
         Returns the log of the MAP estimate for the semantic key sem_key.
@@ -969,20 +965,20 @@ class Lexicon:
             print(('Sem key error:'+sem_key))
             return None
         return self.sem_distribution.map_log_sem_prob(syn_key, shell_sem_key, sem_key, sem_store, self.sentence_count)
-        
+
     def get_log_sem_prob(self, syn_key, sem_key, sem_store):
         shell_sem_key = self.semtoshell.get(sem_key, None)
         if shell_sem_key is None:
             print(('Sem key error:'+sem_key))
             return None
         return self.sem_distribution.log_sem_prob(syn_key, shell_sem_key, sem_key, sem_store, self.sentence_count)
-    
+
     """
     def get_sem_prob(self,syn_key,sem_key,sem_store):
         shell_sem_key = self.semtoshell[sem_key]
         return math.exp(self.sem_distribution.log_sem_prob(syn_key,shell_sem_key,sem_key,sem_store,self.sentence_count))
     """
-    
+
     def update_params(self, word, syn_key, sem_key, prob, sentence_count):
         self.lex[(word, syn_key, sem_key)].update_alpha(prob)
         sem_shell = self.semtoshell[sem_key]
@@ -992,14 +988,14 @@ class Lexicon:
         #self.catToRepShell[syn_key][self.semtoshell[sem_key]] += prob
         #self.syn_sem[(syn_key,sem_key)].update_alpha(prob)
         #self.syntax[syn_key].update_alpha_top(prob)
-    
+
     def refresh_all_params(self, sentence_count):
         for l in self.lex:
             self.refresh_params(l[0], l[1], l[2], sentence_count)
-    
+
     """
     def refresh_sem_params(self,syn_key,sem_key):
-        sem_shell = self.semtoshell[sem_key]        
+        sem_shell = self.semtoshell[sem_key]
         if self.sem_distribution.has_key(sem_key):
             for i in range(self.sem_distribution.last_used(syn_key,sem_key),self.sentence_count):
                 learning_rate = self.learningrates[i]
@@ -1010,7 +1006,7 @@ class Lexicon:
             max_iter = max(self.sem_distribution.last_used(syn_key,sem_key),self.sentence_count)
             self.sem_distribution.set_last_used(syn_key,sem_key,max_iter)
     """
-            
+
     def refresh_sem_word_params(self, sem_key, word):
         if (sem_key, word) in self.sem_to_word:
             sw = self.sem_to_word[(sem_key, word)]
@@ -1019,7 +1015,7 @@ class Lexicon:
                 update = -learning_rate*sw.alpha
                 sw.increment_alpha(update)
             sw.set_last_used(max(sw.last_used, self.sentence_count))
-            
+
     def refresh_params(self, word_key, syn_key, sem_key, sentence_count):
         if (word_key, syn_key, sem_key) in self.lex:
             l = self.lex[(word_key, syn_key, sem_key)]
@@ -1030,28 +1026,28 @@ class Lexicon:
 
         if (sem_key, word_key) in self.sem_to_word:
             self.refresh_sem_word_params(sem_key, word_key)
-        
+
         #self.sem_distribution.refresh_sem_params(syn_key,self.semtoshell[sem_key],sem_key,\
         #                                             self.learningrates,self.sentence_count)
-        
+
 
     def store_log_update(self, word, syn_key, sem_key, log_prob):
         prob = exp(log_prob)
         if (word, syn_key, sem_key) not in self.updates:
             self.updates[(word, syn_key, sem_key)] = prob
         else: self.updates[(word, syn_key, sem_key)] += prob
-    
+
     def get_learning_rate(self, i):
         return self.learningrates[i]
 
     def set_learning_rates2(self, datasize, k):
         self.learningrates = []
-        To = 50 
+        To = 50
         k = -0.8
         print(('K k='+str(k)))
         for i in range(1, datasize+1):
             self.learningrates.append(pow(To+i, k))
-    
+
     def set_learning_rates(self,datasize,k=-0.6):
         dflist = []
         prodlist = []
@@ -1072,7 +1068,7 @@ class Lexicon:
 
     def perform_updates(self, learningrate, datasize, sentence_count):
         self.sentence_count += 1
-        
+
         # Refreshing catcounts that are not refreshed otherwise
         if self.sentence_count > 1:
             for syn_key in self.catcounts:
@@ -1080,7 +1076,7 @@ class Lexicon:
                 self.catcounts[syn_key] += update
 
             self.sem_distribution.refresh(learningrate)
-        
+
         # UPDATING PARAMETERS, without the refreshing substraction part
         for l in self.updates:
             li = self.lex[l]
@@ -1089,13 +1085,13 @@ class Lexicon:
             update += self.updates[l]*learningrate*datasize
             self.lex[l].increment_num_seen()
             self.update_params(l[0], l[1], l[2], update, sentence_count)
-        
+
         # PRUNING STAGE
         todel = []
         del_space = 10
         delfrac = 0.1
         minsemalph = 0.001
-        
+
         if sentence_count%del_space==0 and sentence_count > 1:
             for swk in self.sem_to_word:
                 sw = self.sem_to_word[swk]
@@ -1106,7 +1102,7 @@ class Lexicon:
                     todel.append(swk)
 
         print(('Deleting '+str(len(todel))+' entries of the total '+str(len(self.sem_to_word))))
-                  
+
         for swk in todel:
             sw = self.sem_to_word[swk]
             for li in sw.lex_items:
@@ -1119,21 +1115,21 @@ class Lexicon:
                 del self.lex[lk]
                 self.sem_distribution.update_alpha(li.syn, self.semtoshell[li.sem_key], li.sem_key, -li.alpha)
             del self.sem_to_word[swk]
-          
+
     @staticmethod
-    def set_one_word(oneWord):
-        Lexicon.mwe = not oneWord
-    
+    def set_one_word(is_exclude_mwe):
+        Lexicon.mwe = not is_exclude_mwe
+
     @staticmethod
     def log_word_prior(word):
         numbound = word.count(" ")
         numchar = len(word) - numbound
         log_prior = numchar*log(0.5) - 4.0*numbound
         return log_prior
-    
+
     def clear_updates(self):
         self.updates = {}
-    
+
     def getMaxWordForSynSem(self, syn_key, sem_key):
         """
         Returns the maximum likelihood word for this (syn,sem) pair.

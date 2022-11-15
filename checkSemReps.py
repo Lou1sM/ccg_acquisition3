@@ -130,7 +130,7 @@ def main(argv, opts):
 
     if build_or_check == "i_n":  # train on months 1..i, test on the n-th
         exp.allowTypeRaise = False
-        oneWord = True
+        is_exclude_mwe = True
         numreps = 1
         rule_alpha_top = 1.0
         beta_tot = 1.0
@@ -150,7 +150,7 @@ def main(argv, opts):
         prev_sentence_count = 0
         input_file = opts.inp_file  # "trainFiles/trainPairs"
         inputpairs = open(input_file).readlines()
-        word_sign = "_1W" if oneWord else "_MWE"
+        word_sign = "_1W" if is_exclude_mwe else "_MWE"
         rep_sign = "_{0:d}reps".format(numreps) if numreps>1 else ""
         outfile = opts.train_parses + ''.join([word_sign, rep_sign])
         output = open(outfile, "w")

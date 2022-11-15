@@ -1,7 +1,7 @@
 """
 Reads a pickled lexicon and computes the distributions according to that lexicon.
 """
-import parser, SemLearn, generator, exp, cat, pdb, os
+import parser, sem_learn, generator, exp, cat, pdb, os
 import scipy.misc
 import inside_outside_calc
 import pickle as pickle
@@ -31,7 +31,7 @@ PATH = os.path.dirname(os.path.realpath(__file__)) + '/'
 
 def _catProbFromGrammar(sc, RuleSet):
     """
-    obtains Pr(syntactic category) 
+    obtains Pr(syntactic category)
     """
     c_prob = 1.0
     rule_prob = 1.0
@@ -161,7 +161,7 @@ def get_synt_given_LF(lexicon, sentence_count, sem_store, RuleSet, target_syn_ke
         Z += synt_cat_distribution[syn_key] * pr_sem_given_syn
         syn_given_sem_D.append((syn_key, synt_cat_distribution[syn_key] * pr_sem_given_syn ))
     syn_given_sem_D = dict([(k, v/Z) for k, v in syn_given_sem_D])
-    
+
     return syn_given_sem_D, synt_cat_distribution
 
 
@@ -255,7 +255,7 @@ def orderOfVariables(sem_str):
 ######################################################
 
 class Phenomenon:
-    
+
     def __init__(self, name, word_lf_pairs, target_syn, all_target_syns, \
                      unambig = None, two_LFs = False, \
                      flipped_target_syn=None,sem_type=None, \
@@ -290,14 +290,14 @@ class Phenomenon:
             return [(syn_key, shell) for shell in self._target_shells for syn_key in self._all_target_syns]
         else:
             return []
-        
+
     def two_LFs(self):
         return self._two_LFs
-    
+
     def name(self):
         """the name of the phenomenon"""
         return self._name
-    
+
     def target_lf(self, w):
         L = [x[1] for x in self._word_LF if x[0] == w]
         if len(L) > 1:
@@ -314,11 +314,11 @@ class Phenomenon:
 
     def flipped_target_syn(self):
         return self._flipped_target_syn
-        
+
     def all_target_syns(self):
         """all distractor syns"""
         return self._all_target_syns
-    
+
     def target_word(self, lf):
         """the correct word that matches this lf"""
         other_lf = swap_args_other_way(lf)
@@ -333,7 +333,7 @@ class Phenomenon:
             # raise Exception('Incorrectly defined Phenomenon')
             return ''
         return L[0]
-    
+
     def target_words(self):
         """all target words"""
         return [x[0] for x in self._word_LF]
@@ -352,41 +352,41 @@ def get_phenomena():
                                     flipped_target_syn = "((S/NP)\\NP)", sem_type='((S|NP)|NP)',\
                                     target_shells=['lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.placeholderP($0,$1,$2)',\
                                                        'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.placeholderP($1,$0,$2)']))
-    
+
     # adding intransitive verbs
     word_lfs = get_intransitive_lfs()
     phenomena.append(Phenomenon('Intransitives', word_lfs, '(S\\NP)', \
                                     ['(S\\NP)', "(S/NP)"], sem_type='(S|NP)'))
-    
+
     # getting adjectives
     word_lfs = get_adjective_lfs()
     phenomena.append(Phenomenon('Adjectives', word_lfs, '(N/N)', \
                                     ['(N\\N)', '(N/N)'], sem_type='(N|N)'))
-    
+
     # getting prepositions
     word_lfs = get_prep_lfs()
     #phenomena.append(Phenomenon('Prepositions', word_lfs, '(PP/NP)', \
     #                                ['(PP/NP)', "(PP\\NP)"],sem_type='(PP|NP)'))
     phenomena.append(Phenomenon('Prepositions', word_lfs, '((NP\\NP))/NP)', \
-                               ['((NP/NP)/NP)', '((NP\\NP)\\NP)', '((NP\\NP)/NP)', '((NP/NP)\\NP'], sem_type='((NP|NP)|NP)'))    
+                               ['((NP/NP)/NP)', '((NP\\NP)\\NP)', '((NP\\NP)/NP)', '((NP/NP)\\NP'], sem_type='((NP|NP)|NP)'))
 
     # getting determiners
     word_lfs = get_det_lfs()
     phenomena.append(Phenomenon('Determiners', word_lfs, '(NP/N)', \
                                     ['(NP/N)', "(NP\\N)"], sem_type='(NP|N)'))
-    
+
     # getting nouns
     word_lfs = get_noun_lfs()
     phenomena.append(Phenomenon('Nouns', word_lfs, 'N', \
                                     ['N'], sem_type='N'))
-    
+
     return phenomena
 
 def get_bax_phenom():
     word_lfs = [('bax', 'lambda $0_{<e,t>}.lambda $1_{e}.and(adj|bax($1),$0($1))')]
     return Phenomenon('Adjectives', word_lfs, '(N\\N)', \
                                     ['(N\\N)', "(N/N)"], sem_type='(N|N)')
-    
+
 def get_dax_phenom():
     word_lfs = [('daxed', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.v|dax&PAST($1,$0,$2)')]
     return Phenomenon('Daxed (trans.)', word_lfs, '((S\\NP)/NP)', \
@@ -472,7 +472,7 @@ def get_prep_lfs():
     for line in f:
         fields = line.strip().split(' ')
         #for k in ["lambda $0_{e}.lambda $1_{r}."+fields[1]+"($0,$1)"]:
-        for k in ["lambda $0_{e}.lambda $1_{e}.att($1, " + fields[1] + "($0)"]:    
+        for k in ["lambda $0_{e}.lambda $1_{e}.att($1, " + fields[1] + "($0)"]:
             verb_to_lf.append( (fields[0], k) )
     f.close()
     return verb_to_lf
@@ -516,13 +516,13 @@ def print_cat_stats(phenom,lexicon,sentence_count,sem_store,RuleSet,f_out,prefix
     #    D = get_transitive_cats(lexicon,sentence_count,sem_store,RuleSet,synt_cat_distribution)
     #    for k,v in D.items():
     #        f_out.write(str(sentence_count)+'\t'+k+'\t'+str(v)+'\n')
-    
+
     for syn_key in phenom.all_target_syns():
         f_out.write(prefix+'\t'.join([phenom.name(), str(sentence_count), syn_key, 'Pr(syn|all relevant syns)',\
                                           str(synt_cat_distribution.get(syn_key, 0.0))])+'\n')
-    
+
     target_lfs = set(phenom.target_lfs())
-    
+
     for target_lf in target_lfs:
         if target_lf not in lexicon.sem_distribution.sem_to_pairs:
             continue
@@ -536,12 +536,12 @@ def print_cat_stats(phenom,lexicon,sentence_count,sem_store,RuleSet,f_out,prefix
             f_out.write(prefix+'\t'.join([phenom.name(), str(sentence_count), 'Pr(correct syn|LF)', str(target_lf),\
                                           phenom.target_word(target_lf),\
                                           str(synt_given_LF[phenom.target_syn()])])+'\n')
-        
+
         w_given_LF = get_w_dist_given_LF(lexicon, sentence_count, sem_store, RuleSet, target_lf)
         f_out.write(prefix+'\t'.join([phenom.name(), str(sentence_count), 'Pr(correct word|LF)', str(target_lf),\
                                           phenom.target_word(target_lf),\
                                           str(w_given_LF.get(phenom.target_word(target_lf), 0.0))])+'\n')
-        
+
         if phenom.two_LFs():
             marginal_lf_probs = {}
             marginal_lf_probs[target_lf] = \
@@ -555,32 +555,32 @@ def print_cat_stats(phenom,lexicon,sentence_count,sem_store,RuleSet,f_out,prefix
                 marginal_lf_probs[other_lf] = 0.0
             else:
                 marginal_lf_probs[other_lf] = math.exp(pr_other_lf) * pr_syn
-            
+
             for ind, target_sem in zip([1, 2], [target_lf, other_lf]):
                 f_out.write(prefix+'\t'.join([phenom.name(), str(sentence_count), 'Pr(LF'+str(ind)+')', str(target_sem),\
                                                   phenom.target_word(target_lf),\
                                                   str(marginal_lf_probs.get(target_sem, 0.0))])+'\n')
-            
+
             prob_syn_given_lf1_or_lf2 = synt_given_LF[phenom.target_syn()] * marginal_lf_probs.get(target_lf) / \
                                              sum(marginal_lf_probs.values())
-            
+
             target_word = phenom.target_word(target_lf)
             f_out.write(prefix+'\t'.join([phenom.name(), str(sentence_count), 'Pr(correct syn|LF1 or LF2)', str(target_lf),\
                                               target_word, str(prob_syn_given_lf1_or_lf2)])+'\n')
-            
+
             w_given_other_LF = get_w_dist_given_LF(lexicon, sentence_count, sem_store, RuleSet, other_lf)
             w_given_either_lf = (marginal_lf_probs[target_lf] * w_given_LF.get(target_word, 0.0) + \
                                      marginal_lf_probs[other_lf] * w_given_other_LF.get(target_word, 0.0)) / \
                                      sum(marginal_lf_probs.values())
-            
+
             f_out.write(prefix+'\t'.join([phenom.name(), str(sentence_count),\
                                               'Pr(correct word|LF1 or LF2)', str(target_lf),\
                                               target_word, str(w_given_either_lf)])+'\n')
 
-            
+
     for target_word in phenom.target_words():
         print_lf_given_word_probs(phenom.name(), lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
-    
+
     sem_types_enabled = True
     for sem_type, shell_key in phenom.target_types_shells():
         try:
@@ -667,7 +667,7 @@ def main(output_fn, special_option='N', lexicon_fn = None, \
             #sents_to_parse = [['this', 'is', 'corp', 'Mommy'], ['this', 'is', 'the', 'corp']]
             sents_to_parse = []
             #'Jarjar has it'.split(), 'what you did have'.split(), 'what did you have'.split()]
-            #[('what you did have ?','lambda $0_{e}.lambda $1_{ev}.aux|do&PAST(v|have(pro|you,$0,$1),$1)'), 
+            #[('what you did have ?','lambda $0_{e}.lambda $1_{ev}.aux|do&PAST(v|have(pro|you,$0,$1),$1)'),
             #('what did you have ?','lambda $0_{e}.lambda $1_{ev}.aux|do&PAST(v|have(pro|you,$0,$1),$1)')]
 
             if sents_to_parse != []:
@@ -714,7 +714,7 @@ def main(output_fn, special_option='N', lexicon_fn = None, \
     elif special_option != 'N':
         dax_range = [int(x) for x in special_option.split(':')]
         print(dax_range)
-    
+
     if special_option != 'N':
         for ind in dax_range:
             if ind in [1, 2]:
@@ -733,7 +733,7 @@ def main(output_fn, special_option='N', lexicon_fn = None, \
 
 if __name__ == '__main__':
     if len(sys.argv) != 4:
-        print(('Usage: extract_from_lexicon.py <pickled file> <output> ' + 
+        print(('Usage: extract_from_lexicon.py <pickled file> <output> ' +
               ' <special options: ' + \
                   'T for just test, number for a single dax, F otherwise]>'))
         sys.exit(-1)

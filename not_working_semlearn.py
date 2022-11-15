@@ -28,7 +28,7 @@ import expFunctions
 noQ = False
 
 
-def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
+def train_rules(sem_store, RuleSet, lexicon, is_exclude_mwe, inputpairs,
                 cats_to_check, output, test_out=None, dotest=False, sentence_count=0,
                 min_lex_dump=0, max_lex_dump=1000000, dump_lexicons=False,
                 dump_interval=100, dump_out='lexicon_dump', f_out_additional=None, truncate_complex_exps=True,
@@ -137,7 +137,7 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                     continue
 
                 try:
-                    chart = build_chart(topCatList, words, RuleSet, lexicon, catStore, sem_store, oneWord)
+                    chart = build_chart(topCatList, words, RuleSet, lexicon, catStore, sem_store, is_exclude_mwe)
                 except (AttributeError, IndexError):
                     print("Sent : " + sentence, file=failed_out)
                     continue
@@ -201,7 +201,7 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
             #     ####################################
             #     catStore = {}
             #     try:
-            #         chart = build_chart(topCatList, words, RuleSet, lexicon, catStore, sem_store, oneWord)
+            #         chart = build_chart(topCatList, words, RuleSet, lexicon, catStore, sem_store, is_exclude_mwe)
             #     except (AttributeError, IndexError):
             #         print >> failed_out, "Sent : " + sentence
             #         continue
@@ -248,7 +248,7 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                 doingGenerate = False
                 if doingGenerate:
                     generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store,
-                                       oneWord, genoutfile, sentence_count)
+                                       is_exclude_mwe, genoutfile, sentence_count)
 
                 print("done with sent\n\n")
                 if sentence_count == train_limit:
@@ -364,7 +364,7 @@ def print_cat_probs(cats_to_check, lexicon, sem_store, RuleSet):
         outputFile = c[1]
         outputCatProbs(posType, lfType, arity, cats, lexicon, sem_store, RuleSet, outputFile)
 
-def generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store, oneWord, genoutfile, sentence_count):
+def generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store, is_exclude_mwe, genoutfile, sentence_count):
     sentnum = 1
     for (gensent, gensemstr) in sentstogen:
         gensem = expFunctions.makeExpWithArgs(gensemstr, {})[0]
@@ -376,7 +376,7 @@ def generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store, oneWor
             sc = synCat.allSynCats(gensem.type())[0]
         genCat = cat.cat(sc, gensem)
         print("gonna generate sentence ", gensent)
-        generateSent(lexicon, RuleSet, genCat, catStore, sem_store, oneWord, gensent, genoutfile,
+        generateSent(lexicon, RuleSet, genCat, catStore, sem_store, is_exclude_mwe, gensent, genoutfile,
                      sentence_count, sentnum)
         sentnum += 1
 
@@ -465,9 +465,9 @@ def main(argv, options):
         exp.exp.allowTypeRaise = False
 
         # initialization info #
-        oneWord = True
+        is_exclude_mwe = True
         if len(argv) > 2 and argv[2] in ["mwe", "MWE"]:
-            oneWord = False
+            is_exclude_mwe = False
         numreps = 1
         if len(argv) > 3:
             numreps = int(argv[3])
@@ -481,7 +481,7 @@ def main(argv, options):
         if reverse: extra = extra + "reversed"
 
 
-        Lexicon.set_one_word(oneWord)
+        Lexicon.set_one_word(is_exclude_mwe)
 
         rule_alpha_top = 1.0
         beta_tot = 1.0
@@ -528,7 +528,7 @@ def main(argv, options):
             outfile = options.train_parses + '_'
             testoutfile = options.test_parses + '_'
 
-            if oneWord:
+            if is_exclude_mwe:
                 outfile = outfile + "1W"
                 testoutfile = testoutfile + "1W"
             else:
@@ -543,7 +543,7 @@ def main(argv, options):
             testoutfile = testoutfile + "_" + str(i)
             output = open(outfile, "w")
 
-            sentence_count = train_rules(sem_store, RuleSet, Current_Lex, oneWord, inputpairs,
+            sentence_count = train_rules(sem_store, RuleSet, Current_Lex, is_exclude_mwe, inputpairs,
                                          cats_to_check, output, None, False, sentence_count,
                                          min_lex_dump=options.min_lex_dump,
                                          max_lex_dump=options.max_lex_dump,

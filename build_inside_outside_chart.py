@@ -1,5 +1,5 @@
 # Need to build inside-outside charts
-# slight difference from usual because, we don't have 
+# slight difference from usual because, we don't have
 # one to one word, sentence mappings. but that's ok.
 # Hold as dictionary?
 #     (head,p,q)
@@ -12,13 +12,7 @@ from tools import inf
 import expFunctions
 
 
-########################################
-# MAKE A CLASS CALLED SEM_STORE TO SAVE#
-# ALL THE SEM REPS SO THAT THEY'RE NOT #
-# NEEDED ALL OVER THE PLACE.           #
-########################################
-
-
+# purpose of SemStore is to save 'all the sem reps'
 class SemStore:
     def __init__(self):
         self.store = {}
@@ -57,25 +51,15 @@ class SemStore:
         else:
             return None
 
-
-        ########################################
-        # Each node for each span must be      #
-        # realisable as a word.                #
-        ########################################
+        # Each node for each span must be realisable as a word
         # class word_target:
         # def __init__(self,word):
         # self.word = word
         # self.inside_prob = 0.0
         # self.outside_prob = 0.0
 
-
-########################################
-
-########################################
-# chart entries are for syntactic nodes#
-# that represent the span p->q of the  #
-# sentence.                               #
-########################################
+# chart entries are for syntactic nodes that represent the span
+# p->q of the sentence
 class chart_entry:
     def __init__(self, ccgCat, p, q, sentence):
         self.sentence = sentence
@@ -134,8 +118,7 @@ class chart_entry:
     def get_inside(self):
         return self.inside_prob
 
-
-def expand_chart(entry, chart, catStore, sem_store, RuleSet, lexicon, oneWord, correct_index):
+def expand_chart(entry, chart, catStore, sem_store, RuleSet, lexicon, is_exclude_mwe, correct_index):
     """
     CatStore is a dictionary that maps pairs of syntactic and semantic forms
     to the set of pairs they can decompose to. It's a cache essentially.
@@ -146,7 +129,7 @@ def expand_chart(entry, chart, catStore, sem_store, RuleSet, lexicon, oneWord, c
         for d in range(entry.p + 1, entry.q):
             words_l = ' '.join(entry.sentence[entry.p:d])
             words_r = ' '.join(entry.sentence[d:entry.q])
-            if oneWord:
+            if is_exclude_mwe:
                 minL = d - entry.p
                 minR = entry.q - d
             else:
@@ -182,25 +165,17 @@ def expand_chart(entry, chart, catStore, sem_store, RuleSet, lexicon, oneWord, c
                 lexicon.check(words_r, r_syn, r_sem, r_cat.sem)
 
                 # sem_store
-
                 if (l_syn, l_sem, entry.p, d) not in chart[d - entry.p]:
                     cl = chart_entry(l_cat, entry.p, d, entry.sentence)
                     chart[d - entry.p][(l_syn, l_sem, entry.p, d)] = cl
-                    # print "added entry ",(l_syn,l_sem,entry.p,d)
-                    expand_chart(cl, chart, catStore, sem_store, RuleSet, lexicon, oneWord, correct_index)
-                # else: print "already there"
+                    expand_chart(cl, chart, catStore, sem_store, RuleSet, lexicon, is_exclude_mwe, correct_index)
                 chart[d - entry.p][(l_syn, l_sem, entry.p, d)].add_parent(entry, 'l')
                 if (r_syn, r_sem, d, entry.q) not in chart[entry.q - d]:
                     cr = chart_entry(r_cat, d, entry.q, entry.sentence)
                     chart[entry.q - d][(r_syn, r_sem, d, entry.q)] = cr
-                    # print "added entry ",(r_syn,r_sem,d,entry.q)
-                    expand_chart(cr, chart, catStore, sem_store, RuleSet, lexicon, oneWord, correct_index)
-                # else: print "already there"
+                    expand_chart(cr, chart, catStore, sem_store, RuleSet, lexicon, is_exclude_mwe, correct_index)
                 chart[entry.q - d][(r_syn, r_sem, d, entry.q)].add_parent(entry, 'r')
                 entry.add_child(((l_syn, l_sem, entry.p, d), (r_syn, r_sem, d, entry.q)))
-
-
-########################################
 
 ########################################
 # get_cats is called from get_children #
@@ -212,9 +187,9 @@ def expand_chart(entry, chart, catStore, sem_store, RuleSet, lexicon, oneWord, c
 """
 def get_cats(parent_cat,head_rep,s1,s2,minL,minR):
     child_pairs = []
-    # pair structure is (cat, sem_string) # 
+    # pair structure is (cat, sem_string) #
     # could just go to cat
-    
+
     if len(s2.lambdas) == 0:
         # Functional application #
         # fwd
@@ -228,7 +203,7 @@ def get_cats(parent_cat,head_rep,s1,s2,minL,minR):
         # back
         if len(s2.all_deps)+1 >= minL and len(s1.all_deps)+1 >= minR:
             cat1 = parent_cat.copy()
-            cat1.add_target(s2.type,'back')    
+            cat1.add_target(s2.type,'back')
             cat2 = syn_cat(s2.type,[])
             child_pairs.append(((cat2,s2.sem_key),(cat1,s1.sem_key)))
             #print "got back fa ", cat2.key,s2.sem_key,"  ",cat1.key,s1.sem_key
@@ -257,12 +232,12 @@ def get_cats(parent_cat,head_rep,s1,s2,minL,minR):
     return child_pairs
 
 ########################################
-def build_chartOld(sem_list,sentence,sem_store,RuleSet,lexicon,oneWord):
+def build_chartOld(sem_list,sentence,sem_store,RuleSet,lexicon,is_exclude_mwe):
     chart = {}
     for i in range(1,len(sentence)+1):
                 chart[i] = {}
     print 'sentence is ',sentence
-    for sem in sem_list:    
+    for sem in sem_list:
         print 'sem is ',sem
     # NEED START SYMBOL
         cat = syn_cat(sem_store.get(sem).type,[])
@@ -271,8 +246,8 @@ def build_chartOld(sem_list,sentence,sem_store,RuleSet,lexicon,oneWord):
         RuleSet.check_rule(c1.cat.key,None,None)
         wordspan = ' '.join(sentence)
         lexicon.check(wordspan,c1.cat.key,c1.sem_key,sem)
-        
-        expand_chart(c1,chart,sem_store,RuleSet,lexicon,oneWord)
+
+        expand_chart(c1,chart,sem_store,RuleSet,lexicon,is_exclude_mwe)
     chart_size = 0
     for level in chart:
         chart_size += len(chart[level])
@@ -280,16 +255,14 @@ def build_chartOld(sem_list,sentence,sem_store,RuleSet,lexicon,oneWord):
     return chart
 """
 
-
 ######################################################
-# topCat,sentence,RuleSet,lexicon,sem_store,oneWord) #
+# topCat,sentence,RuleSet,lexicon,sem_store,is_exclude_mwe) #
 ######################################################
 
-def build_chart(topCatList, sentence, RuleSet, lexicon, catStore, sem_store, oneWord):
+def build_chart(topCatList, sentence, RuleSet, lexicon, catStore, sem_store, is_exclude_mwe):
     chart = {}
     for i in range(1, len(sentence) + 1):
         chart[i] = {}
-    print('sentence is ', sentence)
     # for sem in sem_list:
     # NEED START SYMBOL
     # cat = syn_cat(sem_store.get(sem).type,[])
@@ -305,7 +278,7 @@ def build_chart(topCatList, sentence, RuleSet, lexicon, catStore, sem_store, one
         RuleSet.check_rule(topCat.synString(), None, None, None, None)
         wordspan = ' '.join(sentence)  # ,topCat.synString(),topCat.semString())
         lexicon.check(wordspan, topCat.synString(), topCat.semString(), topCat.sem)
-        expand_chart(c1, chart, catStore, sem_store, RuleSet, lexicon, oneWord, correct_index == ind)
+        expand_chart(c1, chart, catStore, sem_store, RuleSet, lexicon, is_exclude_mwe, correct_index == ind)
 
     chart_size = 0
     for level in chart:

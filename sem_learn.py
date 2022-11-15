@@ -1,10 +1,8 @@
-import os
 import pickle
-import argparse
 import verb_repo
 from generator import generateSent
 from grammar_classes import *
-from lexicon_classes import i_o_oneChart
+from inside_outside_calc import i_o_oneChart
 from parser import *
 from sample_most_probable_parse import *
 from makeGraphs import *
@@ -15,15 +13,11 @@ import exp
 import expFunctions
 
 
-noQ = False
-
-
-def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
+def train_rules(sem_store, RuleSet, lexicon, is_one_word, inputpairs, skip_q,
                 cats_to_check, output_fpath, test_out=None, dotest=False, sentence_count=0,
                 min_lex_dump=0, max_lex_dump=1000000, dump_lexicons=False,
                 dump_interval=100, dump_out='lexicon_dump', f_out_additional=None, truncate_complex_exps=True,
                 verb_repository=None, is_dump_verb_repo=False, analyze_lexicons=False, genoutfile=None):
-    print("put in sent coutn = ", sentence_count)
     datasize = 20000
     lexicon.set_learning_rates(datasize)
 
@@ -67,7 +61,7 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                     isQ, sc = get_top_cat(sem)
                 except IndexError:
                     # print "couldn't determine syntactic category ", sem_line
-                    print_sent_info(sentence, train_parses_fpath, sentence_count, lexicon, topCatList)
+                    #print_sent_info(sentence, train_parses_fpath, sentence_count, lexicon, topCatList)
                     words = None
                     sentence = None
                     sem = None
@@ -88,31 +82,18 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                 if dotest and not donetest:
                     test_during_training(test_out, sem, words, sem_store, RuleSet, lexicon, sentence_count)
 
-                print("sentence is ", sentence)
                 topCat = cat.cat(sc, sem)
                 topCatList.append(topCat)
 
-
             if sentence and line[:11] == "example_end":
-                print("Sent : " + sentence)
-                #if sentence == "where 's the real Ursula ?":
-                    #print("booo")
-                    #pass
-                f.write("Sent : " + sentence)
-                f.write(f"update weight = {lexicon.get_learning_rate(sentence_count)}")
-                f.write(str(sentence_count))
-                for topCat in topCatList:
-                    print("Cat : " + topCat.toString())
-                    f.write("Cat : " + topCat.toString())
-
                 catStore = {}
-                if len(words) > 8 or (noQ and "?" in sentence):
+                if len(words) > 8 or (skip_q and "?" in sentence):
                     sentence = []
                     sem = None
                     continue
 
                 try:
-                    chart = build_chart(topCatList, words, RuleSet, lexicon, catStore, sem_store, args.is_one_word)
+                    chart = build_chart(topCatList, words, RuleSet, lexicon, catStore, sem_store, is_one_word)
                 except (AttributeError, IndexError):
                     print("Sent : " + sentence)
                     continue
@@ -131,14 +112,14 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                             #this is not great, I'm putting it in because I don't quite get why the above fails
                             pass
                 lexicon.cur_cats = []
-                dump_model(dump_lexicons, analyze_lexicons, args.dump_verb_repo, sentence_count,
+                dump_model(dump_lexicons, analyze_lexicons, is_dump_verb_repo, sentence_count,
                            dump_interval, max_lex_dump, min_lex_dump, dump_out, sem_store,
                            lexicon, RuleSet, verb_repository)
                 #anothe hack - not sure why printing a parse would fail if a chart has been created but it does sometimes
-                try:
-                    print_top_parse(chart, RuleSet, train_parses_fpath, f_out_additional)
-                except IndexError:
-                    print("Top parse priting failed")
+                #try:
+                    #print_top_parse(chart, RuleSet, train_parses_fpath, f_out_additional)
+                #except IndexError:
+                    #print("Top parse priting failed")
                 try:
                     print_cat_probs(cats_to_check, lexicon, sem_store, RuleSet)
                 except Exception:
@@ -150,12 +131,10 @@ def train_rules(sem_store, RuleSet, lexicon, oneWord, inputpairs,
                 doingGenerate = False
                 if doingGenerate:
                     generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store,
-                                       args.is_one_word, genoutfile, sentence_count)
+                                       is_one_word, genoutfile, sentence_count)
 
                 if sentence_count == train_limit:
                     return sentence_count
-
-        print("returning sentence count ", sentence_count)
     return sentence_count
 
 def get_top_cat(sem):
@@ -226,16 +205,6 @@ def save_verb_repo(dump_out, sentence_count, verb_repository):
     pickle.dump(verb_repository, f_repo, pickle.HIGHEST_PROTOCOL)
     f_repo.close()
 
-def watch_selected_rules(lexicon, sem_store, RuleSet, sentence_count, sentence):
-    # added 14/8/2014 for debugging purposes
-    target_syn_keys = ["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"]
-    syn_distribution = extract_from_lexicon3.get_synt_distribution(target_syn_keys, \
-                                                                   lexicon, sem_store, RuleSet,
-                                                                   sentence_count)
-    print(('WATCH' + '\t' + sentence))
-    for k, v in list(syn_distribution.items()):
-        print(('WATCH' + '\t' + str(sentence_count) + '\t' + str(k) + '\t' + str(v)))
-
 def print_top_parse(chart, RuleSet, train_parses_fpath, f_out_additional):
     print("getting topparses")
     topparses = []
@@ -268,7 +237,7 @@ def print_cat_probs(cats_to_check, lexicon, sem_store, RuleSet):
         outputFile = c[1]
         outputCatProbs(posType, lfType, arity, cats, lexicon, sem_store, RuleSet, outputFile)
 
-def generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store, oneWord, genoutfile, sentence_count):
+def generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store, is_one_word, genoutfile, sentence_count):
     sentnum = 1
     for (gensent, gensemstr) in sentstogen:
         gensem = expFunctions.makeExpWithArgs(gensemstr, {})[0]
@@ -280,7 +249,7 @@ def generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store, oneWor
             sc = synCat.allSynCats(gensem.type())[0]
         genCat = cat.cat(sc, gensem)
         print("gonna generate sentence ", gensent)
-        generateSent(lexicon, RuleSet, genCat, catStore, sem_store, args.is_one_word, gensent, genoutfile,
+        generateSent(lexicon, RuleSet, genCat, catStore, sem_store, is_one_word, gensent, genoutfile,
                      sentence_count, sentnum)
         sentnum += 1
 
@@ -295,10 +264,6 @@ def dump_model(dump_lexicons, analyze_lexicons, is_dump_verb_repo, sentence_coun
 
     if is_dump_verb_repo and sentence_count % dump_interval == 0:
         save_verb_repo(dump_out, sentence_count, verb_repository)
-
-
-##########################################################
-
 
 def test(exp_name, sem_store, RuleSet, Current_Lex, sentence_count):
     errors_out_fpath = os.path.join(exp_name,'sem_errors.txt')
@@ -347,133 +312,3 @@ def test(exp_name, sem_store, RuleSet, Current_Lex, sentence_count):
             print("\n", file=test_out)
 
 
-###########################################
-# Main.                                   #
-# Try to keep to just build or check      #
-###########################################
-
-def main(args):
-    exp.exp.allowTypeRaise = False
-
-    Lexicon.set_one_word(args.is_one_word)
-
-    rule_alpha_top = 1.0
-    beta_tot = 1.0
-    beta_lex = 0.005
-
-    verb_repository = verb_repo.VerbRepository()
-    RuleSet = Rules(rule_alpha_top, beta_tot, beta_lex)
-
-    type_to_shell_alpha_o = 1000.0
-    shell_to_sem_alpha_o = 500.0
-    word_alpha_o = 1.0
-
-    Current_Lex = Lexicon(type_to_shell_alpha_o, shell_to_sem_alpha_o, word_alpha_o)
-
-    RuleSet.usegamma = False
-    Current_Lex.usegamma = False
-
-    sentence_count = 0
-
-    cats_to_check = []
-
-    sem_store = SemStore()
-    test_file_index = args.test_session
-    if args.pickle_model:
-        pickle_file = "_".join(args.test_parses.split("_")[-4:-1])+".pkl"
-
-    if args.continued:
-        dump_file = open(args.continued, "rb")
-        model_dict = pickle.load(dump_file)
-        sem_store = model_dict["sem_store"]
-        RuleSet = model_dict["RuleSet"]
-        Current_Lex = model_dict["Current_Lex"]
-        sentence_count = model_dict["sentence_count"]
-        cats_to_check = model_dict["cats_to_check"]
-        start_file = model_dict["last_session_no"] + 1
-    else:
-        start_file = 1
-
-    for i in range(start_file, test_file_index):
-        input_file = args.inp_file
-        test_file = args.inp_file+"_"+str(test_file_index)
-
-        if args.numreps > 1:
-            input_file = input_file + str(numreps) + "reps"
-        input_file = input_file + "_" + str(i)
-
-        inputpairs = open(input_file).readlines()
-
-        train_parses_fpath = os.path.join(args.outdir, 'train_parses' + str(i) + '.txt')
-        test_parses_fpath = os.path.join(args.outdir, 'test_parses.' + str(i) + 'txt')
-
-        sentence_count = train_rules(sem_store, RuleSet, Current_Lex, args.is_one_word, inputpairs,
-                                     cats_to_check, train_parses_fpath, None, False, sentence_count,
-                                     min_lex_dump=args.min_lex_dump,
-                                     max_lex_dump=args.max_lex_dump,
-                                     dump_lexicons=args.dump_lexicons,
-                                     dump_interval=args.dump_interval,
-                                     dump_out=args.dump_out,
-                                     verb_repository=verb_repository,
-                                     is_dump_verb_repo=args.is_dump_verb_repo,
-                                     analyze_lexicons=args.is_analyze_lexicons)
-
-
-        print("returned sentence count = ", sentence_count)
-
-        if args.dotest:
-            test_out = open(testoutfile, "w")
-            print("trained on up to ", input_file, " testing on ", test_file, file=test_out)
-            test_file = open(test_file, "r")
-            breakpoint()
-            test(test_parses_fpath, sem_store, RuleSet, Current_Lex, sentence_count)
-            test_out.close()
-        if args.pickle_model:
-            dict_to_pickle = {"sem_store": sem_store,
-                              "RuleSet": RuleSet,
-                              "Current_Lex": Current_Lex,
-                              "sentence_count": sentence_count,
-                              "cats_to_check": cats_to_check,
-                              "last_session_no": i}
-            f = open(pickle_file, "wb")
-            pickle.dump(dict_to_pickle, f)
-            f.close()
-        print("at end, lexicon size is ", len(Current_Lex.lex))
-
-
-
-if __name__ == '__main__':
-    args = argparse.ArgumentParser()
-    args.add_argument("--min_lex_dump", type=int, default=0,
-                          help="the number of iterations before we start dumping lexicons")
-    args.add_argument("--numreps", type=int, default=1)
-    args.add_argument("--outdir", type=str, default="tmp")
-    args.add_argument("--dump_out", type=str, default="lexicon_dump")
-    args.add_argument("--max_lex_dump", type=int, default=1000000,
-                          help="the number of iterations at which we stop dumping lexicons")
-    args.add_argument("-d", "--dump_lexicons", action="store_true",
-                          help="whether to dump the lexicons or not")
-    args.add_argument("--dotest", action="store_true",
-                          help="use this flag if you want to apply testing")
-    args.add_argument("--dump_interval", type=int, default=100,
-                          help="a dumped lexicon file (works only with load_from_pickle")
-    args.add_argument("--expname", default='tmp',
-                          help="the directory to write output files")
-    args.add_argument("--is_dump_verb_repo", action="store_true",
-                          help="whether to dump the verb repository")
-    args.add_argument("-i", "--inp_file", default="trainFiles/trainPairs",
-                          help="the input file names (with the annotated corpus)")
-    args.add_argument("--is_analyze_lexicons", action="store_true",
-                          help="output the results for the experiments")
-    args.add_argument("--devel", "--development_mode", action="store_true",
-                          help="development mode")
-    args.add_argument("-s", "--test_session", default=26, type=int,
-                          help="number of session on which to test; training up to the previous session")
-    args.add_argument("-p", "--pickle_model", action="store_true",
-                          help="whether to save the model after every training session")
-    args.add_argument("-c", "--continued", default=None,
-                          help="pickled learner files to use as as the initial state")
-    args.add_argument("--is_one_word", action="store_true")
-    args = args.parse_args()
-
-    main(args)

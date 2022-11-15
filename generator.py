@@ -19,12 +19,12 @@ def assignWords(chart, lexicon):
             entry.word_target =  w_syn_sem[0]
     
 # can't just sample down since we need to generate the correct semantics
-def generateSent(lexicon, RuleSet, topCat, catStore, sem_store, oneWord, corrSent, genoutfile, sentence_count, sentnum):
+def generateSent(lexicon, RuleSet, topCat, catStore, sem_store, is_exclude_mwe, corrSent, genoutfile, sentence_count, sentnum):
     # pack 'word list' with None so that we can reuse old code
     # generate words at leaves
     # do MAP inside-outside
     wordlist = ["placeholderW"]*(len(topCat.sem.allSubExps()))
-    chart = build_chart([topCat], wordlist, RuleSet, lexicon, catStore, sem_store, oneWord)
+    chart = build_chart([topCat], wordlist, RuleSet, lexicon, catStore, sem_store, is_exclude_mwe)
     assignWords(chart, lexicon)
     i_o_oneChart(chart, sem_store, lexicon, RuleSet, False, 0.0, lexicon.sentence_count, True)    
     topparses = []
@@ -42,7 +42,7 @@ def generateSent(lexicon, RuleSet, topCat, catStore, sem_store, oneWord, corrSen
     print(top_parse)
     print(top.inside_score)
     
-    chart = build_chart([topCat], corrSent.split(), RuleSet, lexicon, catStore, sem_store, oneWord)
+    chart = build_chart([topCat], corrSent.split(), RuleSet, lexicon, catStore, sem_store, is_exclude_mwe)
     if chart is not None:
         corr_score = i_o_oneChart(chart, sem_store, lexicon, RuleSet, False, 0.0, lexicon.sentence_count)
         print("corr score"+str(sentnum)+" is ", corr_score, file=genoutfile)

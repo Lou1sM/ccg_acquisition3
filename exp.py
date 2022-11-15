@@ -12,13 +12,13 @@ class exp:
     varNum = 0
     eventNum = 0
     emptyNum = 0
-    allowTypeRaise = True
+    allowTypeRaise = False
     def __init__(self, name, numArgs, argTypes, posType):
         self.onlyinout = None
         self.linkedVar = None
         self.name = name
         self.numArgs = numArgs
-        if numArgs!=len(argTypes): 
+        if numArgs!=len(argTypes):
             print("error, not right number of args")
         self.argTypes = argTypes
         self.arguments = []
@@ -28,7 +28,7 @@ class exp:
         self.setReturnType()
         self.functionExp = self
         # self.nounMod = False
-        self.posType = posType    
+        self.posType = posType
         self.argSet = False
         self.isVerb=False
         self.isNull = False
@@ -80,7 +80,7 @@ class exp:
         return None
     def compose(self, e):
         return None
-            
+
     #########################################
     # def setNounMod(self):
     #     self.nounMod = True
@@ -128,7 +128,7 @@ class exp:
 
     def numArgs(self):
         return len(self.arguments)
-            
+
     def replace(self, e1, e2):
         # replaces all instances of e1 with e2r
         i=0
@@ -149,7 +149,7 @@ class exp:
             self.arguments.insert(i, a.replace2(e1, e2))
             i+=1
         return self
-        
+
     ##########################################
     # this version uses python's inbuilt     #
     # lambda expression to deal with function#
@@ -178,7 +178,7 @@ class exp:
             self.arguments[self.arguments.index(e)] = var
             return var
         return None
-        
+
     def bind(self, e):
         pass
 
@@ -264,7 +264,7 @@ class exp:
 
     def getReturnType(self):
         return self.returnType
-        
+
     def type(self):
         print("shouldnt be asking for type here")
         error("shouldnt be asking for type here")
@@ -293,7 +293,7 @@ class exp:
         print("should never be getting here, equals defined on subexps")
         print("this is ", self.toString(True))
         error("should never be getting here, equals defined on subexps")
-        
+
     def equalsPlaceholder(self, other):
         print("should never be getting here, equals defined on subexps")
         print("this is ", self.toString(True))
@@ -310,7 +310,7 @@ class exp:
     def removeArg(self, arg):
         for i in range(len(self.arguments)):
             a = self.arguments[i]
-            if a==arg: 
+            if a==arg:
                 self.arguments.pop(i)
                 return
 
@@ -320,7 +320,7 @@ class exp:
         for a in self.arguments:
             a.add_parent(self)
             a.recalcParents(False)
-    
+
     def allSubExps(self):
         subExps = []
         subExps.append(self)
@@ -328,7 +328,7 @@ class exp:
             subExps.extend(d.allSubExps())
         return subExps
 
-    def allExtractableSubExps(self):    
+    def allExtractableSubExps(self):
         subExps = []
         subExps.append(self)
         for d in self.arguments:
@@ -360,7 +360,7 @@ class exp:
         for v in vars:
             if not v in boundVars and v!=self: unboundvars.append(v)
         return unboundvars
-        
+
     def partitionVars(self, other):
         allVars = []
         self.getAllVars(allVars)
@@ -373,19 +373,19 @@ class exp:
             if v in belowVars:
                 bothVars.append(v)
         return (belowVars, aboveVars, bothVars)
-        
-        
+
+
     # really want a function that takes an
     # expression and two lists of nodes. One
-    # to remain with the expression and one 
-    # to be pulled out. Will return a new 
-    # (with no root level lambda terms) and 
+    # to remain with the expression and one
+    # to be pulled out. Will return a new
+    # (with no root level lambda terms) and
     # a variable (with root level lambda terms).
 
 
     # return a pair copy for each way to pull the thing
     # out. can be > 1 because of composition.
-    # each pair needs to say how many lambda terms go 
+    # each pair needs to say how many lambda terms go
     # with composition.
     # just have a different definition in lambdaExp???
     def pullout(self, e, vars, numNewLam):
@@ -395,15 +395,15 @@ class exp:
             for a in v.arguments:
                 vset.append(a)
             vargset.append(vset)
-            
-        
+
+
         # first of all, make function application
         origsem = self.copy()
         orige = e.copy()
         pairs = []
         (belowvars, abovevars, bothvars) = self.partitionVars(e)
         ec = e.copyNoVar()
-        
+
         if self.__class__==lambdaExp and len(vars)>0:
             compdone = False
             frontvar = self.var
@@ -434,7 +434,7 @@ class exp:
         newvariable = variable(ec)
         self.replace2(e, newvariable)
         p = self.copyNoVar()
-        
+
 
         for v in vars:
             nv = variable(v)
@@ -443,22 +443,22 @@ class exp:
             # this line is definitely not always right
             #vargset.append(v.arguments)
             v.arguments = []
-            newvariable.addAtFrontArg(v)                
+            newvariable.addAtFrontArg(v)
             l = lambdaExp()
             l.setFunct(ec)
             l.setVar(nv)
             ec = l
-        
+
         newvariable.setType(ec.type())
-        
+
         l = lambdaExp()
         l.setFunct(p)
         l.setVar(newvariable)
         pair = (l.copy(), ec.copy(), numNewLam, 0)
         pairs.append(pair)
-        
+
         self.replace2(newvariable, e)
-    
+
         i=0
         for v in vars:
             v.arguments = vargset[i]
@@ -490,7 +490,7 @@ class exp:
                 varnum+=1
         if varnum!=len(varorder):
             return False
-        return True        
+        return True
 
     def varOrder(self, L):
         """Omri added 25/7"""
@@ -499,7 +499,7 @@ class exp:
             if a.__class__ == variable:
                 L[varnum] = a.name
                 varnum+=1
-            
+
     def getNullPair(self):
         ## this should ALWAYS be by composition
         # parent, child
@@ -509,9 +509,9 @@ class exp:
         var = variable(self)
         parent.setVar(var)
         parent.setFunct(var)
-        # all the child cats will have fixed dir and 
+        # all the child cats will have fixed dir and
         # there are no new lambdas in the arg
-        
+
         # maybe forget the actual direction just the content
         # fixeddircats will actually have the variables
         fixeddircats = []
@@ -519,15 +519,15 @@ class exp:
         done = not (f.__class__==lambdaExp)
         while not done:
             if not f.__class__==lambdaExp:
-                print("not a lambda expression, is  ", f.toString(True))  
+                print("not a lambda expression, is  ", f.toString(True))
                 error("not a lambda expression")
             fixeddircats.append(f.var)
             if not f.funct.__class__==lambdaExp: done = True
             else: f = f.funct
-            
+
         return (parent, child, 0, 0, None)
-        
-        
+
+
     def split_subexp(self, e):
         if self.arity() > 3: return []
         allpairs = []
@@ -535,13 +535,13 @@ class exp:
         origsem = self.copy()
         child = e
         sem = self
-        
+
         evars = e.unboundVars()
         # control the arity of the child
-        # this may well be problematic        
+        # this may well be problematic
         if len(evars)>4: return (None, None)
         ordernum=0
-        
+
         (orders, numNewLam, fixeddircats) = self.getOrders(evars)
         for order in orders:
             ordernum+=1
@@ -578,26 +578,26 @@ class exp:
         l.setVar(v)
         l.setFunct(v)
         return l
-            
+
     def getOrders(self, undervars):
         # if the order is defined by the lambda terms of this
-        # thing then go with that order but otherwise we need to 
+        # thing then go with that order but otherwise we need to
         # get iterations.
         uv2 = []
         evm = None
-        for v in undervars: 
+        for v in undervars:
             if v.__class__ == eventMarker:
                 if evm: print("already got event marker")
                 evm = v
             else: uv2.append(v)
-        
+
         fixedorder = []
-        
+
         for lvar in self.getLvars():
             if lvar in undervars:
                 fixedorder.append(lvar)
                 del uv2[uv2.index(lvar)]
-        
+
         orderings = []
         if len(uv2)==0:
             ordering = []
@@ -615,8 +615,8 @@ class exp:
                 ordering.reverse()
                 orderings.append(ordering)
         return (orderings, len(uv2) +((evm or 0) and 1), fixedorder)
-        
-        
+
+
     def getLvars(self): return []
 
     #IDA:seems not to be used
@@ -629,15 +629,15 @@ class exp:
             pass
 
     # to do in make pairs:
-    # 1. want to be able to pull a variable out in one 
+    # 1. want to be able to pull a variable out in one
     # place only (or in multiple places simultaneously).
-    # 2. want to get all subtrees in there. this will 
+    # 2. want to get all subtrees in there. this will
     # cause a ridiculous blowup in complexity...
-    # 
+    #
     # CONSTRAINTS: is across board constraint ok with
     # prepositions????
     # how to do A-over-A constraint???
-            
+
     def makePairs(self):
         if self.nullSem(): return []
         repPairs = []
@@ -648,7 +648,7 @@ class exp:
         for e in subExps:
             # this is how we should add null if we're going to
             allowNull = True
-            if e==self: 
+            if e==self:
                 if allowNull:
                     nullpair = self.getNullPair()
                     repPairs.append(nullpair)
@@ -873,7 +873,7 @@ class emptyExp(exp):
         if other.__class__ != emptyExp: return False
         return True
 
-            
+
 class variable(exp):
     def __init__(self, e):
         self.linkedVar = None
@@ -1602,10 +1602,10 @@ def allcombinations(arguments, index, allcombs):
     allcombs.append([a])
     allcombinations(arguments, index+1, allcombs)
 
-    
+
 # def main(argv=None):
 #     exp.main()
 #
 # if __name__ == "__main__":
 #     main()
-    
+
