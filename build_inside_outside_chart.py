@@ -119,22 +119,14 @@ class chart_entry:
         return self.inside_prob
 
 def expand_chart(entry, chart, catStore, sem_store, RuleSet, lexicon, is_exclude_mwe, correct_index):
-    """
-    CatStore is a dictionary that maps pairs of syntactic and semantic forms
+    """CatStore is a dictionary that maps pairs of syntactic and semantic forms
     to the set of pairs they can decompose to. It's a cache essentially.
     """
-
     if entry.ccgCat.sem.getIsNull(): return
     if entry.p < entry.q - 1:
         for d in range(entry.p + 1, entry.q):
             words_l = ' '.join(entry.sentence[entry.p:d])
             words_r = ' '.join(entry.sentence[d:entry.q])
-            if is_exclude_mwe:
-                minL = d - entry.p
-                minR = entry.q - d
-            else:
-                minL = 0
-                minR = 0
             # there is currently no support for null categories #
             for pair in entry.ccgCat.allPairs(catStore):
                 l_cat = pair[0]
@@ -269,7 +261,7 @@ def build_chart(topCatList, sentence, RuleSet, lexicon, catStore, sem_store, is_
     # need to fix outside probs too!
     correct_index = (len(topCatList) - 1) / 2  # the index of the correct semantics
     for ind, topCat in enumerate(topCatList):
-        print('sem is ', topCat.sem.toString(True))
+        #print('sem is ', topCat.sem.toString(True))
         c1 = chart_entry(topCat, 0, len(sentence), sentence)
         if not sem_store.check(topCat.sem.toString(True)):
             sem_store.add(topCat.sem)

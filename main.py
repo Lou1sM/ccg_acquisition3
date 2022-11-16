@@ -59,19 +59,22 @@ def main(args):
 
         inputpairs = open(input_file).readlines()
 
-        train_parses_fpath = os.path.join(args.outdir, 'train_parses' + str(i) + '.txt')
-        test_parses_fpath = os.path.join(args.outdir, 'test_parses' + str(i) + '.txt')
+        train_out_fpath = os.path.join(args.outdir, f'train_out{i}.txt')
+        test_out_fpath = os.path.join(args.outdir, f'test_out{i}.txt')
 
-        lexicon, RuleSet, sem_store, chart = train_rules(lexicon,RuleSet,sem_store,
+        with (  open(train_out_fpath, 'w') as train_out,
+                open(test_out_fpath, 'w') as test_out):
+            lexicon, RuleSet, sem_store, chart = train_rules(lexicon,RuleSet,sem_store,
                                     is_one_word=not args.include_mwe, inputpairs=inputpairs,
                                     skip_q=args.skip_q,
                                     cats_to_check=cats_to_check,sentence_count=sentence_count,
-                                    train_parses_fpath=train_parses_fpath,
-                                    test_parses_fpath=test_parses_fpath)
+                                    train_out=train_out,
+                                    test_out=test_out,
+                                    is_devel=args.devel)
 
         lexicon.cur_cats = []
         print_cat_probs(cats_to_check, lexicon, sem_store, RuleSet)
-        print_top_parse(chart, RuleSet, train_parses_fpath)
+        print_top_parse(chart, RuleSet, train_out_fpath)
 
         if args.is_dump_lexicons:
             dump_lexicons_fpath = os.path.join(args.outdir, f'lexicon_dump{i}.txt')
@@ -85,7 +88,7 @@ def main(args):
                 f.write("/n".join(list(lexicon.sem_distribution.sem_to_pairs.keys())))
                 f.write("#### next session ####")
             lexicon_analysis_fpath = os.path.join(args.outdir, f'lexicon_analysis{i}.txt')
-            extract_from_lexicon.extract_from_lexicon(lexicon_analysis_fpath, lexicon,
+            extract_from_lexicon(lexicon_analysis_fpath, lexicon,
                             sem_store, RuleSet, sentence_count=sentence_count)
 
         if args.is_dump_verb_repo:
@@ -108,9 +111,13 @@ def main(args):
 
     # end for
     if args.dotest:
-        test_file = args.inp_file+"_"+str(test_file_index)
-        test_file = open(test_file, "r")
-        test(test_parses_fpath, sem_store, RuleSet, lexicon, sentence_count)
+        test_in_fpath = args.inp_file+"_"+str(test_file_index)
+        test_out_fpath = os.path.join(args.outdir, f'test_out.txt')
+        errors_out_fpath = os.path.join(args.outdir, f'errors_out.txt')
+        with (  open(test_in_fpath, 'r') as test_in,
+                open(test_out_fpath, 'w') as test_out,
+                open(errors_out_fpath, 'w') as errors_out):
+            test(test_in, test_out, errors_out, sem_store, RuleSet, lexicon, sentence_count)
 
     print("at end, lexicon size is ", len(lexicon.lex))
 

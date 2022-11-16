@@ -13,7 +13,6 @@ trans_binding1 = re.compile('lambda\\ \\$0\\_\\{e\\}\\.lambda\\ \\$1\\_\\{e\\}\\
 trans_binding2 = re.compile('lambda\\ \\$0\\_\\{e\\}\\.lambda\\ \\$1\\_\\{e\\}\\.lambda\\ ' +
                             '\\$2\\_\\{r\\}\\.v\\|[^()]+\\(\\$1\\,\\$0\\,\\$2\\)')
 
-
 class synCat:
     def __init__(self, head, arg, direction):
         self.funct = head
@@ -158,7 +157,6 @@ class synCat:
                     numbrack -= 1
                 i += 1
 
-
 class npCat(synCat):
     def __init__(self):
         self.head = "NP"
@@ -184,7 +182,6 @@ class npCat(synCat):
 
     def equals(self, other):
         return other.__class__ == npCat
-
 
 class nCat(synCat):
     def __init__(self):
@@ -212,7 +209,6 @@ class nCat(synCat):
     def equals(self, other):
         return other.__class__ == nCat
 
-
 class stCat(synCat):
     def __init__(self):
         self.head = "St"
@@ -238,7 +234,6 @@ class stCat(synCat):
 
     def equals(self, other):
         return other.__class__ == stCat
-
 
 class sCat(synCat):
     def __init__(self):
@@ -266,7 +261,6 @@ class sCat(synCat):
     def equals(self, other):
         return other.__class__ == sCat
 
-
 class sWhCat(synCat):
     def __init__(self):
         self.head = "Swh"
@@ -292,7 +286,6 @@ class sWhCat(synCat):
 
     def equals(self, other):
         return other.__class__ == sWhCat
-
 
 class qCat(synCat):
     def __init__(self):
@@ -320,7 +313,6 @@ class qCat(synCat):
     def equals(self, other):
         return other.__class__ == qCat
 
-
 def getCat(catType):
     cats = []
     # <e,t>
@@ -331,7 +323,6 @@ def getCat(catType):
         cats.append(synCat.s)
     return cats
 
-
 def getCatAug(e):
     t = e.type()
     cats = []
@@ -341,7 +332,6 @@ def getCatAug(e):
     if t.equals(sCat.getStaticType()):
         cats.append(synCat.s)
     return cats
-
 
 class cat:
     def __init__(self, syn, sem):
@@ -425,39 +415,7 @@ class cat:
         # numByComp says how many lambda terms composition was used on
         sem_pairs = self.sem.makePairs()
         for (parentSem, childSem, numNew, numByComp, fixeddircats) in sem_pairs:
-
-            # fixed dir cats is a funny one since many of the cats have
-            # a lambda associated with them but this is fine since
-
-            # print "here"
-            # print "\nexp split is ",parentSem.toString(True)," ",childSem.toString(True)
-            # print parentSem.toString(True)
-            # print childSem.toString(True)
-            # don't really want to do al
-            # pairs.ap
-
-            # ps = parentSem.copy()
-            # cs = childSem.copy()
-
-            # nr = ps.apply(cs)
-
-            # if nr:
-            # if not nr.equals(self.sem): print parentSem.toString(True)," applied to ",childSem.toString(True),\
-            # " does not get us back to ",self.sem.toString(True)," gets us to ",nr.toString(True)
-            # else: print "matches woooh"
-            # else:
-            # nr = ps.compose(cs)
-            # if not nr or not nr.equals(self.sem): print "does not match under comp",\
-            # parentSem.toString(True)," composed with to ",childSem.toString(True),\
-            # " does not get us back to ",self.sem.toString(True)," gets us to ",nr.toString(True)
-            # else: print "compmatches ",parentSem.toString(True),childSem.toString(True),nr.toString(True)
-
-            # only interested in the most significant child lambdas that
-            # really have to go
-
             # want the child to steal (borrow) a lot from the parent
-
-            # all nulls by composition
             isnull = False
             if fixeddircats is None:
                 functcat = self.syn.copy()
@@ -542,8 +500,6 @@ class cat:
                 currlam = currlam.funct
 
             compbase = currcat
-            # is this ok??? yes???
-            # do lots of debugging!!!!
             # get ALL splits of a top cat
             istyperaised = False
             if len(fixeddircats) > 0 and fixeddircats[0] == "typeraised":
@@ -603,11 +559,12 @@ class cat:
                     if istyperaised: print("typeraised")
                     parentCat = cat(pscf, parentSem)
                     if not pscf.getType().equals(parentSem.type()):
-                        print("types dont match 2 : ", parentCat.toString(), \
-                            " ", pscf.getType().toString(), " ", parentSem.type().toString(), \
-                            " comp is ", canDoComp, "\n")
-                        print(parentCat.toString(), childCat.toString())
-                        print("NOT ADDING THIS")
+                        #print("types dont match 2 : ", parentCat.toString(), \
+                        #    " ", pscf.getType().toString(), " ", parentSem.type().toString(), \
+                        #    " comp is ", canDoComp, "\n")
+                        #print(parentCat.toString(), childCat.toString())
+                        #print("NOT ADDING THIS")
+                        pass
                     elif not istyperaised:
                         append_pairs(pairs, (parentCat, childCat, "fwd", numByComp))
                     else:
@@ -625,10 +582,11 @@ class cat:
                     if istyperaised: print("typeraised")
                     parentCat = cat(pscb, parentSem)
                     if not pscb.getType().equals(parentSem.type()):
-                        print("types dont match 3 : ", parentCat.toString(), \
-                            " ", pscb.getType().toString(), " ", parentSem.type().toString(), \
-                            " comp is ", canDoComp, "\n")
-                        print("NOT ADDING THIS")
+                        #print("types dont match 3 : ", parentCat.toString(), \
+                        #    " ", pscb.getType().toString(), " ", parentSem.type().toString(), \
+                        #    " comp is ", canDoComp, "\n")
+                        #print("NOT ADDING THIS")
+                        pass
                     elif not istyperaised:
                         append_pairs(pairs, (childCat, parentCat, "back", numByComp))
                     else:
@@ -652,7 +610,8 @@ class cat:
                             # print "not back to orig, should be ", self.toString()
                             pass
                     else:
-                        print("got back to orig ")
+                        #print("got back to orig ")
+                        pass
                 else:
                     pc = parentCat.copy()
                     cc = childCat.copy()
@@ -677,15 +636,10 @@ class cat:
         c = cat(syncat, semrep)
         return c
 
-
-###########################
 # CODE OMRI ADDED
-###########################
-
 def append_pairs(pairs, new_entry):
     if check_restrictions(new_entry[0]) and check_restrictions(new_entry[1]):
         pairs.append(new_entry)
-
 
 def all_directions(syn_cat):
     """
@@ -697,7 +651,6 @@ def all_directions(syn_cat):
         output.append(c.direction)
         c = c.funct
     return output
-
 
 def check_restrictions(cur_cat):
     """
@@ -722,7 +675,6 @@ def check_restrictions(cur_cat):
             return False
     return True
 
-
 def orderOfVariables(cur_cat):
     """
     In a string s, returns the order of expressions of the form $[0-9]
@@ -736,7 +688,6 @@ def orderOfVariables(cur_cat):
         cur.append(ind)
         D[v] = cur
     return list(D.values())
-
 
 
 # make static cats #

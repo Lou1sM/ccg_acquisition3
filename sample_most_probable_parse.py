@@ -1,4 +1,4 @@
-# this is a function to sample the most probable parse for 
+# this is a function to sample the most probable parse for
 # each of the training sentences once the inside_outside
 # algorithm has converged
 """
@@ -22,7 +22,7 @@ def sample_most_probable_parse(sentence_charts,RuleSet,lexicon,output,sem_store)
                     print 'inside prob is over one'
                     print item
                     print 'rule prob is ',rule_prob
-                    
+
         for item in  sentence_charts[c][len(sentence_charts[c])]:
             top = sentence_charts[c][len(sentence_charts[c])][item]
             parse = sample(top,sentence_charts[c],RuleSet)
@@ -31,9 +31,8 @@ def sample_most_probable_parse(sentence_charts,RuleSet,lexicon,output,sem_store)
 
 
 def sample(entry, sentence_chart, RuleSet):
-    """
-    Tom's code. It is supposed to return the most likely parse after the inside_outside chart has
-    been filled out.
+    """Tom's code. It is supposed to return the most likely parse after the
+    inside_outside chart has been filled out.
     """
     children = []
     children.append((entry.word_score+entry.sem_score+\
@@ -45,15 +44,15 @@ def sample(entry, sentence_chart, RuleSet):
         children.append((RuleSet.return_log_prob(entry.syn_key, target) + \
                      sentence_chart[pair[0][3]-pair[0][2]][pair[0]].inside_score + \
                      sentence_chart[pair[1][3]-pair[1][2]][pair[1]].inside_score, pair))
-    children.sort()
-    children.reverse()
+    chilren = sorted(children,key=lambda x:x[0], reverse=True) # python3 updated, louis
     if children[0][1] == 'LEX':
         return [(entry.word_target, entry.syn_key, entry.sem_key)]
     else:
-        pair = children[0][1]
-        left_syn = pair[0][0]
-        right_syn = pair[1][0]
-        target = left_syn+'#####'+right_syn
+        best_parse = children[0]
+        pair = best_parse[1] # two elements that can best combine to give entry
+        left_syn = pair[0][0] # syntactic category of the left element
+        right_syn = pair[1][0] # syntactic category of the right element
+        target = left_syn+'#####'+right_syn # unused?
         pl = sample(sentence_chart[pair[0][3]-pair[0][2]][pair[0]], sentence_chart, RuleSet)
         pr = sample(sentence_chart[pair[1][3]-pair[1][2]][pair[1]], sentence_chart, RuleSet)
         pl.extend(pr)

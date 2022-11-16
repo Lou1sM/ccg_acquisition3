@@ -178,8 +178,8 @@ def get_transitive_cats(lexicon, sentence_count, sem_store, RuleSet, syn_cat_dis
             L_pr_aligned.append(log_pr)
         else:
             L_pr_notaligned.append(log_pr)
-    log_pr_aligned = scipy.misc.logsumexp(L_pr_aligned)
-    log_pr_notaligned = scipy.misc.logsumexp(L_pr_notaligned)
+    log_pr_aligned = scipy.special.logsumexp(L_pr_aligned)
+    log_pr_notaligned = scipy.special.logsumexp(L_pr_notaligned)
     pr_aligned = math.exp(log_pr_aligned) / \
         (math.exp(log_pr_aligned) + math.exp(log_pr_notaligned))
     pr_notaligned = 1 - pr_aligned
@@ -213,8 +213,8 @@ def get_adjective_order(lexicon, sentence_count, sem_store, RuleSet, syn_cat_dis
             L_pr_aligned.append(log_pr)
         else:
             L_pr_notaligned.append(log_pr)
-    log_pr_aligned = scipy.misc.logsumexp(L_pr_aligned)
-    log_pr_notaligned = scipy.misc.logsumexp(L_pr_notaligned)
+    log_pr_aligned = scipy.special.logsumexp(L_pr_aligned)
+    log_pr_notaligned = scipy.special.logsumexp(L_pr_notaligned)
     pr_aligned = math.exp(log_pr_aligned) / \
         (math.exp(log_pr_aligned) + math.exp(log_pr_notaligned))
     pr_notaligned = 1 - pr_aligned

@@ -196,6 +196,7 @@ def cky(chart1, sentence, minscores, RuleSet, beamsize):
     return returnchart
 
 def removemin(chart1, start, end, minscores):
+    # this function makes no sense
     minscore = inf
     secondmin = inf
     minc = None
@@ -210,13 +211,10 @@ def removemin(chart1, start, end, minscores):
     minscores[start][end]=secondmin
 
 def get_parse_chart(sentence, sem_store, RuleSet, lexicon, sentence_count):
-    guesslex = True # False
     guesslex = True
     beamsize = 100//(len(sentence)+1)
-    #beamsize = 1
     print("beam is ", beamsize)
-    verbose = False # True
-    verbose = True
+    verbose = False
     print("PARSING: really should prune lexicon (and rules??)", sentence)
     # this parser should build up the chart in a far
     # more efficient way than the previous one.
@@ -231,7 +229,8 @@ def get_parse_chart(sentence, sem_store, RuleSet, lexicon, sentence_count):
         ms = {}
         for j in range(i+1, len(sentence)+1):
             sc[j]={}
-            ms[j]=[]
+            #ms[j]=[] Louis: changed from this, think it should be -inf based on line 286 below
+            ms[j] = -inf
         chart1[i] = sc
         minscores[i] = ms
     if verbose: print("wordset is ", wordset)

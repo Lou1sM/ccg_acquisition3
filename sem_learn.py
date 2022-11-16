@@ -1,8 +1,9 @@
 import pickle
 from generator import generateSent
-from grammar_classes import *
+#from grammar_classes import *
 from inside_outside_calc import i_o_oneChart
-from parser import *
+from parser import parse
+from build_inside_outside_chart import build_chart
 from sample_most_probable_parse import *
 from makeGraphs import *
 from cat import synCat
@@ -11,8 +12,8 @@ import expFunctions
 
 
 def train_rules(lexicon,RuleSet,sem_store, is_one_word, inputpairs, skip_q,
-                cats_to_check, train_parses_fpath, test_parses_fpath,
-                sentence_count=0, truncate_complex_exps=True):
+                cats_to_check, train_out, test_out, sentence_count=0,
+                truncate_complex_exps=True, is_devel=False):
 
     datasize = 20000
     lexicon.set_learning_rates(datasize)
@@ -44,7 +45,6 @@ def train_rules(lexicon,RuleSet,sem_store, is_one_word, inputpairs, skip_q,
                 print("Sem: " + semstring + "\n\n")
                 continue
             if len(sem.allExtractableSubExps()) > 9 and truncate_complex_exps:
-                print("rejecting ", sem.toString(True))
                 r = None
                 sentence = None
                 continue
@@ -53,7 +53,7 @@ def train_rules(lexicon,RuleSet,sem_store, is_one_word, inputpairs, skip_q,
                 isQ, sc = get_top_cat(sem)
             except IndexError:
                 # print "couldn't determine syntactic category ", sem_line
-                #print_sent_info(sentence, train_parses_fpath, sentence_count, lexicon, topCatList)
+                #print_sent_info(sentence, train_out, sentence_count, lexicon, topCatList)
                 words = None
                 sentence = None
                 sem = None
@@ -63,8 +63,6 @@ def train_rules(lexicon,RuleSet,sem_store, is_one_word, inputpairs, skip_q,
             words = sentence.split()
             if not isQ and words[-1] in ["?", "."]:
                 words = words[:-1]
-            else:
-                print("Is Q")
             if len(words) == 0:
                 words = None
                 sentence = None
@@ -72,12 +70,19 @@ def train_rules(lexicon,RuleSet,sem_store, is_one_word, inputpairs, skip_q,
                 sc = None
                 continue
             # this function is broken atm
-            #test_during_training(test_parses_fpath, sem, words, sem_store, RuleSet, lexicon, sentence_count)
+            #test_during_training(test_out, sem, words, sem_store, RuleSet, lexicon, sentence_count)
 
             topCat = cat.cat(sc, sem)
             topCatList.append(topCat)
 
         if sentence and line[:11] == "example_end":
+            print("Sent : " + sentence, file=train_out)
+            print("update weight = ", lexicon.get_learning_rate(sentence_count), file=train_out)
+            print(sentence_count, file=train_out)
+            for topCat in topCatList:
+                print("Cat : " + topCat.toString(), file=train_out)
+                print("Cat : " + topCat.toString(), file=train_out)
+
             catStore = {}
             if len(words) > 8 or (skip_q and "?" in sentence):
                 sentence = []
@@ -92,7 +97,7 @@ def train_rules(lexicon,RuleSet,sem_store, is_one_word, inputpairs, skip_q,
             i_o_oneChart(chart, sem_store, lexicon, RuleSet, True, 0.0, sentence_count)
             sentence_count += 1
 
-            if sentence_count == train_limit:
+            if is_devel or (sentence_count == train_limit):
                 break
     return lexicon, RuleSet, sem_store, chart
 
@@ -108,7 +113,7 @@ def get_top_cat(sem):
         sc = synCat.allSynCats(sem.type())[0]
     return isQ, sc
 
-def print_sent_info(sentence, train_parses_fpath, sentence_count, lexicon, topCatList):
+def print_sent_info(sentence, train_out, sentence_count, lexicon, topCatList):
     if topCatList:
         print("sentence is ", sentence)
         print('\ngot training pair')
@@ -155,19 +160,12 @@ def print_top_parse(chart, RuleSet, output_fpath):
     for entry in chart[len(chart)]:
         top = chart[len(chart)][entry]
         topparses.append((top.inside_score, top))
-
     top_parse = sample(sorted(topparses)[-1][1], chart, RuleSet)
+
     with open(output_fpath, "w") as f:
         f.write('top parse:')
-        f.write(top_parse)
-        f.write(top.inside_score)
-        f.write("\n")
-
-    if f_out_additional:
-        print('\ntop parse:', file=f_out_additional)
-        print(top_parse, file=f_out_additional)
-        print(top.inside_score, file=f_out_additional)
-        print("\n", file=f_out_additional)
+        print(top_parse,file=f)
+        print(top.inside_score,file=f)
 
 def print_cat_probs(cats_to_check, lexicon, sem_store, RuleSet):
     print("outputting cat probs")
@@ -197,12 +195,10 @@ def generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store, is_one
                      sentence_count, sentnum)
         sentnum += 1
 
-def test(exp_name, sem_store, RuleSet, Current_Lex, sentence_count):
-    errors_out_fpath = os.path.join(exp_name,'sem_errors.txt')
-    errors_out = open(errors_out_fpath, "a")
+def test(test_in, test_out, errors_out, sem_store, RuleSet, Current_Lex, sentence_count):
     Current_Lex.refresh_all_params(sentence_count)
     retsem = None
-    for line in test_file:
+    for line in test_in:
         if line[:5] == "Sent:":
             sentence = line[6:].split()
         if line[:4] == "Sem:":

@@ -24,7 +24,7 @@ class Rule:
     def __init__(self, rule_head, alpha_top, beta_tot, beta_lex):
         self.Rule_Head = rule_head
         self.Targets = {}
-        
+
         # sort these out #
         self.alpha_top = alpha_top
         self.alpha_tot = 0.0
@@ -38,12 +38,12 @@ class Rule:
         self.temp_beta_lex = beta_lex
 
         ##################
-        
+
         # these are for  #
         # the i/o alg     #
         #self.top_term = 0.0
         self.bottom_term = 0.0
-        
+
         self.Targets[self.Rule_Head+'_LEX'] = Target(self.Rule_Head, 'LEX')
 
         correction = 1.0
@@ -64,18 +64,18 @@ class Rule:
     @staticmethod
     def rule_prior(left_syn, right_syn, direction, numcomp):
         ruleprior = 0.5
-        
+
         if direction=="fwd": ruleprior=ruleprior*right_syn.prior()
         elif direction=="back": ruleprior=ruleprior*left_syn.prior()
         elif direction is None and right_syn is None: ruleprior= ruleprior * left_syn.prior()
-        
+
         if numcomp>0:
             ruleprior = ruleprior*(0.25/numcomp)
         else:
             ruleprior = ruleprior*0.5
 
         return ruleprior
-    
+
     def check_target(self, left_syn, right_syn, direction, numcomp):
         left_synstring = left_syn.toString()
         if self.Rule_Head=="START" :
@@ -95,7 +95,7 @@ class Rule:
             # self.beta_tot = self.beta_tot+1.0
             # self.temp_alpha_tot = self.temp_alpha_tot + 1.0
             # self.temp_beta_tot = self.temp_beta_tot+1.0
-        
+
             # self.Targets[t].increment_alpha(1.0)
             # at the moment, just adding 1 to CRP
             # doing nothing for words though
@@ -119,19 +119,19 @@ class Rule:
 
         if target == self.Rule_Head+'_LEX':
             self.temp_beta_lex = prob + self.beta_lex
-        else: 
+        else:
             self.temp_alpha_tot = prob + self.alpha_top
             self.Targets[target].increment_temp_alpha(prob)
-    
+
 
     def set_temp_params(self, target):
-        self.temp_beta_tot = self.beta_tot 
+        self.temp_beta_tot = self.beta_tot
         if target == self.Rule_Head+'_LEX':
             self.temp_beta_lex = self.beta_lex
-        else: 
+        else:
             self.temp_alpha_tot = self.alpha_tot
             self.Targets[target].set_temp_alpha()
-    
+
 
     def update_params(self, target, prob, learningrate, datasize, gamma):
         verbose = False
@@ -144,12 +144,12 @@ class Rule:
         #if True==False and target == self.Rule_Head+'_LEX':
         #self.beta_lex += (prob*learningrate)/gamma - learningrate*self.beta_lex/gamma
 #self.beta_tot -= learningrate*self.beta_lex
-#        if True: 
+#        if True:
             #self.beta_tot -= learningrate*self.Targets[target].alpha
         self.alpha_tot += ((prob*learningrate)/gamma)*datasize - learningrate*self.Targets[target].alpha
         if verbose: print("updating target alpha by ", ((prob*learningrate)/gamma)*datasize - learningrate*self.Targets[target].alpha)
         self.Targets[target].increment_alpha(((prob*learningrate)/gamma)*datasize  - learningrate*self.Targets[target].alpha)
-    
+
     def update_log_params(self, target, log_prob):
         prob = exp(log_prob)
         self.beta_tot += prob
@@ -157,7 +157,7 @@ class Rule:
             self.beta_lex += prob
         else: self.alpha_tot += prob
         self.Targets[target].increment_alpha(prob)
-            
+
     def return_prob(self, target, sentence_count):
         return exp(self.return_log_prob(target, sentence_count))
 
@@ -167,9 +167,9 @@ class Rule:
             scale = Rules.extrascale*sentence_count
         else:
             scale = 1.0
-        scale = 1.0            
+        scale = 1.0
         log_prior = log(self.Targets[target].prior)
-        unseen = log_prior + psi(scale*self.alpha_top)-psi(scale*self.alpha_tot+scale*self.alpha_top)        
+        unseen = log_prior + psi(scale*self.alpha_top)-psi(scale*self.alpha_tot+scale*self.alpha_top)
 
         a_t = scale*self.Targets[target].alpha
         p1 = psi(a_t)
@@ -195,13 +195,13 @@ class Rule:
             scale = Rules.extrascale*sentence_count
         else:
             scale = 1.0
-        scale = 1.0            
+        scale = 1.0
         log_prior = log(self.Targets[target].prior)
         unseen = log_prior + log(scale*self.alpha_top) - \
-        log(scale*self.alpha_tot+scale*self.alpha_top)        
+        log(scale*self.alpha_tot+scale*self.alpha_top)
 
         a_t = scale*self.Targets[target].alpha
-        
+
         #p1 = psi(a_t)
         #p2 = psi(scale*self.alpha_tot+scale*self.alpha_top)
         #log_seen = p1-p2
@@ -221,16 +221,16 @@ class Rule:
             print("scale is ", scale)
         return log_prob
 
-    def check_alpha_tot(self):  
+    def check_alpha_tot(self):
         pass
-        
+
     def check_alpha_tot2(self):
         at = 0
         for t in self.Targets:
             at+=self.Targets[t].alpha
         if not at+10E-5>self.alpha_tot>at-10E-5:
             print("at = ", at)
-            print("alpha tot = ", self.alpha_tot) 
+            print("alpha tot = ", self.alpha_tot)
             error("alpha_tot2 error")
 
     def return_temp_prob(self, target):
@@ -255,12 +255,12 @@ class Rule:
             p1 = psi(a_t)
             p2 = psi(self.temp_alpha_tot)
             #print "p1 = ",p1," p2 = ",p2
-            prob = prob*exp(p1-p2)#psi(a_t) - psi(self.temp_alpha_tot))            
+            prob = prob*exp(p1-p2)#psi(a_t) - psi(self.temp_alpha_tot))
         if prob > 1.0:
             print('rule prob over 1 for ', target, self.Targets[target].temp_alpha, self.temp_alpha_tot, prob)
             print(self.temp_beta_lex, self.temp_beta_tot)
         return prob
-        
+
     def clear_probs(self):
         for t in self.Targets:
             self.Targets[t].clear_probs()
@@ -334,7 +334,7 @@ class Rules:
         if c in self.Targets: return
         self.Rules["START"].check_target(rule_head, None, None, 0)
         self.Targets[c] = "START"
-        print("adding ", c, " to START")
+        #print("adding ", c, " to START")
     def check_rule(self, rule_head, left_syn, right_syn, direction, numcomp):
         if rule_head not in self.Rules:
             self.Rules[rule_head] = Rule(rule_head, self.alpha_top, self.beta_tot, self.beta_lex)
@@ -369,14 +369,14 @@ class Rules:
         prob = exp(log_prob)
         if target not in self.updates: self.updates[target]=prob
         else: self.updates[target] += prob
-            
+
     def perform_updates(self, learningrate, datasize, sentence_count):
         gamma = self.orig_alpha_top + datasize
         if not self.usegamma: gamma = 1.0
         if sentence_count > 0:
-            alpha_top_update = learningrate*self.alpha_top*(1.0/gamma - 1.0) 
-            self.alpha_top = self.alpha_top + alpha_top_update       
-        
+            alpha_top_update = learningrate*self.alpha_top*(1.0/gamma - 1.0)
+            self.alpha_top = self.alpha_top + alpha_top_update
+
         for target in self.Targets: #updates:
             r = self.Targets[target]
             prob = 0.0
@@ -395,12 +395,12 @@ class Rules:
             print("deleting rule ", r)
             del self.Rules[r]
         self.sentence_count = sentence_count
-        
+
     def set_temp_params(self):
         for target in self.updates:
             r = self.Targets[target]
             self.Rules[r].set_temp_params(target)
-            
+
     def perform_temp_updates(self):
         for target in self.updates:
             r = self.Targets[target]
@@ -438,12 +438,12 @@ class Rules:
                 tot += val
             D = sorted([(x[0], x[1]/tot) for x in D], key=lambda x: -x[1])
             return D
-            
+
     def return_leaf_map_log_prob(self, head):
         """
         Written by Omri Abend 28/7
         Returns the log MAP probability of generating
-        a leaf from the category head. 
+        a leaf from the category head.
 
         Input:
         head - a string with the syntactic category
@@ -468,7 +468,7 @@ class Rules:
             log_prob = self.Rules[head].return_log_prob(target, self.sentence_count)
         else:
             return logprior
-        return log_prob    
+        return log_prob
 
     def update_alphas(self):
         for r in self.Rules:
@@ -481,7 +481,7 @@ class Rules:
             if not rc:
                 converged = False
         return converged
-        
+
     def clear_probs(self):
         for r in self.Rules:
             self.Rules[r].clear_probs()
@@ -510,7 +510,7 @@ class Start_Rule:
             self.Targets[Target] = Start_Target(Target)
             self.Targets[Target].increment()
             self.total_count += 1
-            
+
     def return_prob(self, Target):
         print("getting start prob for ", Target)
         if Target in self.Targets:
@@ -520,7 +520,7 @@ class Start_Rule:
         else:
             prob = float(1)/(self.total_count+1)
             return prob
-        
+
     def return_unk_prob(self):
         prob = self.alpha_top/(self.total_count+self.alpha_top)
         return prob
@@ -536,10 +536,10 @@ class Start_Target:
         self.count = 0
     def increment(self):
         self.count += 1
-    
+
 #########################################
 #########################################
-    
+
 
 
 ###########################################

@@ -64,7 +64,6 @@ def isQuant(args):
         return False
 
 def makeExpWithArgs(expString, expDict):
-    print("making ", expString)
     is_lambda = expString[:6]=="lambda"
     arguments_present = -1<expString.find("(")<expString.find(")")
     no_commas = expString.find(",")==-1
