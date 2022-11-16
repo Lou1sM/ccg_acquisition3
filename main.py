@@ -7,10 +7,6 @@ from build_inside_outside_chart import SemStore
 import pickle
 from sem_learn import train_rules, test, test_during_training, print_cat_probs, print_top_parse
 from extract_from_lexicon import extract_from_lexicon
-#from grammar_classes import *
-#from parser import *
-#from sample_most_probable_parse import *
-#from makeGraphs import *
 
 
 def main(args):
@@ -157,4 +153,6 @@ if __name__ == '__main__':
     args.add_argument("--include_mwe", action="store_true")
     args = args.parse_args()
 
+    if args.devel:
+        args.test_session = 2
     main(args)

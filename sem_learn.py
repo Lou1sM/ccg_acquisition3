@@ -1,14 +1,12 @@
 import pickle
 from generator import generateSent
-#from grammar_classes import *
 from inside_outside_calc import i_o_oneChart
 from parser import parse
 from build_inside_outside_chart import build_chart
-from sample_most_probable_parse import *
-from makeGraphs import *
+from sample_most_probable_parse import sample
 from cat import synCat
 import cat
-import expFunctions
+import exp
 
 
 def train_rules(lexicon,RuleSet,sem_store, is_one_word, inputpairs, skip_q,
@@ -39,7 +37,7 @@ def train_rules(lexicon,RuleSet,sem_store, is_one_word, inputpairs, skip_q,
         if sentence and line[:4] =="Sem:":
             semstring = line[5:].strip().rstrip()
             try:
-                sem, _ = expFunctions.makeExpWithArgs(semstring, {})
+                sem, _ = exp.makeExpWithArgs(semstring, {})
             except (AttributeError, IndexError):
                 print("LF could not be parsed\nSent : " + sentence)
                 print("Sem: " + semstring + "\n\n")
@@ -182,7 +180,7 @@ def print_cat_probs(cats_to_check, lexicon, sem_store, RuleSet):
 def generate_sentences(sentstogen, lexicon, RuleSet, catStore, sem_store, is_one_word, genoutfile, sentence_count):
     sentnum = 1
     for (gensent, gensemstr) in sentstogen:
-        gensem = expFunctions.makeExpWithArgs(gensemstr, {})[0]
+        gensem = exp.makeExpWithArgs(gensemstr, {})[0]
         if gensem.checkIfWh():
             sc = synCat.swh
         elif gensem.isQ():
@@ -203,12 +201,12 @@ def test(test_in, test_out, errors_out, sem_store, RuleSet, Current_Lex, sentenc
             sentence = line[6:].split()
         if line[:4] == "Sem:":
             try:
-                sem = expFunctions.makeExpWithArgs(line[5:].strip().rstrip(), {})[0]
+                sem = exp.makeExpWithArgs(line[5:].strip().rstrip(), {})[0]
             except IndexError:
                 print(sentence, file=errors_out)
                 print(line, file=errors_out)
                 continue
-                #sem = expFunctions.makeExpWithArgs(line[5:].strip().rstrip(), {})[0]
+                #sem = exp.makeExpWithArgs(line[5:].strip().rstrip(), {})[0]
             if not sem.isQ() and sentence[-1] in [".", "?"]:
                 sentence = sentence[:-1]
             if len(sentence) == 0:

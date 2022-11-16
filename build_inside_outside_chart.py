@@ -9,7 +9,7 @@ import pdb, re
 # from variable import variable
 # from lexicon_classes import syn_cat
 from tools import inf
-import expFunctions
+import exp
 
 
 # purpose of SemStore is to save 'all the sem reps'
@@ -32,7 +32,7 @@ class SemStore:
     def get_log_prior(self, sem_key):
         if not self.check(sem_key):
             print("not got ", sem_key)
-            sem = expFunctions.makeExpWithArgs(sem_key, {})
+            sem = exp.makeExpWithArgs(sem_key, {})
             # OMRI ADDED THE NEXT TWO LINES
             if isinstance(sem, tuple):
                 sem = sem[0]
@@ -60,7 +60,7 @@ class SemStore:
 
 # chart entries are for syntactic nodes that represent the span
 # p->q of the sentence
-class chart_entry:
+class ChartEntry:
     def __init__(self, ccgCat, p, q, sentence):
         self.sentence = sentence
         if p is not None and q is not None:
@@ -158,12 +158,12 @@ def expand_chart(entry, chart, catStore, sem_store, RuleSet, lexicon, is_exclude
 
                 # sem_store
                 if (l_syn, l_sem, entry.p, d) not in chart[d - entry.p]:
-                    cl = chart_entry(l_cat, entry.p, d, entry.sentence)
+                    cl = ChartEntry(l_cat, entry.p, d, entry.sentence)
                     chart[d - entry.p][(l_syn, l_sem, entry.p, d)] = cl
                     expand_chart(cl, chart, catStore, sem_store, RuleSet, lexicon, is_exclude_mwe, correct_index)
                 chart[d - entry.p][(l_syn, l_sem, entry.p, d)].add_parent(entry, 'l')
                 if (r_syn, r_sem, d, entry.q) not in chart[entry.q - d]:
-                    cr = chart_entry(r_cat, d, entry.q, entry.sentence)
+                    cr = ChartEntry(r_cat, d, entry.q, entry.sentence)
                     chart[entry.q - d][(r_syn, r_sem, d, entry.q)] = cr
                     expand_chart(cr, chart, catStore, sem_store, RuleSet, lexicon, is_exclude_mwe, correct_index)
                 chart[entry.q - d][(r_syn, r_sem, d, entry.q)].add_parent(entry, 'r')
@@ -233,7 +233,7 @@ def build_chartOld(sem_list,sentence,sem_store,RuleSet,lexicon,is_exclude_mwe):
         print 'sem is ',sem
     # NEED START SYMBOL
         cat = syn_cat(sem_store.get(sem).type,[])
-        c1 = chart_entry(sem,cat,0,len(sentence),sentence)
+        c1 = ChartEntry(sem,cat,0,len(sentence),sentence)
         chart[len(sentence)][(cat.key,sem,0,len(sentence))] = c1
         RuleSet.check_rule(c1.cat.key,None,None)
         wordspan = ' '.join(sentence)
@@ -262,7 +262,7 @@ def build_chart(topCatList, sentence, RuleSet, lexicon, catStore, sem_store, is_
     correct_index = (len(topCatList) - 1) / 2  # the index of the correct semantics
     for ind, topCat in enumerate(topCatList):
         #print('sem is ', topCat.sem.toString(True))
-        c1 = chart_entry(topCat, 0, len(sentence), sentence)
+        c1 = ChartEntry(topCat, 0, len(sentence), sentence)
         if not sem_store.check(topCat.sem.toString(True)):
             sem_store.add(topCat.sem)
         chart[len(sentence)][(topCat.synString(), topCat.semString(), 0, len(sentence))] = c1

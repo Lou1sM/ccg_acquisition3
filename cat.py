@@ -1,17 +1,6 @@
-## ccg category class
-# import exp
-# import types
-
-import pdb
-from semType import *
-from exp import *
-import expFunctions
+from semType import semType
+from exp import exp, variable
 import re
-
-trans_binding1 = re.compile('lambda\\ \\$0\\_\\{e\\}\\.lambda\\ \\$1\\_\\{e\\}\\.lambda\\ ' +
-                            '\\$2\\_\\{r\\}\\.v\\|[^\\(\\)]+\\(\\$0\\,\\$1\\,\\$2\\)')
-trans_binding2 = re.compile('lambda\\ \\$0\\_\\{e\\}\\.lambda\\ \\$1\\_\\{e\\}\\.lambda\\ ' +
-                            '\\$2\\_\\{r\\}\\.v\\|[^()]+\\(\\$1\\,\\$0\\,\\$2\\)')
 
 class synCat:
     def __init__(self, head, arg, direction):
@@ -631,7 +620,7 @@ class cat:
     def readCat(catstring):
         synstring = catstring.split(" :: ")[0]
         semstring = catstring.split(" :: ")[1]
-        (semrep, expString) = expFunctions.makeExpWithArgs(semstring, {})
+        (semrep, expString) = exp.makeExpWithArgs(semstring, {})
         syncat = synCat.readCat(synstring)
         c = cat(syncat, semrep)
         return c

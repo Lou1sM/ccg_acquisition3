@@ -19,7 +19,7 @@ class eType:
 		return False
 	def atomic(self):
 		return True
-		
+
 class tType:
 	def __init__(self):
 		pass
@@ -57,17 +57,14 @@ class eventType:
 		return False
 	def atomic(self):
 		return True
-	#def getArg(self):
-		#return None
-		
-		
+
 class semType:
 	e = eType()
 	t = tType()
 	event = eventType()
 	def __init__(self, argType, functType):
 		#eType = "e"
-		#tType = "t"		
+		#tType = "t"
 		self.argType = argType
 		self.functType = functType
 	@staticmethod
@@ -80,7 +77,7 @@ class semType:
 			print("type error ", typestring)
 			error('tye error')
 		typestring = typestring[1:-1]
-		leftbrack = 0		
+		leftbrack = 0
 		i = 0
 		for c in typestring:
 			if c=="<": leftbrack+=1
@@ -125,8 +122,3 @@ class semType:
 
 	def atomic(self):
 		return False
-		
-	
-
-
-		
