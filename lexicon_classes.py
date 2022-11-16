@@ -812,7 +812,7 @@ class Lexicon:
         for old_sem in self.sem_distribution.all_sems_for_shell(syn_key, shell_key):
             log_probs.append(self.get_map_log_word_prob(word, syn_key, old_sem, sentence_count, psi_or_log='log') + \
                                  self.get_map_log_sem_prob(syn_key, old_sem, sem_store))
-        return scipy.misc.logsumexp(log_probs)
+        return scipy.special.logsumexp(log_probs)
 
     def check(self, word, syn_key, sem_key, sem):
         """
@@ -876,9 +876,9 @@ class Lexicon:
         return wr
     """
 
-    def get_lex_items(self,word,test_out=None,guess=False,sem_store=None,beamsize=None):
-        """
-        Returns the most common lexical items with this specific word.
+    def get_lex_items(self,word,guess=False,sem_store=None,beamsize=None):
+        """Returns the most common lexical items with this specific word. Used to write
+        each l.toString() in pi to some file too, but a getter shouldn't be logging.
         """
         pi = []
         if beamsize is None:
@@ -895,8 +895,6 @@ class Lexicon:
                 shell_key = self.sem_distribution.get_most_common_shell(synkey)
                 lex_item = lexical_item(word, synkey, shell_key, True)
                 pi.append(lex_item)
-        for l in pi:
-            if test_out: print(l.toString(), file=test_out)
         return pi
 
     """

@@ -1,7 +1,7 @@
 import sys, pylab, pdb, os
 import numpy as np
 import matplotlib.pyplot as plt
-import extract_from_lexicon3
+import extract_from_lexicon
 from optparse import OptionParser
 
 FIELD_NAMES = ['name', 'sentence count', 'row type', 'LF', 'word', 'prob']
@@ -77,8 +77,8 @@ if __name__ == '__main__':
 
     words = options.words.split(':')
 
-    word_lfs = extract_from_lexicon3.get_transitive_lfs()
-    phenom = extract_from_lexicon3.Phenomenon('Transitives', word_lfs, '((S\\NP)/NP)', \
+    word_lfs = extract_from_lexicon.get_transitive_lfs()
+    phenom = extract_from_lexicon.Phenomenon('Transitives', word_lfs, '((S\\NP)/NP)', \
                                               ["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], \
                                               two_LFs=True, \
                                               flipped_target_syn="((S/NP)\\NP)", \

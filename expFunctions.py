@@ -2,10 +2,8 @@ from exp import *
 from predicate import *
 from constant import *
 from conjunction import *
-from neg import *
 from qMarker import *
 import re
-
 
 
 def makeExp(predString, expString, expDict):
@@ -148,7 +146,6 @@ def extractArguments(expString, expDict):
         i += 1
     return arglist, expString[i:]
 
-
 def makeVars(predstring,expString,vardict,parse_args=True):
     if predstring not in vardict:
         if "_{" in predstring:
@@ -171,7 +168,6 @@ def makeVars(predstring,expString,vardict,parse_args=True):
         for arg in args:
             e.addArg(arg)
     return e, expString
-
 
 def makeLogExp(predstring, expString, vardict):
     e = None

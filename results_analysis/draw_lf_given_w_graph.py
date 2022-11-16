@@ -1,7 +1,7 @@
 import sys, pylab, pdb, os
 import numpy as np
 import matplotlib.pyplot as plt
-import extract_from_lexicon3
+import extract_from_lexicon
 
 # if len(sys.argv) != 2:
 #    print('Usage: eval_test_file.py ')
@@ -84,33 +84,33 @@ else:
 
 """
 # getting nouns
-word_lfs = extract_from_lexicon3.get_noun_lfs()
-phenom = extract_from_lexicon3.Phenomenon('Nouns', word_lfs,'N',['N'])
+word_lfs = extract_from_lexicon.get_noun_lfs()
+phenom = extract_from_lexicon.Phenomenon('Nouns', word_lfs,'N',['N'])
 words = ['girl', 'coat', 'table', 'coffee', 'pencil', 'spoon']
 results = draw_lf_given_w(phenom,words,filenames)
 draw_graph(results)
 
 # getting prepositions
-word_lfs = extract_from_lexicon3.get_prep_lfs()
-phenom = extract_from_lexicon3.Phenomenon('Prepositions', word_lfs, '(PP/NP)', \
+word_lfs = extract_from_lexicon.get_prep_lfs()
+phenom = extract_from_lexicon.Phenomenon('Prepositions', word_lfs, '(PP/NP)', \
                                      ['(PP/NP)', "(PP\\NP)"])
 words = ['in','on','by','about']
 results = draw_lf_given_w(phenom,words,filenames)
 draw_graph(results)
 
 # getting determiners
-word_lfs = extract_from_lexicon3.get_det_lfs()
-phenom = extract_from_lexicon3.Phenomenon('Determiners', word_lfs, '(NP/N)', \
+word_lfs = extract_from_lexicon.get_det_lfs()
+phenom = extract_from_lexicon.Phenomenon('Determiners', word_lfs, '(NP/N)', \
                                               ['(NP/N)', "(NP\\N)"])
 words = ['the','a','any','his']
 results = draw_lf_given_w(phenom,words,filenames)
 draw_graph(results)
 
 # daxed
-phenom = extract_from_lexicon3.get_dax_phenom()
+phenom = extract_from_lexicon.get_dax_phenom()
 word_lfs = [('daxed', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.v|dax&PAST($1,$0,$2)'),\
                 ('dax', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.v|dax($1,$0,$2)')]
-phenom = extract_from_lexicon3.Phenomenon('Daxed', word_lfs, '((S\\NP)/NP)',\
+phenom = extract_from_lexicon.Phenomenon('Daxed', word_lfs, '((S\\NP)/NP)',\
                           ['((S\\NP)/NP)', "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"],\
                           ['daxed','dax'])
 words = ['daxed','dax']
@@ -121,7 +121,7 @@ for fns, suffix in zip(filenames,suffixes):
         results[(suffix,w)] = r
 """
 
-phenom = extract_from_lexicon3.get_jax_phenom()
+phenom = extract_from_lexicon.get_jax_phenom()
 words = ['jax']
 results = {}
 for fns, suffix in zip(filenames, suffixes):

@@ -25,10 +25,7 @@ swap_args = lambda s: re.sub('\\(\\$1,\\$0,\\$2\\)', '($0,$1,$2)', s)
 swap_args_other_way = lambda s: re.sub('\\(\\$0,\\$1,\\$2\\)', '($1,$0,$2)', s)
 PATH = os.path.dirname(os.path.realpath(__file__)) + '/'
 
-######################################################
 # EXTRACTING THE SYNTAX DISTRIBUTION
-######################################################
-
 def _catProbFromGrammar(sc, RuleSet):
     """
     obtains Pr(syntactic category)
@@ -84,9 +81,7 @@ def print_syn_yield_distribution(prefix, RuleSet, syn_key, sentence_count, f_out
         f_out.write('\t'.join([prefix, str(sentence_count), 'Pr(yield syn|syn)',\
                                    syn_key, cat[0], (cat[1] if len(cat) > 1 else 'EMPTY'), str(prob)])+'\n')
 
-######################################################
 # EXTRACTING THE DISTRIBUTION OF LOGICAL FORMS
-######################################################
 def get_w_dist_given_LF(lexicon, sentence_count, sem_store, RuleSet, target_sem_key):
     """
     computing the distribution Pr(w=*|LF)
@@ -163,7 +158,6 @@ def get_synt_given_LF(lexicon, sentence_count, sem_store, RuleSet, target_syn_ke
     syn_given_sem_D = dict([(k, v/Z) for k, v in syn_given_sem_D])
 
     return syn_given_sem_D, synt_cat_distribution
-
 
 def get_transitive_cats(lexicon, sentence_count, sem_store, RuleSet, syn_cat_distribution):
     """
@@ -250,12 +244,7 @@ def orderOfVariables(sem_str):
         return L[0][1] < L[1][1]
 
 
-######################################################
-# PHENOMENA
-######################################################
-
 class Phenomenon:
-
     def __init__(self, name, word_lf_pairs, target_syn, all_target_syns, \
                      unambig = None, two_LFs = False, \
                      flipped_target_syn=None,sem_type=None, \
@@ -497,11 +486,7 @@ def get_noun_lfs():
     f.close()
     return noun_to_lf
 
-
-######################################################
 # PUTTING EVERYTHING TOGETHER
-######################################################
-
 def log_map_sem_given_syn_prob(lexicon, syn_key, target_sem, sem_store):
     try:
         return math.exp(lexicon.get_map_log_sem_prob(syn_key, target_sem, sem_store))
@@ -601,8 +586,6 @@ def print_cat_stats(phenom,lexicon,sentence_count,sem_store,RuleSet,f_out,prefix
                                               'Pr(shell|syn)',str(pr)])+'\n')
     """
 
-
-
 def fork_and_run_dax(dax_filename, output_filename, phenom, lexicon, sentence_count, sem_store, RuleSet):
     """fork a process, train the model on a single example (given in filename), and then output the stats"""
     PID = os.fork()
@@ -611,7 +594,7 @@ def fork_and_run_dax(dax_filename, output_filename, phenom, lexicon, sentence_co
         f_out_local = open(output_filename, 'w')
         input_pairs = f_dax.readlines()
         f_dax.close()
-        SemLearn.train_rules(sem_store, RuleSet, lexicon, True, input_pairs, [],\
+        sem_learn.train_rules(sem_store, RuleSet, lexicon, True, input_pairs, [],\
                                  None, None, False, sentence_count, f_out_additional=f_out_local,\
                                  truncate_complex_exps=False)
         print_cat_stats(phenom, lexicon, sentence_count, sem_store, RuleSet, f_out_local, prefix='FILE'+dax_filename[-1]+' ')
@@ -637,98 +620,59 @@ def fork_and_run_dax(dax_filename, output_filename, phenom, lexicon, sentence_co
         os.waitpid(PID, 0)
         return
 
-
-def main(output_fn, special_option='N', lexicon_fn = None, \
-             lexicon = None, sentence_count = None, sem_store = None, RuleSet = None):
+def extract_from_lexicon(output_fn, lexicon, sem_store, RuleSet, lexicon_fn = None, sentence_count=None):
 
     if lexicon_fn:
-        f_lexicon = open(lexicon_fn, 'rb')
-        lexicon, sentence_count, sem_store, RuleSet = pickle.load(f_lexicon)
-        f_lexicon.close()
+        with open(lexicon_fn, 'rb') as f:
+            lexicon, sentence_count, sem_store, RuleSet = pickle.load(f)
 
-    dax_range = []
+    synt_cat_distribution = get_synt_distribution(["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], lexicon, sem_store, RuleSet, sentence_count)
+    D = get_transitive_cats(lexicon, sentence_count, sem_store, RuleSet, synt_cat_distribution)
+    f_out = open(output_fn+'.trans_cats', 'w')
+    for k, v in list(D.items()):
+        f_out.write(str(sentence_count)+'\t'+k+'\t'+str(v)+'\n')
+    f_out.close()
+    sents_to_parse = []
 
-    if special_option == 'T':
-        test_file = open("trainFiles/trainPairs_20", "r")
-        test_out = open(output_fn, "w")
-        SemLearn.test(test_file, sem_store, RuleSet, lexicon, test_out, sentence_count)
-        test_file.close()
+    if sents_to_parse != []:
+        test_out = open(output_fn+'.parses', 'w')
+        rubbish_f_out = open('rubbish', 'w')
+        for sentnum, sent_to_parse in enumerate(sents_to_parse):
+            parser.parse(sent_to_parse, sem_store, RuleSet, lexicon, sentence_count, rubbish_f_out,\
+                             test_out_parses=test_out, target_top_cat='Swh')
+        rubbish_f_out.close()
         test_out.close()
-    elif special_option in ['L', 'F', 'N']:
-        synt_cat_distribution = get_synt_distribution(["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], lexicon, sem_store, RuleSet, sentence_count)
-        D = get_transitive_cats(lexicon, sentence_count, sem_store, RuleSet, synt_cat_distribution)
-        f_out = open(output_fn+'.trans_cats', 'w')
-        for k, v in list(D.items()):
-            f_out.write(str(sentence_count)+'\t'+k+'\t'+str(v)+'\n')
-        f_out.close()
-        if special_option == 'L':
-            return
-        else:
-            #sents_to_parse = [['this', 'is', 'corp', 'Mommy'], ['this', 'is', 'the', 'corp']]
-            sents_to_parse = []
-            #'Jarjar has it'.split(), 'what you did have'.split(), 'what did you have'.split()]
-            #[('what you did have ?','lambda $0_{e}.lambda $1_{ev}.aux|do&PAST(v|have(pro|you,$0,$1),$1)'),
-            #('what did you have ?','lambda $0_{e}.lambda $1_{ev}.aux|do&PAST(v|have(pro|you,$0,$1),$1)')]
 
-            if sents_to_parse != []:
-                test_out = open(output_fn+'.parses', 'w')
-                rubbish_f_out = open('rubbish', 'w')
-                for sentnum, sent_to_parse in enumerate(sents_to_parse):
-                    parser.parse(sent_to_parse, sem_store, RuleSet, lexicon, sentence_count, rubbish_f_out,\
-                                     test_out_parses=test_out, target_top_cat='Swh')
-                rubbish_f_out.close()
-                test_out.close()
+    f_out = open(output_fn, 'w')
+    for phenom in get_phenomena():
+        print_cat_stats(phenom, lexicon, sentence_count, sem_store, RuleSet, f_out)
 
-            f_out = open(output_fn, 'w')
-            for phenom in get_phenomena():
-                print_cat_stats(phenom, lexicon, sentence_count, sem_store, RuleSet, f_out)
+    # output the negation phenomena
+    negation_target_words = ['not', '\'t', 'gonna']
+    for target_word in negation_target_words:
+        print_syn_lf_given_word_probs('Negation', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
 
-            # output the negation phenomena
-            negation_target_words = ['not', '\'t', 'gonna']
-            for target_word in negation_target_words:
-                print_syn_lf_given_word_probs('Negation', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
+    # output the adverbs phenomena
+    for target_word in ADVERBS:
+        print_syn_lf_given_word_probs('Adverbs', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
 
-            # output the adverbs phenomena
-            for target_word in ADVERBS:
-                print_syn_lf_given_word_probs('Adverbs', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
+    # output the auxilliaries Pr(m|w)
+    for target_word in AUXILIARIES:
+        print_syn_lf_given_word_probs('Auxiliaries', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
 
-            # output the auxilliaries Pr(m|w)
-            for target_word in AUXILIARIES:
-                print_syn_lf_given_word_probs('Auxiliaries', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
+    # output the wh Pr(m|w)
+    for target_word in WH_WORDS:
+        print_syn_lf_given_word_probs('WH words', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
 
-            # output the wh Pr(m|w)
-            for target_word in WH_WORDS:
-                print_syn_lf_given_word_probs('WH words', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
+    # output the prepositions
+    preposition_target_words = ['on', 'in', 'with', 'good', 'big', 'nice', 'busy', 'right']
+    for target_word in preposition_target_words:
+        print_syn_lf_given_word_probs('PrepCheck', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
 
-            # output the prepositions
-            preposition_target_words = ['on', 'in', 'with', 'good', 'big', 'nice', 'busy', 'right']
-            for target_word in preposition_target_words:
-                print_syn_lf_given_word_probs('PrepCheck', lexicon, target_word, sem_store, RuleSet, sentence_count, f_out)
-
-            # output the yield distribution of some syntactic categories
-            syntactic_categories = ['PP', 'NP', '(PP/N)', '(S\\NP)', '(S/NP)', '((S\\NP)/N)']
-            for syn_key in syntactic_categories:
-                print_syn_yield_distribution('SynYield', RuleSet, syn_key, sentence_count, f_out)
-            dax_range = list(range(1, 16))
-
-    elif special_option != 'N':
-        dax_range = [int(x) for x in special_option.split(':')]
-        print(dax_range)
-
-    if special_option != 'N':
-        for ind in dax_range:
-            if ind in [1, 2]:
-                phenom = get_dax_phenom()
-            elif ind == 3:
-                phenom = get_acorp_phenom()
-            elif ind == 4:
-                phenom = get_corp_phenom()
-            else:
-                continue
-            fork_and_run_dax(PATH+'dax_examples/dax_example'+str(ind),\
-                                 output_fn+'.out'+str(ind), phenom, \
-                                 lexicon, sentence_count, sem_store, RuleSet)
-
+    # output the yield distribution of some syntactic categories
+    syntactic_categories = ['PP', 'NP', '(PP/N)', '(S\\NP)', '(S/NP)', '((S\\NP)/N)']
+    for syn_key in syntactic_categories:
+        print_syn_yield_distribution('SynYield', RuleSet, syn_key, sentence_count, f_out)
 
 
 if __name__ == '__main__':
@@ -739,7 +683,3 @@ if __name__ == '__main__':
         sys.exit(-1)
     main(sys.argv[2], sys.argv[3], sys.argv[1])
     print('Done.')
-
-
-
-

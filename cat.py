@@ -67,7 +67,7 @@ class synCat:
         functCats = synCat.allSynCatsWithPos(e.getFunct())
         for argCat in argCats:
             # bracketing, but need to be careful about where it goes.
-            # should put in implicit bracketing. 
+            # should put in implicit bracketing.
             # arg not always bracketed
             for functCat in functCats:
                 # fwd
@@ -96,8 +96,8 @@ class synCat:
         functCats = synCat.allSynCats(catType.getFunct())
         for argCat in argCats:
             # bracketing, but need to be careful about where it goes.
-            # should put in implicit bracketing. 
-            # arg not always bracketed 
+            # should put in implicit bracketing.
+            # arg not always bracketed
 
             # print "argCat is ",argCat.toString()
             for functCat in functCats:
@@ -496,7 +496,7 @@ class cat:
             compargs = []
             lterm = self.sem
             # check that type and direction match
-            # break if not 
+            # break if not
             compfunct = self.syn
             canDoComp = False
             for i in range(numByComp):
@@ -526,7 +526,7 @@ class cat:
             currcat = self.syn
             currlam = self.sem
             catstoappend = []
-            # want to know about arg cat 
+            # want to know about arg cat
             lvars = childSem.getLvars()
             t = childSem.type()
             pt = childSem
@@ -558,10 +558,10 @@ class cat:
             # catstoappend = []
             # currcat = self.syn
 
-            # this is super wrong. we need to know which cats 
+            # this is super wrong. we need to know which cats
             # they are.
 
-            # now we are interested in the cats for things that come 
+            # now we are interested in the cats for things that come
             # from seen lambdas
             fixedcats = []
             seenfixeddircats = 0
@@ -582,7 +582,7 @@ class cat:
             # here there could be some dynamic programming surely???
             # need to work out the sharing for non comp cats
             for sc in synCat.allSynCatsWithPos(pt):
-                # fixed because lambda terms equivalent 
+                # fixed because lambda terms equivalent
                 # to above
                 for ca in reversed(fixedcats):
                     sc = synCat(sc, ca[0], ca[1])
@@ -679,7 +679,7 @@ class cat:
 
 
 ###########################
-# CODE OMRI ADDED 
+# CODE OMRI ADDED
 ###########################
 
 def append_pairs(pairs, new_entry):
@@ -703,7 +703,7 @@ def check_restrictions(cur_cat):
     """
     Receives an instance of cat.cat.
     Returns True iff the entry does not violate the binding restrictions, i.e., that
-    the arguments should appear in the same order in the logical 
+    the arguments should appear in the same order in the logical
     form and in the syntactic category, whenever you have a case of opposite directions of slashes.
     """
     directions = all_directions(cur_cat.getSyn())

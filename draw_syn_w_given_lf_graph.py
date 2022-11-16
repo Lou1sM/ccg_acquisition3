@@ -6,7 +6,7 @@ matplotlib.rcParams.update({'font.size': 18})
 import sys, pylab, pdb, os, re
 import numpy as np
 import matplotlib.pyplot as plt
-import extract_from_lexicon3
+import extract_from_lexicon
 from optparse import OptionParser
 
 COLORS = ['b', 'g', 'r', 'c', 'm', 'y']
@@ -168,8 +168,8 @@ def draw_graph(results, options, show_plot=True, save_plot=None, suffixes=None, 
 def get_all_phenoms():
     all_phenoms = {}
 
-    word_lfs = extract_from_lexicon3.get_transitive_lfs()
-    phenom = extract_from_lexicon3.Phenomenon('Transitives', word_lfs, '((S\\NP)/NP)', \
+    word_lfs = extract_from_lexicon.get_transitive_lfs()
+    phenom = extract_from_lexicon.Phenomenon('Transitives', word_lfs, '((S\\NP)/NP)', \
                                               ["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], \
                                               two_LFs=True, \
                                               flipped_target_syn="((S/NP)\\NP)", \
@@ -178,54 +178,54 @@ def get_all_phenoms():
                                                   'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.placeholderP($1,$0,$2)'])
     all_phenoms['trans'] = phenom
 
-    phenom = extract_from_lexicon3.get_dax_phenom()
+    phenom = extract_from_lexicon.get_dax_phenom()
     word_lfs = [('daxed', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.v|dax&PAST($1,$0,$2)'), \
                 ('dax', 'lambda $0_{e}.lambda $1_{e}.lambda $2_{r}.v|dax($1,$0,$2)')]
-    phenom = extract_from_lexicon3.Phenomenon('Nonce Transitive', word_lfs, '((S\\NP)/NP)', \
+    phenom = extract_from_lexicon.Phenomenon('Nonce Transitive', word_lfs, '((S\\NP)/NP)', \
                                               ['((S\\NP)/NP)', "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], \
                                               ['daxed', 'dax'], two_LFs=True)
     all_phenoms['trans_dax'] = phenom
 
-    word_lfs = extract_from_lexicon3.get_det_lfs()
-    phenom = extract_from_lexicon3.Phenomenon('Determiners', word_lfs, '(NP/N)', \
+    word_lfs = extract_from_lexicon.get_det_lfs()
+    phenom = extract_from_lexicon.Phenomenon('Determiners', word_lfs, '(NP/N)', \
                                               ['(NP/N)', "(NP\\N)"], sem_type='(NP|N)')
     all_phenoms['det'] = phenom
 
     word_lfs = [('jax', 'lambda $0_{<e,t>}.det|jax($1,$0($1))')]
-    phenom = extract_from_lexicon3.Phenomenon('Jax (deter.)', word_lfs, '(NP/N)', \
+    phenom = extract_from_lexicon.Phenomenon('Jax (deter.)', word_lfs, '(NP/N)', \
                                               ['(NP/N)', "(NP\\N)"], sem_type='(NP|N)')
     all_phenoms['dax_det'] = phenom
 
-    word_lfs = extract_from_lexicon3.get_noun_lfs()
-    phenom = extract_from_lexicon3.Phenomenon('Nouns', word_lfs, 'N', ['N'], sem_type='N')
+    word_lfs = extract_from_lexicon.get_noun_lfs()
+    phenom = extract_from_lexicon.Phenomenon('Nouns', word_lfs, 'N', ['N'], sem_type='N')
     all_phenoms['nouns'] = phenom
 
     word_lfs = [('zax', 'lambda $0_{e}.n|zax($0)')]
-    phenom = extract_from_lexicon3.Phenomenon('Nonce Noun', word_lfs, 'N', ["N"], sem_type='N')
+    phenom = extract_from_lexicon.Phenomenon('Nonce Noun', word_lfs, 'N', ["N"], sem_type='N')
     all_phenoms['dax_nouns'] = phenom
 
-    word_lfs = extract_from_lexicon3.get_prep_lfs()
-    phenom = extract_from_lexicon3.Phenomenon('Prepositions', word_lfs, '(PP/NP)', \
+    word_lfs = extract_from_lexicon.get_prep_lfs()
+    phenom = extract_from_lexicon.Phenomenon('Prepositions', word_lfs, '(PP/NP)', \
                                               ['(PP/NP)', "(PP\\NP)"], sem_type='(PP|NP)')
     all_phenoms['prep'] = phenom
 
     word_lfs = [('ax', "lambda $0_{e}.lambda $1_{r}.prep|ax($0,$1)")]
-    phenom = extract_from_lexicon3.Phenomenon('Nonce Preposition', word_lfs, '(PP/NP)', \
+    phenom = extract_from_lexicon.Phenomenon('Nonce Preposition', word_lfs, '(PP/NP)', \
                                               ['(PP/NP)', "(PP\\NP)"], sem_type='(PP|NP)')
     all_phenoms['prep_dOBax'] = phenom
 
-    word_lfs = extract_from_lexicon3.get_intransitive_lfs()
-    phenom = extract_from_lexicon3.Phenomenon('Intransitives', word_lfs, '(S\\NP)', \
+    word_lfs = extract_from_lexicon.get_intransitive_lfs()
+    phenom = extract_from_lexicon.Phenomenon('Intransitives', word_lfs, '(S\\NP)', \
                                               ['(S\\NP)', "(S/NP)"], sem_type='(S|NP)')
     all_phenoms['intrans'] = phenom
 
     word_lfs = [('corp', "lambda $0_{e}.lambda $1_{r}.prep|corp($0,$1)")]
-    phenom = extract_from_lexicon3.Phenomenon('Nonce Preposition', word_lfs, '(PP/NP)', \
+    phenom = extract_from_lexicon.Phenomenon('Nonce Preposition', word_lfs, '(PP/NP)', \
                                               ['(PP/NP)', "(PP\\NP)"], sem_type='(PP|NP)')
     all_phenoms['corp_prep'] = phenom
 
     word_lfs = [('corp', 'lambda $0_{e}.n|corp($0)')]
-    phenom = extract_from_lexicon3.Phenomenon('Nonce Noun', word_lfs, 'N', \
+    phenom = extract_from_lexicon.Phenomenon('Nonce Noun', word_lfs, 'N', \
                                               ["N"], sem_type='N')
     all_phenoms['corp_noun'] = phenom
 

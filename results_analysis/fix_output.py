@@ -1,7 +1,7 @@
 import sys, pylab, pdb, os
 import numpy as np
 import matplotlib.pyplot as plt
-import extract_from_lexicon3
+import extract_from_lexicon
 from optparse import OptionParser
 
 

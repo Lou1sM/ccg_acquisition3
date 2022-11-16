@@ -209,10 +209,10 @@ def removemin(chart1, start, end, minscores):
     del chart1[start][end][minc]
     minscores[start][end]=secondmin
 
-def get_parse_chart(sentence, sem_store, RuleSet, lexicon, sentence_count, test_out):
+def get_parse_chart(sentence, sem_store, RuleSet, lexicon, sentence_count):
     guesslex = True # False
     guesslex = True
-    beamsize = 100/(len(sentence)+1)
+    beamsize = 100//(len(sentence)+1)
     #beamsize = 1
     print("beam is ", beamsize)
     verbose = False # True
@@ -250,7 +250,7 @@ def get_parse_chart(sentence, sem_store, RuleSet, lexicon, sentence_count, test_
                 if verbose: print("start is ", start, " end is ", end, " for ", w)
                 if end-start>1 and lexicon.mwe == False: continue
                 poss_lex = []
-                poss_lex = lexicon.get_lex_items(w, test_out, guesslex, sem_store, beamsize)
+                poss_lex = lexicon.get_lex_items(w, guesslex, sem_store, beamsize)
                 if verbose: print(w, ' has ', len(poss_lex), ' realisations')
                 if len(poss_lex) > 0:
                     #print 'most probable is ',poss_lex[0]
@@ -295,9 +295,9 @@ def get_parse_chart(sentence, sem_store, RuleSet, lexicon, sentence_count, test_
     return returnchart
 
 
-def parse(sentence,sem_store,RuleSet,lexicon,sentence_count,test_out,test_out_parses=None,target_top_cat=None):
+def parse(sentence,sem_store,RuleSet,lexicon,sentence_count,test_out_parses=None,target_top_cat=None):
     verbose = False
-    returnchart = get_parse_chart(sentence, sem_store, RuleSet, lexicon, sentence_count, test_out)
+    returnchart = get_parse_chart(sentence, sem_store, RuleSet, lexicon, sentence_count)
     if returnchart is None:
         return (None, None, None)
     if returnchart is not None:
@@ -350,6 +350,3 @@ def parse(sentence,sem_store,RuleSet,lexicon,sentence_count,test_out,test_out_pa
             print(topnode.inside_score, file=test_out_parses)
             print("\n", file=test_out_parses)
         return (topnode.ccgCat.sem, top_parse, topnode.ccgCat)
-
-
-

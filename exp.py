@@ -18,8 +18,7 @@ class exp:
         self.linkedVar = None
         self.name = name
         self.numArgs = numArgs
-        if numArgs!=len(argTypes):
-            print("error, not right number of args")
+        assert numArgs==len(argTypes)
         self.argTypes = argTypes
         self.arguments = []
         self.parents = []
@@ -71,7 +70,6 @@ class exp:
                 return True
         else:
             return False
-
     #########################################
     # only lambdas should be allowed to apply
     # and compose.
@@ -671,134 +669,6 @@ class exp:
         for a in self.arguments:
             a.abstractOver(e, v)
 
-    #IDA: I give up on making main() work, for now
-    # @staticmethod
-    # def main():
-    #     # What are you doing in that PLACEHOLDER
-    #     r1 = makeExpWithArgs("lambda $0_{e}.lambda $1_{ev}.and(aux|be&PRES(part|do-PROG(pro|you,$0,$1),$1),prep|in(det|that($2,n|placeholderP($2)),$1))",{})
-    #     # I don't want you to trip on your shoelace
-    #     r2 = makeExpWithArgs("lambda $0_{ev}.not(and(aux|do(and(v|want(pro|I,pro|you,$0),v|trip(pro|you,$0)),$0),prep|on(pro:poss:det|your($1,n|shoelace($1)),$0)),$0)",{});
-    #     # Did you find the little red bicycle?
-    #     r3 = makeExpWithArgs("lambda $0_{ev}.Q(aux|do&PAST(v|find(pro|you,det|the($1,and(adj|little($1),and(adj|red($1),n|bicycle($1)))),$0),$0))",{})
-    #     # She is going to have a bottle
-    #     r4 = makeExpWithArgs("lambda $0_{ev}.aux|be&3S(and(part|go-PROG(pro|she,$0),v|have(pro|she,det|a($1,n|bottle($1)),$0)),$0)",{});
-    #     # same as r2?
-    #     r4 = makeExpWithArgs("lambda $0_{ev}.not(aux|do(v|want(pro|I,lambda $1_{ev}.and(v|trip(pro|you,$1),prep|on(det:poss|your($2,n|shoelace($2)),$1)),$0),$0))",{})
-    #
-    #
-    #     print "made reps\n\n"
-    #     e1 = r1[0]
-    #     e2 = r2[0]
-    #     print "r1 = r2? Should be false: "
-    #     print e1.equals(e2)
-    #     print "r1 = r2, accounting for placeholders? Should be false: "
-    #     print e1.equalsPlaceholder(e2)
-    #
-    #     print "\n\nPrint-out of expression 4:"
-    #     e = r4[0]
-    #     e.printOut(True,0)
-    #     print "\n\nCopying expression 4:"
-    #     eorig = e.copy()
-    #
-    #     # Test all methods of splitting an expression
-    #     print "\n\nMaking splits of expression 4, makePairs():"
-    #     e4 = r4[0]
-    #     b = e4.makePairs()
-    #     print "\n\nmakePairs() done."
-    #     print "\n\nMaking splits of expression 4, genAllSplits():"
-    #     e4.genAllSplits()
-    #     print "\n\ngenAllSplits() done"
-    #     # return
-    #     print "\n\nMaking splits of expression 4, makePairs2():"
-    #     a = e4.makePairs2()
-    #     print "makePairs2() done\n\n\n"
-    #
-    #     #
-    #     for p in a:
-    #         print "pair2",p[0].toString(True),p[1].toString(True)
-    #     print len(a), " from makepairs2"
-    #     return
-    #
-    #     print "\nExp Splits are:"
-    #     for split in e.makePairs():
-    #         print split[0].toString(True)," ",split[1].toString(True)
-    #     print "\n\n\n\n"
-    #     i = 0
-    #     for undere in e.allSubExps():
-    #         if undere.__class__==variable: continue
-    #         print "e now is ",e.toString(True)
-    #         e.resetBinders()
-    #         for unune in e.allSubExps():
-    #             unune.linkedVar = None
-    #             print "setting to false for ",unune.toString(True)
-    #             unune.setInOut(False)
-    #         print "\n\nundere is ",undere.toString(True)
-    #         if undere.__class__ == lambdaExp: continue
-    #         if e.__class__ == lambdaExp and undere==e.funct: continue
-    #         undere.setInOut(True)
-    #
-    #         undere.setInOuts()
-    #         vset = []
-    #         e.getAllVars(vset)
-    #         for v in vset: v.setVarInOut()
-    #         selfnew = e.copy()
-    #         print "making inout"
-    #         (anew,outs,vset) = undere.makeInOut()
-    #         print "made inout"
-    #         print "ANEW WITH LAMBDA IS ",anew.toString(True)
-    #         v = variable(anew)
-    #         lambdaord = []
-    #         for a in outs:
-    #             print "aout is ",a.toString(True),a
-    #             v.addArg(a)
-    #             lambdaord.append(a.linkedVar)
-    #         for lambdavar in reversed(lambdaord):
-    #             l = lambdaExp()
-    #             l.setVar(lambdavar)
-    #             l.setFunct(anew)
-    #             anew = l
-    #         # REALLY NEED TO MATCH VARIABLE ORDER TO ARG
-    #         # ORDER AND LAMBDA ORDER
-    #         v.setType(anew.type())
-    #
-    #         print "a1 is ",anew.toString(True)
-    #         print "e is ",e.toString(True)
-    #
-    #         e.replace2(undere,v)
-    #
-    #         print "Anew is ",anew.toString(True)
-    #         print "e1 is ",e.toString(True)
-    #
-    #         enew = e.copyNoVar()
-    #         print "enew1 is ",enew.toString(True)
-    #         l = lambdaExp()
-    #         l.setVar(v)
-    #         l.setFunct(enew)
-    #
-    #         enew = l.copy()
-    #
-    #         print "here2 ENew is ",enew.toString(False)
-    #         print "pair is ",enew.toString(True),anew.toString(True)
-    #
-    #         eback = enew.apply(anew)
-    #
-    #         if eback:
-    #             print "enew back to ",eback.toString(True)
-    #             eback.resetEqualOther()
-    #             eorig.resetEqualOther()
-    #             if not eback.equals(eorig):
-    #                 print "got enew but not back to orig ",eback.toString(True)
-    #             else:
-    #                 print "equals orig"
-    #         else:
-    #             print "enew back to None"
-    #         e.replace2(v,undere)
-    #         print "eback to ",e.toString(True)
-    #         if not eorig.equals(e):
-    #             print "not back to orig"
-    #         print "******* DONE *********"
-
-
 class emptyExp(exp):
     def __init__(self):
         self.name = "?"
@@ -872,7 +742,6 @@ class emptyExp(exp):
     def equals(self, other):
         if other.__class__ != emptyExp: return False
         return True
-
 
 class variable(exp):
     def __init__(self, e):
@@ -1181,7 +1050,6 @@ class variable(exp):
             i+=1
         return other==self.equalother
 
-
 class lambdaExp(exp):
     def __init__(self):
         self.linkedVar = None
@@ -1381,7 +1249,6 @@ class lambdaExp(exp):
     def arity(self):
         return 1+self.funct.arity()
 
-    # apply
     def apply(self, e):
         newExp = None
         varType = self.var.type()
@@ -1408,7 +1275,6 @@ class lambdaExp(exp):
             return None
 
     def argsFilled(self):
-        print("checking if args filled")
         return self.funct.argsFilled()
 
     def getReturnType(self):
@@ -1495,7 +1361,107 @@ class lambdaExp(exp):
         self.funct = self.funct.replace2(e1, e2)
         return self
 
+class neg(exp):
+    def __init__(self, arg, numArgs):
+        self.name="not"
+        self.numArgs=numArgs
+        self.nounMod = False
+        if numArgs == 2:
+            self.arguments=[arg, eventMarker()]
+        else:
+            self.arguments=[arg]
+            # self.nounMod = arg.isNounMod()
+        self.argTypes=arg.type()
+        self.linkedVar = None
+        arg.add_parent(self)
+        self.parents=[]
+        self.argSet=True
+        # self.returnType = semType.tType()
+        self.returnType = arg.returnType
+        self.isNull = False
+        self.posType=None
+        self.inout=None
+        self.doubleQuant = False
+        #self
+        #self.event = None
 
+    def semprior(self):
+        return -1.0 + self.arguments[0].semprior()
+
+    def makeShell(self, expDict):
+        if self in expDict:
+            n = expDict[self]
+        else:
+            n = neg(self.arguments[0].makeShell(expDict), self.numArgs)
+            if self.numArgs == 2:
+                n.setEvent(self.arguments[1].makeShell(expDict))
+        expDict[self] = n
+        return n
+
+    def copy(self):
+        #print "copying ",self.toString(True)
+        n = neg(self.arguments[0].copy(), self.numArgs)
+        if self.numArgs == 2:
+            n.setEvent(self.arguments[1].copy())
+        n.linkedVar = self.linkedVar
+        return n
+
+    def copyNoVar(self):
+        n = neg(self.arguments[0].copyNoVar(), self.numArgs)
+        if self.numArgs == 2:
+            n.setEvent(self.arguments[1].copyNoVar())
+        n.linkedVar = self.linkedVar
+        return n
+
+    def toStringShell(self, top):
+        s="not"
+        #if self.checkIfVerb():
+            ##self.getEvent().setName("e"+str(exp.eventNum))
+            #exp.eventNum+=1
+
+        #print "tring for ",self.name
+        if len(self.arguments)>0: s=s+"("
+        for a in self.arguments:
+            if isinstance(a, exp): s=s+str(a.toStringShell(False))
+            if self.arguments.index(a)<self.numArgs-1: s=s+","
+        if len(self.arguments)>0: s=s+")"
+        #if self.event:
+            #s=s+":"+self.event.toString(False)
+        if top:
+            exp.varNum = 0
+            exp.eventNum = 0
+            exp.emptyNum = 0
+        #print "returning "+s
+        return s
+
+    def setEvent(self, event):
+        self.setArg(1, event)
+
+    def checkIfVerb(self):
+        return self.arguments[0].checkIfVerb()
+
+    def allExtractableSubExps(self):
+        subExps = []
+        subExps.append(self)
+        subExps.extend(self.arguments[0].allExtractableSubExps())
+        return subExps
+
+    def allSubExps(self):
+        subExps = []
+        subExps.append(self)
+        subExps.extend(self.arguments[0].allSubExps())
+        return subExps
+
+    def type(self):
+        return semType.tType()
+
+    def equalsPlaceholder(self, other):
+        if other.__class__!=neg: return False
+        return other.arguments[0].equalsPlaceholder(self.arguments[0])
+
+    def equals(self, other):
+        if other.__class__!=neg: return False
+        return other.arguments[0].equals(self.arguments[0])
 class eventMarker(exp):
     def __init__(self, e=None):
         self.name=None
@@ -1601,11 +1567,3 @@ def allcombinations(arguments, index, allcombs):
     allcombs.extend(newcombs)
     allcombs.append([a])
     allcombinations(arguments, index+1, allcombs)
-
-
-# def main(argv=None):
-#     exp.main()
-#
-# if __name__ == "__main__":
-#     main()
-
