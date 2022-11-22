@@ -6,7 +6,7 @@ from tools import log_diff
 from tools import inf
 import lexicon_classes
 
-def i_o(sentence_charts, sem_store, lexicon, RuleSet, old_log_prob):
+def i_o(sentence_charts, sem_store, lexicon, rule_set, old_log_prob):
 
     log_prob = 0
     # Get inside probs
@@ -19,7 +19,7 @@ def i_o(sentence_charts, sem_store, lexicon, RuleSet, old_log_prob):
 # eta(tau) = (1+ lambda(tau)/eta(n-1))^-1
 #discountfact =
 
-def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
+def i_o_oneChart(chart,sem_store,lexicon,rule_set,doupdates,old_norm,\
                      sentence_count,generating=False,sentToGen=None):
     datasize = 4000
     gamma = 1.0/datasize
@@ -44,7 +44,7 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
                     semFromSyn[entry.sem_key+":"+entry.syn_key] = entry.sem_score
 
             # should probably have a distinct node for the semantic part of this
-            rule_score = RuleSet.return_log_prob(entry.syn_key, entry.syn_key+'_LEX')
+            rule_score = rule_set.return_log_prob(entry.syn_key, entry.syn_key+'_LEX')
             entry.inside_score = entry.word_score+entry.sem_score+rule_score
             entry.addNumParses(1)
 
@@ -53,7 +53,7 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
                 left_syn = pair[0][0]
                 right_syn = pair[1][0]
                 target = left_syn+'#####'+right_syn
-                rule_score = RuleSet.return_log_prob(entry.syn_key, target)
+                rule_score = rule_set.return_log_prob(entry.syn_key, target)
                 entryL = chart[pair[0][3]-pair[0][2]][pair[0]]
                 entryR = chart[pair[1][3]-pair[1][2]][pair[1]]
                 new_inside_score = rule_score+entryL.inside_score+entryR.inside_score
@@ -104,8 +104,8 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
             if len(entry.parents) == 0:
                 topcat = chart[len(chart)][item].syn_key
                 if usestartrule:
-                    RuleSet.check_start_rule(chart[len(chart)][item].ccgCat.syn)
-                    entry.outside_score = RuleSet.return_log_prob("START", topcat)
+                    rule_set.check_start_rule(chart[len(chart)][item].ccgCat.syn)
+                    entry.outside_score = rule_set.return_log_prob("START", topcat)
                 else: entry.outside_score = 0.0
                 entry.outside_prob = exp(entry.outside_score)
 
@@ -122,8 +122,8 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
                     left_syn = pair[0][0]
                     right_syn = pair[1][0]
                     target = left_syn+'#####'+right_syn
-                    #rule_prob = RuleSet.return_prob(father.syn_key,target)
-                    rule_score = RuleSet.return_log_prob(father.syn_key, target)
+                    #rule_prob = rule_set.return_prob(father.syn_key,target)
+                    rule_score = rule_set.return_log_prob(father.syn_key, target)
                     s_in_prob = 0
                     if side == 'l':
                         s_in_score = chart[pair[1][3]-pair[1][2]][pair[1]].inside_score
@@ -143,7 +143,7 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
     for item in chart[top_down[0]]:
         topcat = chart[top_down[0]][item].syn_key
         log_score_start = chart[top_down[0]][item].inside_score+chart[top_down[0]][item].outside_score - norm_score
-        RuleSet.store_log_update(topcat, log_score_start)
+        rule_set.store_log_update(topcat, log_score_start)
 
 
     lexItemUpdates = {}
@@ -160,7 +160,7 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
             #entry = chart[level][item]
             #if len(entry.words)==1:
                 ##print "entry with scores is ",entry.toString()," inside is ",entry.inside_score," outside is ",entry.outside_score
-                #rule_score = RuleSet.return_log_prob(entry.syn_key,entry.syn_key+'_LEX')
+                #rule_score = rule_set.return_log_prob(entry.syn_key,entry.syn_key+'_LEX')
                 #onewordprobs[entry.p] = log_sum(onewordprobs[i],entry.inside_score+entry.outside_score)
 
     onewordupdates = {}
@@ -185,7 +185,7 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
 
                 target = left_syn+'#####'+right_syn
                 # want the rule score
-                rule_score = RuleSet.return_log_prob(entry.syn_key, target)
+                rule_score = rule_set.return_log_prob(entry.syn_key, target)
                 # should the outside go here???
                 child_score = l_child.inside_score + r_child.inside_score
 
@@ -209,7 +209,7 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
                     print("rule score is ", rule_score)
                     print("norm score is ", norm_score)
                 #print "logER is ",logER
-                RuleSet.store_log_update(target, logRuleExp)
+                rule_set.store_log_update(target, logRuleExp)
 
                 #l = chart[pair[0][3]-pair[0][2]][pair[0]]
                 #r = chart[pair[1][3]-pair[1][2]][pair[1]]
@@ -225,10 +225,10 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
                 ## not sure what is going on here #
                 ## or indeed why                  #
                 ###################################
-                ##RuleSet.update_target_p(a_pq,B_pd,B_dq,target)
+                ##rule_set.update_target_p(a_pq,B_pd,B_dq,target)
 
                 #rule_prob =
-                #RuleSet.update_target_p(a_pq,B_pd,B_dq,target)
+                #rule_set.update_target_p(a_pq,B_pd,B_dq,target)
 
                 #if not target in RulesUsed:
                     #RulesUsed.append(target)
@@ -239,7 +239,7 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
                 continue
 
             target = entry.syn_key+'_LEX'
-            rule_score = RuleSet.return_log_prob(entry.syn_key, target)
+            rule_score = rule_set.return_log_prob(entry.syn_key, target)
 
             # really need to work out what this should be, but e^1e-5 is small
             # think about norm though
@@ -261,13 +261,13 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
 
             #logLexExp = logLexExp  - norm_score
             #target = entry.syn_key+'_LEX'
-            #lex_prob = RuleSet.return_prob(entry.syn_key,target)
-            #lex_score = RuleSet.return_log_prob(entry.syn_key,target)
+            #lex_prob = rule_set.return_prob(entry.syn_key,target)
+            #lex_score = rule_set.return_log_prob(entry.syn_key,target)
             #word_prob = lexicon.get_word_prob(entry.word_target,entry.syn_key,entry.sem_key)
             #word_score = lexicon.get_log_word_prob(entry.word_target,entry.syn_key,entry.sem_key)
             #logER = lex_score + word_score
-            #RuleSet.update_target_log_p(a_pq,1.0,word_prob,target)
-            #RuleSet.update_target_log_p(logER,target)
+            #rule_set.update_target_log_p(a_pq,1.0,word_prob,target)
+            #rule_set.update_target_log_p(logER,target)
             if logLexExp >= 0.0:
                 print("cell is ", entry.toString())
                 print("entry inside is ", entry.inside_score)
@@ -281,10 +281,10 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
                 print("norm score is ", norm_score)
                 #lex_score = log_diff(entry.inside_score,node_inside_sum)
 
-            RuleSet.store_log_update(target, logLexExp)
+            rule_set.store_log_update(target, logLexExp)
             # this only needs to be done once for each time
             # the rule head is seen
-            #RuleSet.update_bottom(entry.syn_key,a_pq,B_pq)
+            #rule_set.update_bottom(entry.syn_key,a_pq,B_pq)
             #
             lexicon.store_log_update(entry.word_target, entry.syn_key, entry.sem_key, logLexExp)
             if entry.words ==['too','?']:
@@ -318,7 +318,6 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
 
     wordstokeys = {}
     for probupdate in sorted(lexItemUpdates.keys()):
-        #print "probupdate is ",probupdate
         w = probupdate.split(" :: ")[0]
         if w not in wordstokeys: wordstokeys[w]=[(exp(lexItemUpdates[probupdate]), probupdate)]
         else: wordstokeys[w].append((exp(lexItemUpdates[probupdate]), probupdate))
@@ -326,43 +325,17 @@ def i_o_oneChart(chart,sem_store,lexicon,RuleSet,doupdates,old_norm,\
     iteratetoconv = False # this should not be true with online learning
     logLikelihoodDiff = abs((norm_score-old_norm)/norm_score)
     if (doupdates and logLikelihoodDiff > 0.05 and iteratetoconv):
-#        lexicon.set_temp_params()
-#        RuleSet.set_temp_params()
-        RuleSet.perform_temp_updates()
+        rule_set.perform_temp_updates()
         lexicon.perform_temp_updates()
-        RuleSet.clear_updates()
+        rule_set.clear_updates()
         lexicon.clear_updates()
         print(">", end=' ')
-        i_o_oneChart(chart, sem_store, lexicon, RuleSet, doupdates, norm_score)
+        i_o_oneChart(chart, sem_store, lexicon, rule_set, doupdates, norm_score)
 
     elif doupdates:
         learningrate = lexicon.get_learning_rate(sentence_count)
-        #learningrate = 1.0/(sentence_count+1)
-        print("doing updates with learning rate ", learningrate)
-        RuleSet.perform_updates(learningrate, datasize, sentence_count)
+        rule_set.perform_updates(learningrate, datasize, sentence_count)
         lexicon.perform_updates(learningrate, datasize, sentence_count)
-        #lexicon.print_all_word_probs(sentence_count,sem_store)
-        #lexicon.set_temp_params()
-        #RuleSet.set_temp_params()
-    RuleSet.clear_updates()
+    rule_set.clear_updates()
     lexicon.clear_updates()
     return norm_score
-        # for target in RulesUsed:
-    # RuleSet.update_alphas()
-    # lexicon.update_alphas()
-
-    #rc = RuleSet.compare_probs()
-    #lc = lexicon.compare_probs()
-
-    #RuleSet.clear_probs()
-    #lexicon.clear_probs()
-
-    #return rc
-    #for item in LexItemsUsed:
-        #lexicon.update_alpha(item[0],item[1],item[2])
-
-    #for target in RulesUsed:
-        #RuleSet.clear_probs(target)
-    #for item in LexItemsUsed:
-        #lexicon.clear_probs(item[0],item[1],item[2])
-

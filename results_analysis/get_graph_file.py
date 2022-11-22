@@ -1,15 +1,10 @@
-
 from matplotlib import rcParams
 from matplotlib import rc
 rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
-## for Palatino and other serif fonts use:
-#rc('font',**{'family':'serif','serif':['Palatino']))
 rc('text', usetex=True)
 rcParams['text.latex.preamble']=[r"\usepackage{amsmath}"]
 
 import numpy as np
-#import matplotlib
-#matplotlib.use('PS') 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -34,7 +29,7 @@ def doQn():
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     quants = ['some','another','an','any','all','both']
-    
+
     dets = ['the','a']
     leglist = []
     i = 0
@@ -154,12 +149,12 @@ def doIntrans():
 
     pp.savefig()
     pp.close()
-    
+
 
 
 #['doing','put','have','want','like','say','take','dropped','open','peel','pull','fall']
 #doing  ->  lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.part|do-PROG($0,$1,$2)
-#doing  ->  lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.part|do-PROG($1,$0,$2) 
+#doing  ->  lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}.part|do-PROG($1,$0,$2)
 def doTrans():
     pp = PdfPages("transprobs/transplot.pdf")
     fig = plt.figure()
@@ -180,7 +175,7 @@ def doTrans():
         leglist.append(v)
         i+=1
 
-        targetsem = "lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}."+s+"($1,$0,$2)"    
+        targetsem = "lambda $0_{e}.lambda $1_{e}.lambda $2_{ev}."+s+"($1,$0,$2)"
         latextarget = r'\[ \displaystyle {\rm '+v.replace("&","")+r'} \rightarrow \lambda x \lambda y \lambda ev . '+s+r'(y,x,ev) \]'
         (instlist,problist) = getprobs(v,targetsem,probfile,outfile)
         ax1.plot(problist,instlist,label=latextarget)
@@ -211,7 +206,7 @@ def doAdv():
         outfile = open("advprobs/"+a,"w")
 
         targetsem = "lambda $0_{<ev,t>}.lambda $1_{ev}.and($0($1),adv|"+a+"($1))"
-    
+
         latextarget = r'\[ \displaystyle {\rm '+a+r' } \rightarrow \lambda f \lambda ev. '+a+r'(ev) \wedge f(ev)\]'
         (instlist,problist) = getprobs(a,targetsem,probfile,outfile)
         ax1.plot(problist,instlist,label=latextarget)
@@ -225,7 +220,7 @@ def doAdv():
 
     pp.savefig()
     pp.close()
-    
+
 
 
 ##### run the things #######

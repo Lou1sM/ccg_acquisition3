@@ -2,13 +2,10 @@
 # sentence with the adjacent ones.
 sents = []
 sems = []
-#infile = raw_input("where are the pairs?\n")
-#numreps = int(raw_input("what is the window size?\n"))
-infile = "trainFiles/trainPairs.adam.ready"
+infile = "data/trainPairs.adam.ready"
 numreps = 7
 
 for session_no in range(1, 42):
-
     for line in open(infile+"_"+str(session_no)):
         line = line.strip().rstrip()
         if line[:5]=="Sent:": sents.append(line)
@@ -23,4 +20,3 @@ for session_no in range(1, 42):
             print(sems[index], file=output)
         i+=1
         print("example_end\n", file=output)
-    

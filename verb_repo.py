@@ -27,7 +27,7 @@ class VerbRepository:
             if not instance in self.verb_instances:
                 self.verb_instances.append(instance)
 
-    def add_verb(self, semstring, lexicon, sem_store, RuleSet, sentence_count):
+    def add_verb(self, semstring, lexicon, sem_store, rule_set, sentence_count):
         """cat is an instance of cat.cat. checks if cat is a transitive and adds it."""
         try:
             if transitive_lf.match(semstring) or transitive_lf2.match(semstring):
@@ -39,10 +39,10 @@ class VerbRepository:
         pr_correct_w_given_lf = math.exp(lexicon.get_map_log_word_prob(target_word,\
                                           self.phenom().sem_type(), semstring, sentence_count))
         pr_correct_lf_given_w = extract_from_lexicon.get_lf_given_word_probs(lexicon,\
-                                          target_word, sem_store, RuleSet, sentence_count)
+                                          target_word, sem_store, rule_set, sentence_count)
         pr_syn_given_lf = extract_from_lexicon.get_synt_distribution(\
             ["((S\\NP)/NP)", "((S/NP)/NP)", "((S\\NP)\\NP)", "((S/NP)\\NP)"], \
-                lexicon, sem_store, RuleSet, sentence_count)
+                lexicon, sem_store, rule_set, sentence_count)
         
         marginal_lf_probs = {}
         marginal_lf_probs[semstring] = \
@@ -61,8 +61,8 @@ class VerbRepository:
             pr_syn_given_lf['((S\\NP)/NP)'] * marginal_lf_probs.get(semstring) / \
             sum(marginal_lf_probs.values())
         
-        w_given_LF = extract_from_lexicon.get_w_dist_given_LF(lexicon, sentence_count, sem_store, RuleSet, semstring)
-        w_given_other_LF = extract_from_lexicon.get_w_dist_given_LF(lexicon, sentence_count, sem_store, RuleSet, other_lf)
+        w_given_LF = extract_from_lexicon.get_w_dist_given_LF(lexicon, sentence_count, sem_store, rule_set, semstring)
+        w_given_other_LF = extract_from_lexicon.get_w_dist_given_LF(lexicon, sentence_count, sem_store, rule_set, other_lf)
         w_given_either_lf = (marginal_lf_probs[semstring] * w_given_LF.get(target_word, 0.0) + \
                                  marginal_lf_probs[other_lf] * w_given_other_LF.get(target_word, 0.0)) / \
                                  sum(marginal_lf_probs.values())

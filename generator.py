@@ -16,21 +16,21 @@ def assignWords(chart, lexicon):
             entry.word_target = w_syn_sem[0]
 
 # can't just sample down since we need to generate the correct semantics
-def generateSent(lexicon, RuleSet, topCat, catStore, sem_store, is_exclude_mwe, corrSent, genoutfile, sentence_count, sentnum):
+def generateSent(lexicon, rule_set, top_cat, cat_store, sem_store, is_exclude_mwe, corrSent, genoutfile, sentence_count, sentnum):
     # pack 'word list' with None so that we can reuse old code
     # generate words at leaves
     # do MAP inside-outside
-    wordlist = ["placeholderW"]*(len(topCat.sem.allSubExps()))
-    chart = build_chart([topCat], wordlist, RuleSet, lexicon, catStore, sem_store, is_exclude_mwe)
+    wordlist = ["placeholderW"]*(len(top_cat.sem.allSubExps()))
+    chart = build_chart([top_cat], wordlist, rule_set, lexicon, cat_store, sem_store, is_exclude_mwe)
     assignWords(chart, lexicon)
-    i_o_oneChart(chart, sem_store, lexicon, RuleSet, False, 0.0, lexicon.sentence_count, True)
+    i_o_oneChart(chart, sem_store, lexicon, rule_set, False, 0.0, lexicon.sentence_count, True)
     topparses = []
     if len(chart[len(chart)])!=1: error()
     for entry in chart[len(chart)]:
         top = chart[len(chart)][entry]
         topparses.append((top.inside_score, top))
 
-    top_parse = sample(sorted(topparses)[-1][1], chart, RuleSet)
+    top_parse = sample(sorted(topparses)[-1][1], chart, rule_set)
     print("\ntop generated parse"+str(sentnum)+":", file=genoutfile)
     print(top_parse, file=genoutfile)
     print(top.inside_score, file=genoutfile)
@@ -39,9 +39,9 @@ def generateSent(lexicon, RuleSet, topCat, catStore, sem_store, is_exclude_mwe, 
     print(top_parse)
     print(top.inside_score)
 
-    chart = build_chart([topCat], corrSent.split(), RuleSet, lexicon, catStore, sem_store, is_exclude_mwe)
+    chart = build_chart([top_cat], corrSent.split(), rule_set, lexicon, cat_store, sem_store, is_exclude_mwe)
     if chart is not None:
-        corr_score = i_o_oneChart(chart, sem_store, lexicon, RuleSet, False, 0.0, lexicon.sentence_count)
+        corr_score = i_o_oneChart(chart, sem_store, lexicon, rule_set, False, 0.0, lexicon.sentence_count)
         print("corr score"+str(sentnum)+" is ", corr_score, file=genoutfile)
         print("prob gen corr"+str(sentnum)+" = ", exp(corr_score - top.inside_score), file=genoutfile)
         print("prob gen corr"+str(sentnum)+" = ", exp(corr_score - top.inside_score))

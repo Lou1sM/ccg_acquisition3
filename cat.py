@@ -1,5 +1,5 @@
-from semType import semType
 from exp import exp, variable
+from sem_type import SemType
 import re
 
 class synCat:
@@ -13,7 +13,7 @@ class synCat:
         return synCat(self.funct.copy(), self.arg.copy(), self.direction)
 
     def getType(self):
-        return semType(self.arg.getType(), self.funct.getType())
+        return SemType(self.arg.getType(), self.funct.getType())
 
     def prior(self):
         return self.funct.prior() * self.arg.prior()
@@ -39,7 +39,7 @@ class synCat:
             return synCat.allSynCats(e.type())
         catType = e.type()
         synCats = []
-        ## just function application for now
+        # just function application for now
         if catType.atomic():
             if catType.isE(): return [synCat.np]
             if catType.isT(): return [synCat.st]
@@ -157,11 +157,11 @@ class npCat(synCat):
         return 0.2
 
     def getType(self):
-        return semType.e
+        return SemType.e
 
     @staticmethod
     def getStaticType():
-        return semType.e
+        return SemType.e
 
     def copy(self):
         return self
@@ -183,11 +183,11 @@ class nCat(synCat):
         return 0.2
 
     def getType(self):
-        return semType(semType.e, semType.t)
+        return SemType(SemType.e, SemType.t)
 
     @staticmethod
     def getStaticType():
-        return semType(semType.e, semType.t)
+        return SemType(SemType.e, SemType.t)
 
     def copy(self):
         return self
@@ -209,11 +209,11 @@ class stCat(synCat):
         return 0.2
 
     def getType(self):
-        return semType.t
+        return SemType.t
 
     @staticmethod
     def getStaticType():
-        return semType.t
+        return SemType.t
 
     def copy(self):
         return self
@@ -235,11 +235,11 @@ class sCat(synCat):
         return 0.2
 
     def getType(self):
-        return semType(semType.event, semType.t)
+        return SemType(SemType.event, SemType.t)
 
     @staticmethod
     def getStaticType():
-        return semType(semType.event, semType.t)
+        return SemType(SemType.event, SemType.t)
 
     def copy(self):
         return self
@@ -261,11 +261,11 @@ class sWhCat(synCat):
         return 0.2
 
     def getType(self):
-        return semType(semType.e, semType(semType.event, semType.t))
+        return SemType(SemType.e, SemType(SemType.event, SemType.t))
 
     @staticmethod
     def getStaticType():
-        return semType(semType.e, semType(semType.event, semType.t))
+        return SemType(SemType.e, SemType(SemType.event, SemType.t))
 
     def copy(self):
         return self
@@ -287,11 +287,11 @@ class qCat(synCat):
         return 0.2
 
     def getType(self):
-        return semType(semType.event, semType.t)
+        return SemType(SemType.event, SemType.t)
 
     @staticmethod
     def getStaticType():
-        return semType.t
+        return SemType.t
 
     def copy(self):
         return self
@@ -355,9 +355,7 @@ class cat:
         argsremoved = []
         retsem = None
         # crossing???
-        # return None
         while syntomatch:
-            # something about number of arguments
             if self.syn.arg.equals(syntomatch) and self.syn.direction == dir:
                 retsem = self.sem.compose(c.sem)
                 break
@@ -374,7 +372,8 @@ class cat:
         if retsem:
             newcat = cat(newsyn, retsem)
         else:
-            print("compfuckup")
+            #print("compfuckup")
+            pass
         return newcat
 
     def combine(self, c):
@@ -392,8 +391,8 @@ class cat:
     def semString(self):
         return self.sem.toString(True)
 
-    def allPairs(self, catStore):
-        if self.toString() in catStore: return catStore[self.toString()]
+    def allPairs(self, cat_store):
+        if self.toString() in cat_store: return cat_store[self.toString()]
         pairs = []
 
         # really want to know :
@@ -405,10 +404,8 @@ class cat:
         sem_pairs = self.sem.makePairs()
         for (parentSem, childSem, numNew, numByComp, fixeddircats) in sem_pairs:
             # want the child to steal (borrow) a lot from the parent
-            isnull = False
             if fixeddircats is None:
                 functcat = self.syn.copy()
-
                 argcat = self.syn.copy()
                 childcat = self.syn.copy()
                 if self.syn != synCat.swh:
@@ -424,6 +421,7 @@ class cat:
                     cbc = cat(childcat, childSem)
                     append_pairs(pairs, (cbc, cbp, "back", numByComp))
                     continue
+
                 else:
                     for sc in synCat.allSynCatsWithPos(self.sem):
                         argcat = sc.copy()
@@ -610,7 +608,7 @@ class cat:
                             # print "not back to orig, should be ", self.toString()
                             pass
 
-        catStore[self.toString()] = pairs
+        cat_store[self.toString()] = pairs
         return pairs
 
     def toString(self):
@@ -642,8 +640,7 @@ def all_directions(syn_cat):
     return output
 
 def check_restrictions(cur_cat):
-    """
-    Receives an instance of cat.cat.
+    """Receives an instance of cat.cat.
     Returns True iff the entry does not violate the binding restrictions, i.e., that
     the arguments should appear in the same order in the logical
     form and in the syntactic category, whenever you have a case of opposite directions of slashes.
@@ -659,7 +656,7 @@ def check_restrictions(cur_cat):
             print(('VIOLATION: vacuous variable found in ' + cur_cat.synString() + ' ' + cur_cat.semString()))
             return False
         rightOrder = (order_var[-1][1] > order_var[-2][1])
-        if rightOrder and (directions[-2:] == ['back', 'fwd'] or \
+        if rightOrder and (directions[-2:] == ['back', 'fwd'] or
                                        directions[-2:] == ['fwd', 'back']):
             return False
     return True
@@ -686,63 +683,3 @@ synCat.st = stCat()
 synCat.swh = sWhCat()
 synCat.q = qCat()
 synCat.n = nCat()
-
-
-def main(argv=None):
-    # toprepstring = ""
-    ##toprepstring = "lambda $0_{<e,t>}.lambda $1_{e}.lambda $2_{ev}.aux|will&COND(v|like($1,qn|more($3,and($0($3),n|juice($3))),$2))"
-    ##toprepstring = "lambda $0_{e}.and(n|grape($0),n|juice($0))"
-    ##toprepstring = "lambda $0_{ev}.v|go(pro|you,$0)"
-    # toprepstring = "not(adj|sure(pro|I))"
-    ##lambda $0_{<<<<e,t>,<e,t>>,<<e,t>,<ev,t>>>,<<<e,t>,<e,t>>,<<e,t>,<ev,t>>>>}.lambda $1_{<<<e,t>,<e,t>>,<<e,t>,<ev,t>>>}.lambda $2_{<<e,t>,<e,t>>}.lambda $3_{<e,t>}.Q($0($1,$2,$3))"
-    # sem = exp.makeExpWithArgs(toprepstring,{})[0]
-    ##Q(eq(pro|it,det|a($0,and(adj|loud($0),n|boom($0)))))",{})[0]
-    # sc = synCat.allSynCats(sem.type())[0]
-    # topCat = cat(sc,sem)
-    # c = topCat
-    exp.allowTypeRaising = True
-
-    # catstring = "((Syn\(S/S))\(((S/S)/(S/S))/S)) :: lambda $0_{<<ev,t>,<<<ev,t>,t>,<<ev,t>,t>>>}.$0(lambda $1_{ev}.aux|will&COND(v|like(pro|you,qn|more($2,and(n|grape($2),n|juice($2))),$1)))"
-    catstring = "S :: not(adj|sure(pro|I))"
-    catstring = "S :: lambda $0_{ev}.and(v|go&PAST(n:prop|Momma,$0),prep|to(n:prop|Boston,$0))"
-    catstring = "S :: lambda $0_{ev}.and(v|put&ZERO(pro|you,pro|them,$0),prep|on(det|the($1,n|table($1)),$0))"
-
-    # (S\\NP) :: lambda $0_{e}.not(adj|sure($0))"
-    c = cat.readCat(catstring)
-    if c: print("cat is : ", c.toString())
-    pairs = c.allPairs({})
-    print(len(pairs), " splits")
-    print("splits are :: ")
-    for pair in pairs:
-        print(pair[0].toString(), " ", pair[1].toString())
-    print("\n")
-
-    # catstring = "(((Syn\(S/S))\(((S/S)/(S/S))/S))/S) :: lambda $0_{<ev,t>}.lambda $1_{<<ev,t>,<<<ev,t>,t>,<<ev,t>,t>>>}.$1($0)"
-    # c = cat.readCat(catstring)
-    # if c :
-    # print "cat is : ",c.toString()
-    # print "sem type is : ",c.sem.type().toString()
-    ##print "splits are :: "
-    ##for pair in c.allPairs({}):
-    ##print pair[0].toString()," ",pair[1].toString()
-    # print "\n"
-
-    # catstring = "(S/NP) :: lambda $0_{e}.lambda $1_{ev}.v|eat($0,pro|it,$1)"
-    # c = cat.readCat(catstring)
-    # if c : print "cat is : ",c.toString()
-    # print "splits are :: "
-    # for pair in c.allPairs({}):
-    # print pair[0].toString()," ",pair[1].toString()
-    # print "\n"
-
-    # catstring = "(S\\NP) :: lambda $0_{e}.lambda $1_{ev}.v|have($0,det|a($2,n|hat($2)),$1)"
-    # c = cat.readCat(catstring)
-    # if c : print "cat is : ",c.toString()
-    # print "splits are :: "
-    # for pair in c.allPairs({}):
-    # print pair[0].toString()," ",pair[1].toString()
-    # print "\n"
-
-
-if __name__ == "__main__":
-    main()

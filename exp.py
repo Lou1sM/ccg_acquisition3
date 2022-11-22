@@ -1,11 +1,9 @@
 # expression, on which everything else is built
-import itertools
-from errorFunct import error
-from semType import semType
-import copy
-import random
+from sem_type import SemType
 from tools import permutations
 import re
+from errorFunct import error
+
 
 verboseSplit = False
 class exp:
@@ -63,7 +61,7 @@ class exp:
     def checkIfWh(self):
         is_lambda = self.__class__ == lambdaExp
         if is_lambda:
-            has_e_var = self.getVar().type() == semType.e
+            has_e_var = self.getVar().type() == SemType.e
             funct = self.getFunct()
             funct_is_lambda = funct.__class__ == lambdaExp
             if is_lambda and has_e_var and funct_is_lambda:
@@ -563,7 +561,7 @@ class exp:
         return allpairs
 
     def canTypeRaise(self):
-        #if self.type().equals(semType.e): return True
+        #if self.type().equals(SemType.e): return True
         return True
 
     def typeRaise(self, parent):
@@ -784,8 +782,8 @@ class variable(exp):
             # assume that we only introduce entity
             # vars from the corpus
             #self.returnType = "e"
-            self.returnType = semType.eType()
-            self.t = semType.eType()
+            self.returnType = SemType.eType()
+            self.t = SemType.eType()
             self.isEvent = False
         self.isNull = False
 
@@ -805,7 +803,7 @@ class variable(exp):
                     if self.varIsConst == None:
                         argument.setBinder(self)
                         self.varIsConst = False
-                        self.returnType = semType.eType()
+                        self.returnType = SemType.eType()
                 else:
                     if self.varIsConst == None:
                         self.varIsConst = True
@@ -1223,7 +1221,7 @@ class lambdaExp(exp):
     def type(self):
         argType = self.var.type()
         functType = self.funct.type()
-        t = semType(argType, functType)
+        t = SemType(argType, functType)
         return t
 
     def setFunct(self, e):
@@ -1376,7 +1374,6 @@ class neg(exp):
         arg.add_parent(self)
         self.parents=[]
         self.argSet=True
-        # self.returnType = semType.tType()
         self.returnType = arg.returnType
         self.isNull = False
         self.posType=None
@@ -1453,7 +1450,7 @@ class neg(exp):
         return subExps
 
     def type(self):
-        return semType.tType()
+        return SemType.tType()
 
     def equalsPlaceholder(self, other):
         if other.__class__!=neg: return False
@@ -1473,7 +1470,7 @@ class eventMarker(exp):
         self.argTypes=[]
         self.numArgs=0
         self.otherEvent = None
-        self.returnType = semType.eventType()
+        self.returnType = SemType.eventType()
         self.isNull = False
         self.inout = None
         self.doubleQuant = False
@@ -1554,14 +1551,14 @@ class eventMarker(exp):
         return True
 
     def type(self):
-        return semType.eventType()
+        return SemType.eventType()
 
 class constant(exp):
     def setReturnType(self):
-        self.returnType = semType.eType()
+        self.returnType = SemType.eType()
 
     def type(self):
-        return semType.eType()
+        return SemType.eType()
 
     def makeCompNameSet(self):
         self.names = [self.name]
@@ -1834,24 +1831,16 @@ class predicate(exp):
 
         for aT in argTypes:
             self.arguments.append(emptyExp())
-        # for i,a in enumerate(args):
-        #     self.setArg(i,a)
 
         if returnType:
             self.returnType = returnType
         else:
             if bindVar and not varIsConst:
-                self.returnType = semType.eType()
+                self.returnType = SemType.eType()
             else:
-                self.returnType = semType.tType()
-            # if args[-1].__class__ == variable and args[-1].isEvent:
-            #     self.returnType = semType.tType()
-            # else:
-            #     self.returnType = semType.eType()
+                self.returnType = SemType.tType()
 
-        # self.setReturnType()
         self.functionExp = self
-        # self.nounMod = False
         self.posType = posType
         self.argSet = False
         self.isVerb=False
@@ -1876,7 +1865,7 @@ class predicate(exp):
                     if self.varIsConst == None:
                         argument.setBinder(self)
                         self.varIsConst = False
-                        self.returnType = semType.eType()
+                        self.returnType = SemType.eType()
                 else:
                     if self.varIsConst == None:
                         self.varIsConst = True
@@ -1900,12 +1889,6 @@ class predicate(exp):
                 if a not in subExps:
                     subExps.append(a)
         return subExps
-
-    # def setReturnType(self):
-    #     if self.bindVar and not self.varIsConst:
-    #         self.returnType = semType.eType()
-    #     else:
-    #         self.returnType = semType.tType()
 
     def semprior(self):
         p = -1.0
@@ -1997,7 +1980,7 @@ class predicate(exp):
     # this may need a little thinking
     def type(self):
         return self.returnType
-        # return semType.tType()
+        # return SemType.tType()
 
     def equalsPlaceholder(self, other):
         if other.__class__ != predicate or \
@@ -2121,7 +2104,7 @@ class qMarker(exp):
         return s
 
     def type(self):
-        return semType.tType()
+        return SemType.tType()
 
     def semprior(self):
         p = -1.0
@@ -2250,7 +2233,7 @@ def makeLambda(expString, expDict):
     vname = expString[7:expString.find("_{")]
     tstring = expString[expString.find("_{")+2:expString.find("}")]
     v = variable(None)
-    t = semType.makeType(tstring)
+    t = SemType.makeType(tstring)
     v.t = t
     if tstring == "r":
         v.isEvent = True
@@ -2322,7 +2305,7 @@ def makeVars(predstring,expString,vardict,parse_args=True):
             # variable bound by a quantifier
             vname = predstring
             tstring = 'e'
-        t = semType.makeType(tstring)
+        t = SemType.makeType(tstring)
         e = variable(None)
         e.t = t
         e.name = vname

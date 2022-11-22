@@ -48,7 +48,7 @@ def putInDict(d, items, sentence):
 
 index_regex = re.compile("_\d+")
 for i in range(1, 56):
-    for line in open('./trainFiles/Adam{}_lf.txt'.format(str(i)), "r"):
+    for line in open('./data/adam{}_lf.txt'.format(str(i)), "r"):
         if line.startswith("Sent: "):
             current_sent = line.rstrip().split("Sent: ")[1].split()
         if line.startswith("Sem: "):

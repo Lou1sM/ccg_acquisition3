@@ -5,7 +5,7 @@ from lexicon_classes import Lexicon
 from grammar_classes import Rules
 from build_inside_outside_chart import SemStore
 import pickle
-from sem_learn import train_rules, test, test_during_training, print_cat_probs, print_top_parse
+from train_test import train_rules, test, print_cat_probs, print_top_parse
 from extract_from_lexicon import extract_from_lexicon
 
 
@@ -14,23 +14,19 @@ def main(args):
     beta_tot = 1.0
     beta_lex = 0.005
 
-    RuleSet = Rules(rule_alpha_top, beta_tot, beta_lex)
+    rule_set = Rules(rule_alpha_top, beta_tot, beta_lex)
 
     type_to_shell_alpha_o = 1000.0
     shell_to_sem_alpha_o = 500.0
     word_alpha_o = 1.0
 
-    lexicon = Lexicon(type_to_shell_alpha_o, shell_to_sem_alpha_o, word_alpha_o, args.include_mwe)
-
-    RuleSet.usegamma = False
-    lexicon.usegamma = False
-
     sentence_count = 0
 
+    lexicon = Lexicon(type_to_shell_alpha_o, shell_to_sem_alpha_o, word_alpha_o, args.include_mwe)
     cats_to_check = []
 
     sem_store = SemStore()
-    test_file_index = args.test_session
+
     if args.pickle_model:
         pickle_file = "_".join(args.test_parses.split("_")[-4:-1])+".pkl"
 
@@ -38,7 +34,7 @@ def main(args):
         dump_file = open(args.continued, "rb")
         model_dict = pickle.load(dump_file)
         sem_store = model_dict["sem_store"]
-        RuleSet = model_dict["RuleSet"]
+        rule_set = model_dict["rule_set"]
         lexicon = model_dict["Current_Lex"]
         sentence_count = model_dict["sentence_count"]
         cats_to_check = model_dict["cats_to_check"]
@@ -46,21 +42,15 @@ def main(args):
     else:
         start_file = 1
 
-    for i in range(start_file, test_file_index):
-        input_file = args.inp_file
-
-        if args.numreps > 1:
-            input_file = input_file + str(args.numreps) + "reps"
-        input_file = input_file + "_" + str(i)
-
-        inputpairs = open(input_file).readlines()
-
+    for i in range(start_file, args.test_session):
+        with open(f'data/{args.corpus}.{i}') as f:
+            inputpairs = f.readlines()
         train_out_fpath = os.path.join(args.outdir, f'train_out{i}.txt')
         test_out_fpath = os.path.join(args.outdir, f'test_out{i}.txt')
 
         with (  open(train_out_fpath, 'w') as train_out,
                 open(test_out_fpath, 'w') as test_out):
-            lexicon, RuleSet, sem_store, chart = train_rules(lexicon,RuleSet,sem_store,
+            lexicon, rule_set, sem_store, chart = train_rules(lexicon,rule_set,sem_store,
                                     is_one_word=not args.include_mwe, inputpairs=inputpairs,
                                     skip_q=args.skip_q,
                                     cats_to_check=cats_to_check,sentence_count=sentence_count,
@@ -69,13 +59,13 @@ def main(args):
                                     is_devel=args.devel)
 
         lexicon.cur_cats = []
-        print_cat_probs(cats_to_check, lexicon, sem_store, RuleSet)
-        print_top_parse(chart, RuleSet, train_out_fpath)
+        print_cat_probs(cats_to_check, lexicon, sem_store, rule_set)
+        print_top_parse(chart, rule_set, train_out_fpath)
 
         if args.is_dump_lexicons:
             dump_lexicons_fpath = os.path.join(args.outdir, f'lexicon_dump{i}.txt')
             with open(dump_lexicons_fpath, 'wb') as f_lexicon:
-                to_pickle_obj = (lexicon, sentence_count, sem_store, RuleSet)
+                to_pickle_obj = (lexicon, sentence_count, sem_store, rule_set)
                 pickle.dump(to_pickle_obj, f_lexicon, pickle.HIGHEST_PROTOCOL)
 
         if args.is_analyze_lexicons:
@@ -85,19 +75,19 @@ def main(args):
                 f.write("#### next session ####")
             lexicon_analysis_fpath = os.path.join(args.outdir, f'lexicon_analysis{i}.txt')
             extract_from_lexicon(lexicon_analysis_fpath, lexicon,
-                            sem_store, RuleSet, sentence_count=sentence_count)
+                            sem_store, rule_set, sentence_count=sentence_count)
 
         if args.is_dump_verb_repo:
             verb_repository = verb_repo.VerbRepository()
             for cur_cat in set([c.semString() for c in lexicon.cur_cats]):
-                verb_repository.add_verb(cur_cat, lexicon, sem_store, RuleSet, sentence_count)
+                verb_repository.add_verb(cur_cat, lexicon, sem_store, rule_set, sentence_count)
             verb_repo_dump_fpath = os.path.join(args.outdir, f'verb_repo_dump{i}.txt')
             with open(verb_repo_dump_fpath,'wb') as f:
                 pickle.dump(verb_repository, f, pickle.HIGHEST_PROTOCOL)
 
         if args.pickle_model:
             dict_to_pickle = {"sem_store": sem_store,
-                              "RuleSet": RuleSet,
+                              "rule_set": rule_set,
                               "Current_Lex": lexicon,
                               "sentence_count": sentence_count,
                               "cats_to_check": cats_to_check,
@@ -107,13 +97,13 @@ def main(args):
 
     # end for
     if args.dotest:
-        test_in_fpath = args.inp_file+"_"+str(test_file_index)
+        test_in_fpath = f'data/{args.corpus}.{args.test_session}'
         test_out_fpath = os.path.join(args.outdir, f'test_out.txt')
         errors_out_fpath = os.path.join(args.outdir, f'errors_out.txt')
         with (  open(test_in_fpath, 'r') as test_in,
                 open(test_out_fpath, 'w') as test_out,
                 open(errors_out_fpath, 'w') as errors_out):
-            test(test_in, test_out, errors_out, sem_store, RuleSet, lexicon, sentence_count)
+            test(test_in, test_out, errors_out, sem_store, rule_set, lexicon, sentence_count)
 
     print("at end, lexicon size is ", len(lexicon.lex))
 
@@ -137,8 +127,7 @@ if __name__ == '__main__':
                           help="the directory to write output files")
     args.add_argument("--is_dump_verb_repo", action="store_true",
                           help="whether to dump the verb repository")
-    args.add_argument("-i", "--inp_file", default="trainFiles/trainPairs",
-                          help="the input file names (with the annotated corpus)")
+    args.add_argument("--corpus", default="adam",help="can specify reps, e.g adam.5reps")
     args.add_argument("--is_analyze_lexicons", action="store_true")
     args.add_argument("--is_generate_sentences", action="store_true",
                           help="doesn't seem to be used atm")

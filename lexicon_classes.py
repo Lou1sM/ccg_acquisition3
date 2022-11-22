@@ -2,25 +2,19 @@
 # CLASSES USED TO CREATE THE LEXICON      #
 ###########################################
 
-import re, pdb
+import re
 import copy
-import random
 import math
 from math import exp
 from math import log
 from tools import log_sum
 from tools import inf
 import scipy.special
-from cat import synCat
 from collections import defaultdict
-from scipy.special import logsumexp
 from errorFunct import error
 
-########################################
-# lamda_op is to be used with the      #
-# sem_rep below                        #
-########################################
 class lambda_op:
+    """Used with sem_rep below."""
     def __init__(self, dep, separator):
         self.type = dep.type
 
@@ -40,13 +34,8 @@ class lambda_op:
     def nullify(self):
         self.dep = None
 
-
-########################################
-# sem_rep is used to represent the l.f #
-# and has functions to deal with       #
-# decomposition                        #
-########################################
 class sem_rep:
+    """Represents lf, has functions to deal with decomposition."""
     def __init__(self, ty, name, fineType):
         self.built = False
         self.type = ty
@@ -61,6 +50,7 @@ class sem_rep:
 
     def set_key(self):
         self.sem_key = self.return_key(True)
+
     def build_rep(self, sem_c, sem_comps, comps):
         if not self.built:
             for d in sem_c.Dependents:
@@ -79,15 +69,19 @@ class sem_rep:
             self.prior = 1.0
         else:
             self.prior = 1.0
+
     def add_dep(self, dep):
         self.dependents.append(dep)
         self.all_deps.append(dep)
         dep.make_parent(self)
+
     def make_parent(self, parent):
         self.parents.append(parent)
+
     def copy(self):
         s = copy.deepcopy(self)
         return s
+
     def print_self(self):
         for l in self.lambdas:
             pass
@@ -101,6 +95,7 @@ class sem_rep:
             if self.dependents.index(d) != len(self.dependents)-1:
                 print(',', end=' ')
         print(')', end=' ')
+
     def make_pairs(self, sem_store, lo):
         self.all_pairs = []
         i = 0
@@ -144,43 +139,31 @@ class sem_rep:
         #print  >> lo,'are :: \\\\'
         for p in self.all_pairs:
             print('$'+p[0]+'~~~~~~'+p[1]+'$\\\\', file=lo)
-        #print >> lo,'\\vspace{1cm} \\\\'
+
     def check_parent_branch(self, parent):
-        #################################
-        ## this function checks whether #
-        ## a given dependent has a parent
-        ## on a different branch.
-        ## this only returns true if the#
-        ## node commands the piece of   #
-        ## l.f. itself.                    #
-        #################################
+        """Check whether given dependent has a parent
+        on a different branch. Return true if the
+        node commands the piece of l.f. itself
+        """
 
         if self.parents == []:
             return True
 
         pb = False
         for p in self.parents:
-            if p != parent:
-                if p.check_parent_branch(parent):
-                    pb = True
+            if p != parent and p.check_parent_branch(parent):
+                pb = True
         return pb
 
-
     def make_var(self):
-
-        ####################################
-        # This is to check if any of the
-        # dependents are called by another
-        # branch of the semantic graph in
-        # which case we do not want to make
-        # this a variable until they've been
-        # dealt with.
-        ####################################
+        """Check if any of the dependents are called by another
+        branch of the semantic graph in which case we should
+        not make this a variable until they've been dealt with.
+        """
         other_branch = False
         for d in self.all_deps:
             if d.check_parent_branch(self):
                 other_branch = True
-        ####################################
 
         if not other_branch:
             for p in self.parents:
@@ -189,26 +172,17 @@ class sem_rep:
             self.parents = []
             return True
         else:
-            #print self.all_deps
-            #print self.return_key(True)
-            #for d in self.all_deps:
-                #print d.return_key(True)
             return False
 
     def make_lambda(self, dep, separator):
         if dep in self.all_deps:
-            ##########################################
-            # separator is the !node! that separates #
-            # the dependent from the parent (often   #
-            # None).                                 #
-            ##########################################
+            """separator: the !node! that separates the
+            dependent from the parent (often  None).
+            """
             del_deps = []
 
-            ##########################################
-            # need to also delete lambdas shared with#
-            # the child lambda list                     #
-            ##########################################
-
+            # need to also delete lambdas shared with
+            # the child lambda list
             self.lambdas.reverse()
             dep.lambdas.reverse()
 
@@ -225,39 +199,6 @@ class sem_rep:
                     del_lambdas.append(i)
                 else:
                     return None
-
-                # Need to sort out substitution stuff here #
-                # DON'T GIVE UP #
-
-                #elif l.type == self.lambdas[i].type:# and (len(dep.lambdas) == len(self.lambdas) ==1) and (len(self.lambdas[i].separators) == 2):
-                    #del_seps = []
-                    #j = 0
-                    #for s in self.lambdas[i].separators:
-                        #if s == dep:
-                            #del_seps.append(j)
-                    #del_seps.reverse()
-                    #for s in del_seps:
-                        #del self.lambdas[i].separators[s]
-                    #if len(self.lambdas[i].separators) == 0:
-                        #del_lambdas.append(i)
-                    #subs = True
-                    ## need to sort this out way better
-                    ## is this happening when it shouldn't?
-                    ## actually should be working out if the
-                    ## term pointed at has or had two parents
-                    ##return None
-                #elif len(self.lambdas[i].separators) > 2:
-                    #print 'shared between more than two'
-                    #error()
-                #else:
-
-                    #return None
-
-                    # all the existing lambda
-                    # terms for the dependent
-                    # should have a counterpart
-                    # at front up top.
-                    #        If not :: FAIL
                 i+=1
 
             self.lambdas.reverse()
@@ -266,73 +207,39 @@ class sem_rep:
             orig_length = len(self.lambdas)
             for i in del_lambdas:
                 del self.lambdas[orig_length-1-i]
-
-                #else:
-                    #for s in self.lambdas[orig_length-1-i].separators:
-                        #if s == dep:
-                            #print 'is equal'
-                            #del_s.append(j)
-                        #else:
-                            #print 'not equal'
-                #j += 1
-
-                #for s in del_s.reverse():
-                    #del.self.lambdas[orig_length-1-i].separators
-
-                #if len
-
             self.lambdas.append(lambda_op(dep, separator))
 
-            ###########################################
-            # This is only for substitution type rules#
-            # and swaps the order of the (now 2) lamda#
-            # terms.                                  #
-            ###########################################
+            # This is only for substitution type rules
+            # and swaps the order of the (now 2) lamda
+            # terms.
             if subs:
                 if not len(self.lambdas)==2:
                     print('not 2. this is mental')
                     print(len(self.lambdas))
                     error("not 2. this is mental")
                 self.lambdas.reverse()
-            ###########################################
 
-            ###########################################
             if dep in self.dependents:
                 del self.dependents[self.dependents.index(dep)]
             del self.all_deps[self.all_deps.index(dep)]
-            ###########################################
 
-
-            ###########################################
-            # Under_Deps are given the binary option  #
-            # to go or stay                              #
-            ###########################################
+            # Under_Deps are given the binary option
+            # to go or stay
             for d in self.all_deps:
                 if d in dep.all_deps:
                     #if d in self.dependents
                     del_deps.append(d)
-
-                    #if
-                    # but if it's in dependents (direct)
-                    # too then it will need a lambda term
-                    # _or_ it should stay here and the
-                    # other thing should get a lambda
-            ##############################
-            # should there be something  #
-            # to deal with more complex  #
-            # semantic possibilities?    #
-            ##############################
+            # should there be something
+            # to deal with more complex
+            # semantic possibilities?
             for p in self.parents:
                 pr = p.make_lambda(dep, self)
                 if pr is None:
 
                     return None
-            # delete from all_deps here #
-
+            # delete from all_deps here
             for d in del_deps:
                 del self.all_deps[self.all_deps.index(d)]
-        #for d in self.dependents:
-            #d.make_lambda(dep,
             return True
         else:
             double_dep = False
@@ -343,23 +250,6 @@ class sem_rep:
             if not double_dep:
                 error("")
             return True
-    # why does doing it like this help ? #
-    # buddy, I'm not sure that it does.  #
-
-    # have just recreated what I had before
-    # need to support lx.f(x(a)) which I
-    # don't
-
-    # do I really need to support this?
-    # KIND OF IS SUPPORTED. SUBJ STILL
-    # THERE
-
-    # NEED TO SPLIT SHARED ITEMS WHEN
-    # NECCESSARY. WOULD BE WELL NICE
-    # IF THIS WAS OPTIONAL TOO
-
-
-
 
     def combine(self, target):
         # THIS ONLY DOES SEMANTIC COMBINATION #
@@ -367,14 +257,12 @@ class sem_rep:
             for s in self.lambdas[-1].separators:
                 if s is None:
                     self.dependents.append(target)
-
                 else:
                     s.combine(target)
             self.lambdas.pop()
             return True
         else:
             return False
-            #self.dep
 
     def return_key(self, top):
         key = ''
@@ -396,17 +284,16 @@ class sem_rep:
                 key = key+','
             i += 1
 
-        #key = key+')'
         lambda_done = False
         for l in self.lambdas:
             if None in l.separators:
                 lambda_done = True
                 key = key+','+l.type
 
-        #if top:
         if self.dependents != [] or lambda_done:
             key = key+')'
         return key
+
     def nullify_lambdas(self):
         for l in self.lambdas:
             l.nullify()
@@ -447,10 +334,8 @@ class syn_cat:
                 error('not fwd or back - WHAAAT?')
         return key
 
-########################################
 # Function to build rep from sem_comps #
 # that are read in from the input       #
-########################################
 def make_reps(sem_c, sem_comps, Parent, targ_rep, sem_store, lo):
     comps = []
     for c in sem_comps:
@@ -461,10 +346,7 @@ def make_reps(sem_c, sem_comps, Parent, targ_rep, sem_store, lo):
     rep.set_key()
     sem_store.add(rep)
     return rep.sem_key
-########################################
 
-
-########################################
 class lexical_item:
     def __init__(self,word,syn_key,sem_key,is_shell_item=False):
         self.last_used = 0
@@ -512,7 +394,6 @@ class lexical_item:
         self.top_term = 0
     def toString(self):
         return self.word+" : "+ self.syn+" : "+self.sem_key
-########################################
 
 class sem_to_word:
     def __init__(self, sem_key, word):
@@ -529,15 +410,11 @@ class sem_to_word:
         self.alpha += update
     def set_last_used(self, count):
         self.last_used = count
-        #sw.set_last_used(max(sw.last_used
-
-########################################
 
 typing_regexp = re.compile("[\\\\/]")
 syn_to_type = lambda syn_key: (typing_regexp.sub("|", syn_key) if syn_key is not None else None)
 
 class sem_distribution:
-
     def __init__(self, alpha_shell, alpha_shell_to_sem):
 
         self.type_to_count = {}
@@ -751,17 +628,7 @@ class sem_distribution:
         self.type_shell_to_count[(sem_type, sem_shell)] = max(self.type_shell_to_count[(sem_type, sem_shell)] + val, 0.0)
         self.type_shell_sem_to_count[(sem_type, sem_shell, sem_key)] = max(self.type_shell_sem_to_count[(sem_type, sem_shell, sem_key)] + val, 0.0)
 
-    #def all_alphas(self):
-    #    return self.sem_to_count.items()
-
-    #def alpha(self,sem_key):
-    #    return self.sem_to_count[sem_key]
-
-
-
-########################################
 class Lexicon:
-
     def __init__(self, type_to_shell_alpha_o, shell_to_sem_alpha_o, word_alpha_o, mwe):
         self.word_alpha_o = word_alpha_o
         self.sentence_count = 0
@@ -1137,4 +1004,3 @@ class Lexicon:
             return None
         else:
             return max(relevant_key_vals, key=lambda x: x[1])[0]
-
