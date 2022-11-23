@@ -6,11 +6,11 @@ for line in open("trainPairs.txt"):
         semstring = line[4:].strip().rstrip()
         if not semstring.__contains__("^") and not semstring.__contains__("sk "):
             print("\n\nmaking sem for : "+semstring)
-            r = exp.makeExpWithArgs(semstring, {})
+            r = exp.make_exp_with_args(semstring, {})
             if r:
                 print("r is ", r)
                 e = r[0]
-                print("made : "+e.toString(True))
+                print("made : "+e.to_string(True))
             else: print("failed on ^")
         
         

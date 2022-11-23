@@ -10,7 +10,7 @@ def assignWords(chart, lexicon):
         for item in chart[level]:
             entry = chart[level][item]
             ccgcat = entry.ccgCat
-            w_syn_sem = lexicon.getMaxWordForSynSem(ccgcat.syn.toString(), ccgcat.sem.toString(True))
+            w_syn_sem = lexicon.getMaxWordForSynSem(ccgcat.syn.to_string(), ccgcat.sem.to_string(True))
             if w_syn_sem is None: continue
             entry.words = w_syn_sem[0]
             entry.word_target = w_syn_sem[0]

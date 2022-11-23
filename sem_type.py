@@ -33,73 +33,73 @@ def get_comma_seperator_point(typestring):
             return i
         i+=1
 
-class eType:
+class EType:
     def __init__(self):
         pass
-    def toString(self):
+    def to_string(self):
         return "e"
-    def toStringUBL(self):
+    def to_string_uBL(self):
         return "e"
-    def isE(self):
+    def is_e(self):
         return True
-    def isT(self):
+    def is_t(self):
         return False
-    def isEvent(self):
+    def is_event(self):
         return False
     def equals(self, e):
-        if e.isE(): return True
+        if e.is_e(): return True
         return False
     def atomic(self):
         return True
 
-class tType:
+class TType:
     def __init__(self):
         pass
-    def toString(self):
+    def to_string(self):
         return "t"
-    def toStringUBL(self):
+    def to_string_uBL(self):
         return "t"
-    def isE(self):
+    def is_e(self):
         return False
-    def isT(self):
+    def is_t(self):
         return True
-    def isEvent(self):
+    def is_event(self):
         return False
     def equals(self, e):
-        if e.isT(): return True
+        if e.is_t(): return True
         return False
     def atomic(self):
         return True
 
-class eventType:
+class EventType:
     def __init__(self):
         pass
-    def toString(self):
+    def to_string(self):
         return "r"
-    def toStringUBL(self):
+    def to_string_uBL(self):
         return "r"
-    def isE(self):
+    def is_e(self):
         return False
-    def isT(self):
+    def is_t(self):
         return False
-    def isEvent(self):
+    def is_event(self):
         return True
     def equals(self, e):
-        if e.isEvent(): return True
+        if e.is_event(): return True
         return False
     def atomic(self):
         return True
 
 class SemType:
-    e = eType()
-    t = tType()
-    event = eventType()
-    def __init__(self, argType, functType):
-        self.argType = argType
-        self.functType = functType
+    e = EType()
+    t = TType()
+    event = EventType()
+    def __init__(self, arg_type, funct_type):
+        self.arg_type = arg_type
+        self.funct_type = funct_type
 
     @staticmethod
-    def makeType(typestring):
+    def make_type(typestring):
         if typestring=="e": return SemType.e
         elif typestring=="t": return SemType.t
         elif typestring=="r": return SemType.event
@@ -116,37 +116,37 @@ class SemType:
             i+=1
         argstring = typestring[:i]
         functstring = typestring[i+1:]
-        t = SemType(SemType.makeType(argstring), SemType.makeType(functstring))
+        t = SemType(SemType.make_type(argstring), SemType.make_type(functstring))
         return t
-    def getArity(self):
+    def get_arity(self):
         if self.atomic(): return 1
-        return self.argType.getArity()+self.functType.getArity()
-    def isE(self):
+        return self.arg_type.get_arity()+self.funct_type.get_arity()
+    def is_e(self):
         return False
-    def isT(self):
+    def is_t(self):
         return False
     @staticmethod
-    def eType():
+    def e_type():
         return SemType.e
     @staticmethod
-    def tType():
+    def t_type():
         return SemType.t
-    def isEvent(self):
+    def is_event(self):
         return False
     @staticmethod
-    def eventType():
+    def event_type():
         return SemType.event
-    def getFunct(self):
-        return self.functType
-    def getArg(self):
-        return self.argType
+    def get_funct(self):
+        return self.funct_type
+    def get_arg(self):
+        return self.arg_type
     def equals(self, e):
-        if e.isE() or e.isT() or e.isEvent(): return False
-        return self.argType.equals(e.argType) and self.functType.equals(e.functType)
-    def toString(self):
-        return "<"+self.argType.toString()+","+self.functType.toString()+">"
-    def toStringUBL(self):
-        return "<"+self.argType.toStringUBL()+","+self.functType.toStringUBL()+">"
+        if e.is_e() or e.is_t() or e.is_event(): return False
+        return self.arg_type.equals(e.arg_type) and self.funct_type.equals(e.funct_type)
+    def to_string(self):
+        return "<"+self.arg_type.to_string()+","+self.funct_type.to_string()+">"
+    def to_string_uBL(self):
+        return "<"+self.arg_type.to_string_uBL()+","+self.funct_type.to_string_uBL()+">"
 
     def atomic(self):
         return False

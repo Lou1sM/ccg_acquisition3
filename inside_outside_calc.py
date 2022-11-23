@@ -67,7 +67,7 @@ def i_o_oneChart(chart,sem_store,lexicon,rule_set,doupdates,old_norm,\
         for level in chart:
             for item in chart[level]:
                 entry = chart[level][item]
-                print(entry.toString(), "  ", entry.inside_score)
+                print(entry.to_string(), "  ", entry.inside_score)
         print("\n\n")
 
     top_down = list(range(1, len(chart)+1))
@@ -88,9 +88,9 @@ def i_o_oneChart(chart,sem_store,lexicon,rule_set,doupdates,old_norm,\
                 #if not (foundparentl and foundparentr):
                     #print "l ",foundparentl
                     #print "r ",foundparentr
-                    #print entry.toString()
-                    #print entryL.toString()
-                    #print entryR.toString()
+                    #print entry.to_string()
+                    #print entryL.to_string()
+                    #print entryR.to_string()
 
                     #error()
 
@@ -99,7 +99,7 @@ def i_o_oneChart(chart,sem_store,lexicon,rule_set,doupdates,old_norm,\
         #print "level top down is ",level
         for item in chart[level]:
             entry = chart[level][item]
-            #print "entry is ",entry.toString()
+            #print "entry is ",entry.to_string()
             usestartrule = True
             if len(entry.parents) == 0:
                 topcat = chart[len(chart)][item].syn_key
@@ -159,7 +159,7 @@ def i_o_oneChart(chart,sem_store,lexicon,rule_set,doupdates,old_norm,\
         #for item in chart[level]:
             #entry = chart[level][item]
             #if len(entry.words)==1:
-                ##print "entry with scores is ",entry.toString()," inside is ",entry.inside_score," outside is ",entry.outside_score
+                ##print "entry with scores is ",entry.to_string()," inside is ",entry.inside_score," outside is ",entry.outside_score
                 #rule_score = rule_set.return_log_prob(entry.syn_key,entry.syn_key+'_LEX')
                 #onewordprobs[entry.p] = log_sum(onewordprobs[i],entry.inside_score+entry.outside_score)
 
@@ -269,7 +269,7 @@ def i_o_oneChart(chart,sem_store,lexicon,rule_set,doupdates,old_norm,\
             #rule_set.update_target_log_p(a_pq,1.0,word_prob,target)
             #rule_set.update_target_log_p(logER,target)
             if logLexExp >= 0.0:
-                print("cell is ", entry.toString())
+                print("cell is ", entry.to_string())
                 print("entry inside is ", entry.inside_score)
                 print("inside sum is ", node_inside_sum)
 

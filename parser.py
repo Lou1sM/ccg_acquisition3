@@ -1,8 +1,7 @@
 # this is a parser for a single sentence
 from tools import generate_wordset
 from tools import inf
-from cat import synCat
-from cat import cat
+from cat import SynCat, Cat
 from build_inside_outside_chart import ChartEntry
 from sample_most_probable_parse import sample
 from tools import log_sum
@@ -30,20 +29,20 @@ def cky(chart1, sentence, minscores, rule_set, beamsize):
                         lcat = lc.ccgCat
                         rcat = rc.ccgCat
                         if verbose:
-                            print("trying to combine ", lcat.toString(), " with ", rcat.toString())
+                            print("trying to combine ", lcat.to_string(), " with ", rcat.to_string())
                             print("leftscore = ", lc.max_score)
                             print("rightscore = ", rc.max_score)
                             print("fwdapp")
                         newcat = lcat.copy().apply(rcat.copy(), "fwd")
                         if newcat:
-                            if (newcat.synString(), newcat.semString(), j, j+i) in returnchart[i]:
-                                ce = returnchart[i][(newcat.synString(), newcat.semString(), j, j+i)]
+                            if (newcat.syn_string(), newcat.sem_string(), j, j+i) in returnchart[i]:
+                                ce = returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)]
                             else:
                                 ce = ChartEntry(newcat, j, j+i, sentence)
                                 # just according to inside score, but haven't been
                                 # accumulating
 
-                            target = lcat.syn.toString()+'#####'+rcat.syn.toString()
+                            target = lcat.syn.to_string()+'#####'+rcat.syn.to_string()
                             rule_set.check_rule(ce.syn_key, lcat.syn, rcat.syn, "fwd", 0)
                             rule_score = rule_set.return_map_log_prob(ce.syn_key, target)
                             new_inside_score = rule_score+lc.inside_score+rc.inside_score
@@ -52,15 +51,15 @@ def cky(chart1, sentence, minscores, rule_set, beamsize):
                             if new_max_score > ce.max_score:
                                 ce.max_score = new_max_score
                             if verbose:
-                                print("got newcat ", newcat.toString(), " from ", lcat.toString(), " ", rcat.toString(), " maxscore is ", new_max_score)
+                                print("got newcat ", newcat.to_string(), " from ", lcat.to_string(), " ", rcat.to_string(), " maxscore is ", new_max_score)
                                 print("rule_score = ", rule_score)
 
                             lc.add_parent(ce, 'l')
                             rc.add_parent(ce, 'r')
                             ce.add_child(((lc.syn_key, lc.sem_key, j, j+k), (rc.syn_key, rc.sem_key, j+k, j+i)))
 
-                            chart1[j][j+i][(newcat.synString(), newcat.semString(), j, j+i)] = ce
-                            returnchart[i][(newcat.synString(), newcat.semString(), j, j+i)] = ce
+                            chart1[j][j+i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
+                            returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
                             if len(chart1[j][j+i]) > beamsize:
                                 removemin(chart1, j, j+i, minscores)
                             continue
@@ -68,12 +67,12 @@ def cky(chart1, sentence, minscores, rule_set, beamsize):
                         if verbose: print("backapp")
                         newcat = rcat.copy().apply(lcat.copy(), "back")
                         if newcat:
-                            if (newcat.synString(), newcat.semString(), j, j+i) in returnchart[i]:
-                                ce = returnchart[i][(newcat.synString(), newcat.semString(), j, j+i)]
+                            if (newcat.syn_string(), newcat.sem_string(), j, j+i) in returnchart[i]:
+                                ce = returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)]
                             else:
                                 ce = ChartEntry(newcat, j, j+i, sentence)
 
-                            target = lcat.syn.toString()+'#####'+rcat.syn.toString()
+                            target = lcat.syn.to_string()+'#####'+rcat.syn.to_string()
                             rule_set.check_rule(ce.syn_key, lcat.syn, rcat.syn, "back", 0)
                             rule_score = rule_set.return_map_log_prob(ce.syn_key, target)
                             new_inside_score = rule_score+lc.inside_score+rc.inside_score
@@ -83,15 +82,15 @@ def cky(chart1, sentence, minscores, rule_set, beamsize):
                                 ce.max_score = new_max_score
 
                             if verbose:
-                                print("got newcat ", newcat.toString(), " from ", lcat.toString(), " ", rcat.toString(), " maxscore is ", new_max_score)
+                                print("got newcat ", newcat.to_string(), " from ", lcat.to_string(), " ", rcat.to_string(), " maxscore is ", new_max_score)
                                 print("rule_score = ", rule_score)
 
                             lc.add_parent(ce, 'l')
                             rc.add_parent(ce, 'r')
                             ce.add_child(((lc.syn_key, lc.sem_key, j, j+k), (rc.syn_key, rc.sem_key, j+k, j+i)))
 
-                            chart1[j][j+i][(newcat.synString(), newcat.semString(), j, j+i)] = ce
-                            returnchart[i][(newcat.synString(), newcat.semString(), j, j+i)] = ce
+                            chart1[j][j+i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
+                            returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
                             if len(chart1[j][j+i]) > beamsize:
                                 removemin(chart1, j, j+i, minscores)
                             continue
@@ -99,12 +98,12 @@ def cky(chart1, sentence, minscores, rule_set, beamsize):
                         if verbose: print("fwdcomp")
                         newcat = lcat.copy().compose(rcat.copy(), "fwd")
                         if newcat:
-                            if (newcat.synString(), newcat.semString(), j, j+i) in returnchart[i]:
-                                ce = returnchart[i][(newcat.synString(), newcat.semString(), j, j+i)]
+                            if (newcat.syn_string(), newcat.sem_string(), j, j+i) in returnchart[i]:
+                                ce = returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)]
                             else:
                                 ce = ChartEntry(newcat, j, j+i, sentence)
 
-                            target = lcat.syn.toString()+'#####'+rcat.syn.toString()
+                            target = lcat.syn.to_string()+'#####'+rcat.syn.to_string()
                             rule_set.check_rule(ce.syn_key, lcat.syn, rcat.syn, "fwd", 1)
 
                             rule_score = rule_set.return_map_log_prob(ce.syn_key, target)
@@ -115,15 +114,15 @@ def cky(chart1, sentence, minscores, rule_set, beamsize):
                                 ce.max_score = new_max_score
 
                             if verbose:
-                                print("got newcat ", newcat.toString(), " from ", lcat.toString(), " ", rcat.toString(), " maxscore is ", new_max_score)
+                                print("got newcat ", newcat.to_string(), " from ", lcat.to_string(), " ", rcat.to_string(), " maxscore is ", new_max_score)
                                 print("rule_score = ", rule_score)
 
                             lc.add_parent(ce, 'l')
                             rc.add_parent(ce, 'r')
                             ce.add_child(((lc.syn_key, lc.sem_key, j, j+k), (rc.syn_key, rc.sem_key, j+k, j+i)))
 
-                            chart1[j][j+i][(newcat.synString(), newcat.semString(), j, j+i)] = ce
-                            returnchart[i][(newcat.synString(), newcat.semString(), j, j+i)] = ce
+                            chart1[j][j+i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
+                            returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
                             chartsize += 1
                             if len(chart1[j][j+i]) > beamsize:
                                 removemin(chart1, j, j+i, minscores)
@@ -133,12 +132,12 @@ def cky(chart1, sentence, minscores, rule_set, beamsize):
                         newcat = rcat.copy().compose(lcat.copy(), "back")
                         if newcat:
 
-                            if (newcat.synString(), newcat.semString(), j, j+i) in returnchart[i]:
-                                ce = returnchart[i][(newcat.synString(), newcat.semString(), j, j+i)]
+                            if (newcat.syn_string(), newcat.sem_string(), j, j+i) in returnchart[i]:
+                                ce = returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)]
                             else:
                                 ce = ChartEntry(newcat, j, j+i, sentence)
 
-                            target = lcat.syn.toString()+'#####'+rcat.syn.toString()
+                            target = lcat.syn.to_string()+'#####'+rcat.syn.to_string()
                             rule_set.check_rule(ce.syn_key, lcat.syn, rcat.syn, "fwd", 1)
                             rule_score = rule_set.return_map_log_prob(ce.syn_key, target)
                             new_inside_score = rule_score+lc.inside_score+rc.inside_score
@@ -148,15 +147,15 @@ def cky(chart1, sentence, minscores, rule_set, beamsize):
                                 ce.max_score = new_max_score
 
                             if verbose:
-                                print("got newcat ", newcat.toString(), " from ", lcat.toString(), " ", rcat.toString(), " maxscore is ", new_max_score)
+                                print("got newcat ", newcat.to_string(), " from ", lcat.to_string(), " ", rcat.to_string(), " maxscore is ", new_max_score)
                                 print("rule_score = ", rule_score)
 
                             lc.add_parent(ce, 'l')
                             rc.add_parent(ce, 'r')
                             ce.add_child(((lc.syn_key, lc.sem_key, j, j+k), (rc.syn_key, rc.sem_key, j+k, j+i)))
 
-                            chart1[j][j+i][(newcat.synString(), newcat.semString(), j, j+i)] = ce
-                            returnchart[i][(newcat.synString(), newcat.semString(), j, j+i)] = ce
+                            chart1[j][j+i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
+                            returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
                             if len(chart1[j][j+i]) > beamsize:
                                 removemin(chart1, j, j+i, minscores)
                             continue
@@ -170,7 +169,7 @@ def cky(chart1, sentence, minscores, rule_set, beamsize):
             for item in returnchart[level]:
                 print(item)
                 entry = returnchart[level][item]
-                print(entry.toString(), "  ", entry.inside_score)
+                print(entry.to_string(), "  ", entry.inside_score)
         print("\n\n")
     return returnchart
 
@@ -230,12 +229,12 @@ def get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count):
                     for pl in poss_lex:
                         if verbose: print("pl is ", pl)
                         l = pl
-                        if verbose: print(l.toString())
-                        syncat = synCat.readCat(l.syn)
-                        if verbose: print("syn is ", l.syn, " syncat is ", syncat.toString())
-                        sem = sem_store.get(l.sem_key) # exp.makeExpWithArgs(l.sem_key,{})[0]
-                        if verbose: print("sem is ", sem.toString(True))
-                        c = cat(syncat, sem)
+                        if verbose: print(l.to_string())
+                        syncat = SynCat.readCat(l.syn)
+                        if verbose: print("syn is ", l.syn, " syncat is ", syncat.to_string())
+                        sem = sem_store.get(l.sem_key) # exp.make_exp_with_args(l.sem_key,{})[0]
+                        if verbose: print("sem is ", sem.to_string(True))
+                        c = Cat(syncat, sem)
                         ce = ChartEntry(c, start, end, sentence)
                         if hasattr(l, 'is_shell_item') and l.is_shell_item:
                             # if it's a shell, there is the probability of it generating a new LF and the probability
@@ -258,10 +257,10 @@ def get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count):
                         ce.max_score = ce.word_score+ce.sem_score+rule_score
                         if len(chart1[start][end])<beamsize or minscores[start][end]<ce.inside_score:
                             chart1[start][end][(l.syn, l.sem_key, start, end)] = ce
-                            if verbose: print("added ", ce.toString(), " to ", start, end)
+                            if verbose: print("added ", ce.to_string(), " to ", start, end)
                             if len(chart1[start][end]) > beamsize:
                                 removemin(chart1, start, end, minscores)
-                        elif verbose: print("not adding ", ce.toString())
+                        elif verbose: print("not adding ", ce.to_string())
                 start += w.count(" ")+1
     returnchart = cky(chart1, sentence, minscores, rule_set, beamsize)
     return returnchart

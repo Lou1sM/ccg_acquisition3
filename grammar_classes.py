@@ -32,7 +32,7 @@ class Rule:
 
         correction = 1.0
         if hacked_prior and self.rule_head != 'START':
-            directions = cat.all_directions(cat.synCat.readCat(self.rule_head))
+            directions = cat.all_directions(cat.SynCat.read_cat(self.rule_head))
             if len(directions) >= 2:
                 if directions[-1] == directions[-2]:
                     correction = 4.0 / 3
@@ -56,14 +56,14 @@ class Rule:
         return ruleprior
 
     def check_target(self, left_syn, right_syn, direction, numcomp):
-        left_synstring = left_syn.toString()
+        left_synstring = left_syn.to_string()
         if self.rule_head=="START":
             if left_syn not in self.targets:
                 self.targets[left_synstring] = Target(self.rule_head, (left_synstring, None))
                 self.targets[left_synstring].prior = \
                     Rule.rule_prior(left_syn, right_syn, direction, numcomp)
             return
-        right_synstring = right_syn.toString()
+        right_synstring = right_syn.to_string()
         t = left_synstring+'#####'+right_synstring
         if t not in self.targets:
             self.targets[t] = Target(self.rule_head, (left_synstring, right_synstring))
@@ -232,7 +232,7 @@ class Rules:
         self.rules["START"] = Rule("START", self.alpha_top, self.beta_tot, self.beta_lex)
 
     def check_start_rule(self, rule_head):
-        c = rule_head.toString()
+        c = rule_head.to_string()
         if c in self.targets: return
         self.rules["START"].check_target(rule_head, None, None, 0)
         self.targets[c] = "START"
@@ -243,8 +243,8 @@ class Rules:
             self.targets[rule_head+'_LEX'] = rule_head
         if left_syn is not None and right_syn is not None:
             self.rules[rule_head].check_target(left_syn, right_syn, direction, numcomp)
-            if left_syn.toString()+'#####'+right_syn.toString() not in self.targets:
-                self.targets[left_syn.toString()+'#####'+right_syn.toString()] = rule_head
+            if left_syn.to_string()+'#####'+right_syn.to_string() not in self.targets:
+                self.targets[left_syn.to_string()+'#####'+right_syn.to_string()] = rule_head
 
     def check_target(self, t):
         if t in self.targets:

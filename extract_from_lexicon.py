@@ -6,7 +6,7 @@ import pickle as pickle
 import sys, math, re, os
 import lexicon_classes
 import numpy as np
-from cat import synCat
+from cat import SynCat
 
 ADVERBS = ["now", "again", "on", "later", "away", "off", "almost", "yet", "hard", "first", "already",\
                "better", "still", "maybe", "well",\
@@ -33,7 +33,7 @@ def _catProbFromGrammar(sc, rule_set):
     if sc.atomic(): return 1.0
     elif sc.direction=="fwd":
         # fwd
-        rule = (sc.funct.toString(), sc.toString()+'#####'+sc.arg.toString())
+        rule = (sc.funct.to_string(), sc.to_string()+'#####'+sc.arg.to_string())
         if rule_set.check_target(rule[1]):
             rule_prob = rule_set.return_prob(rule[0], rule[1])
             #print "rule_prob is ",rule_prob
@@ -42,7 +42,7 @@ def _catProbFromGrammar(sc, rule_set):
         c_prob = c_prob*rule_prob
         c_prob = c_prob*_catProbFromGrammar(sc.funct, rule_set)
     elif sc.direction=="back":
-        rule = (sc.funct.toString(), sc.arg.toString()+'#####'+sc.toString())
+        rule = (sc.funct.to_string(), sc.arg.to_string()+'#####'+sc.to_string())
         if rule_set.check_target(rule[1]):
             rule_prob = rule_set.return_prob(rule[0], rule[1])
             #print "rule_prob is ",rule_prob
@@ -59,7 +59,7 @@ def get_synt_distribution(target_syn_keys, lexicon, sem_store, rule_set, sentenc
     """
     synt_cat_distribution = []
     for syn_key in target_syn_keys:
-        pr_syn = _catProbFromGrammar(synCat.readCat(syn_key), rule_set)    # an approximation of Pr(cat)
+        pr_syn = _catProbFromGrammar(SynCat.read_cat(syn_key), rule_set)    # an approximation of Pr(cat)
         leaf_log_prob =  rule_set.return_leaf_map_log_prob(syn_key) # added 28/7
         if leaf_log_prob is None:
             return {}

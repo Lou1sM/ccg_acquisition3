@@ -3,9 +3,8 @@ from inside_outside_calc import i_o_oneChart
 from parser import parse
 from build_inside_outside_chart import build_chart
 from sample_most_probable_parse import sample
-from cat import synCat
+from cat import Cat,SynCat
 from make_graphs import output_cat_probs
-import cat
 import exp
 
 
@@ -25,7 +24,7 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
         line = inputpairs[line_count]
         line_count += 1
         if line[:5] == "Sent:":
-            isQ = False
+            is_q = False
             sentence = line[6:].strip().rstrip()
             if sentence.count(" ") > max_sentence_length:
                 print("rejecting: example too long ", line)
@@ -36,17 +35,17 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
         if sentence and line[:4] =="Sem:":
             semstring = line[5:].strip().rstrip()
             try:
-                sem, _ = exp.makeExpWithArgs(semstring, {})
+                sem, _ = exp.make_exp_with_args(semstring, {})
             except (AttributeError, IndexError):
                 print("LF could not be parsed\nSent : " + sentence)
                 print("Sem: " + semstring + "\n\n")
                 continue
-            if len(sem.allExtractableSubExps()) > 9 and truncate_complex_exps:
+            if len(sem.all_extractable_sub_exps()) > 9 and truncate_complex_exps:
                 sentence = None
                 continue
 
             try:
-                isQ, sc = get_top_cat(sem)
+                is_q, sc = get_top_cat(sem)
             except IndexError:
                 # print "couldn't determine syntactic category ", sem_line
                 words = None
@@ -56,7 +55,7 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
                 continue
 
             words = sentence.split()
-            if not isQ and words[-1] in ["?", "."]:
+            if not is_q and words[-1] in ["?", "."]:
                 words = words[:-1]
             if len(words) == 0:
                 words = None
@@ -65,7 +64,7 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
                 sc = None
                 continue
 
-            top_cat = cat.cat(sc, sem)
+            top_cat = Cat(sc, sem)
             top_cat_list.append(top_cat)
 
         if sentence and line[:11] == "example_end":
@@ -73,8 +72,8 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
             print("update weight = ", lexicon.get_learning_rate(sentence_count), file=train_out)
             print(sentence_count, file=train_out)
             for top_cat in top_cat_list:
-                print("Cat : " + top_cat.toString(), file=train_out)
-                print("Cat : " + top_cat.toString(), file=train_out)
+                print("Cat : " + top_cat.to_string(), file=train_out)
+                print("Cat : " + top_cat.to_string(), file=train_out)
             cat_store = {}
             if len(words) > 8 or (skip_q and "?" in sentence):
                 sentence = []
@@ -94,16 +93,16 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
     return lexicon, rule_set, sem_store, chart
 
 def get_top_cat(sem):
-    if sem.checkIfWh():
-        isQ = False
-        sc = synCat.swh
-    elif sem.isQ():
-        isQ = True
-        sc = synCat.q
+    if sem.check_if_wh():
+        is_q = False
+        sc = SynCat.swh
+    elif sem.is_q():
+        is_q = True
+        sc = SynCat.q
     else:
-        isQ = False
-        sc = synCat.allSynCats(sem.type())[0]
-    return isQ, sc
+        is_q = False
+        sc = SynCat.all_syn_cats(sem.type())[0]
+    return is_q, sc
 
 def print_top_parse(chart, rule_set, output_fpath):
     topparses = []
@@ -132,14 +131,14 @@ def print_cat_probs(cats_to_check, lexicon, sem_store, rule_set):
 def generate_sentences(sentstogen, lexicon, rule_set, cat_store, sem_store, is_one_word, genoutfile, sentence_count):
     sentnum = 1
     for (gensent, gensemstr) in sentstogen:
-        gensem = exp.makeExpWithArgs(gensemstr, {})[0]
-        if gensem.checkIfWh():
-            sc = synCat.swh
-        elif gensem.isQ():
-            sc = synCat.q
+        gensem = exp.make_exp_with_args(gensemstr, {})[0]
+        if gensem.check_if_wh():
+            sc = SynCat.swh
+        elif gensem.is_q():
+            sc = SynCat.q
         else:
-            sc = synCat.allSynCats(gensem.type())[0]
-        genCat = cat.cat(sc, gensem)
+            sc = SynCat.allSynCats(gensem.type())[0]
+        genCat = Cat(sc, gensem)
         print("gonna generate sentence ", gensent)
         generateSent(lexicon, rule_set, genCat, cat_store, sem_store, is_one_word, gensent, genoutfile,
                      sentence_count, sentnum)
@@ -153,12 +152,12 @@ def test(test_in, test_out, errors_out, sem_store, rule_set, current_lexicon, se
             sentence = line[6:].split()
         if line[:4] == "Sem:":
             try:
-                sem = exp.makeExpWithArgs(line[5:].strip().rstrip(), {})[0]
+                sem = exp.make_exp_with_args(line[5:].strip().rstrip(), {})[0]
             except IndexError:
                 print(sentence, file=errors_out)
                 print(line, file=errors_out)
                 continue
-            if not sem.isQ() and sentence[-1] in [".", "?"]:
+            if not sem.is_q() and sentence[-1] in [".", "?"]:
                 sentence = sentence[:-1]
             if len(sentence) == 0:
                 sem = None
@@ -172,14 +171,14 @@ def test(test_in, test_out, errors_out, sem_store, rule_set, current_lexicon, se
             except (AttributeError, IndexError):
                 pass
             if retsem and sem and retsem.equals(sem):
-                print(f"CORRECT\n{retsem.toString(True)}\n{topcat.toString()}", file=test_out)
+                print(f"CORRECT\n{retsem.to_string(True)}\n{topcat.to_string()}", file=test_out)
             elif not retsem:
                 print("NO PARSE", file=test_out)
                 continue
             else:
-                print(f"WRONG\n{retsem.toString(True)}\n{topcat.toString()}", file=test_out)
-                print(sem.toString(True), file=test_out)
+                print(f"WRONG\n{retsem.to_string(True)}\n{topcat.to_string()}", file=test_out)
+                print(sem.to_string(True), file=test_out)
                 if sem and retsem.equalsPlaceholder(sem):
-                    print(f"CORRECTPlaceholder\n{retsem.toString(True)}\n{topcat.toString()}", file=test_out)
+                    print(f"CORRECTPlaceholder\n{retsem.to_string(True)}\n{topcat.to_string()}", file=test_out)
 
             print(f'top parse:\n{top_parse}\n\n', file=test_out)

@@ -375,7 +375,7 @@ class lexical_item:
         #print "update is ",alpha
         self.alpha = self.alpha+alpha
         if self.alpha<-1E-5:
-            print("negative alpha for ", self.toString())
+            print("negative alpha for ", self.to_string())
             print("alpha is ", self.alpha)
             error("alpha is negative")
 
@@ -392,7 +392,7 @@ class lexical_item:
             self.last_used = sentence_count
     def clear_probs(self):
         self.top_term = 0
-    def toString(self):
+    def to_string(self):
         return self.word+" : "+ self.syn+" : "+self.sem_key
 
 class sem_to_word:
@@ -711,7 +711,7 @@ class Lexicon:
             self.catcounts[syn_key] = 0.0
 
         if sem is not None:
-            shell_sem_key = sem.toStringShell(True)
+            shell_sem_key = sem.to_string_shell(True)
         else:
             shell_sem_key = sem_key
 
@@ -728,9 +728,9 @@ class Lexicon:
 
     """
     def getWordsFromSynSem(self,ccgcat,maxw):
-        ssk = (ccgcat.syn.toString(),ccgcat.sem.toString(True))
+        ssk = (ccgcat.syn.to_string(),ccgcat.sem.to_string(True))
         if not self.syn_sem.has_key(ssk): return []
-        #print "for ",ccgcat.toString()," got ",self.syn_sem[(ccgcat.syn.toString(),ccgcat.sem.toString(True))]
+        #print "for ",ccgcat.to_string()," got ",self.syn_sem[(ccgcat.syn.to_string(),ccgcat.sem.to_string(True))]
         words = []
         for l in self.syn_sem[ssk].words.values():
             words.append((l.alpha,l.word))
@@ -745,7 +745,7 @@ class Lexicon:
 
     def get_lex_items(self,word,guess=False,sem_store=None,beamsize=None):
         """Returns the most common lexical items with this specific word. Used to write
-        each l.toString() in pi to some file too, but a getter shouldn't be logging.
+        each l.to_string() in pi to some file too, but a getter shouldn't be logging.
         """
         pi = []
         if beamsize is None:

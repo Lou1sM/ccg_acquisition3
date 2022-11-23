@@ -27,7 +27,7 @@ class SemStore:
 
     def get_log_prior(self, sem_key):
         if not self.check(sem_key):
-            sem = exp.makeExpWithArgs(sem_key, {})
+            sem = exp.make_exp_with_args(sem_key, {})
             # OMRI ADDED THE NEXT TWO LINES
             if isinstance(sem, tuple):
                 sem = sem[0]
@@ -36,9 +36,9 @@ class SemStore:
         return sem.semprior()
 
     def add(self, sem):
-        self.store[sem.toString(True)] = sem
-        if sem.toStringShell(True) not in self.store:
-            self.store[sem.toStringShell(True)] = sem.makeShell({})
+        self.store[sem.to_string(True)] = sem
+        if sem.to_string_shell(True) not in self.store:
+            self.store[sem.to_string_shell(True)] = sem.make_shell({})
 
     def get(self, sem_key):
         if sem_key in self.store:
@@ -63,8 +63,8 @@ class ChartEntry:
         else:
             self.words = sentence
         self.ccgCat = ccgCat
-        self.syn_key = ccgCat.synString()
-        self.sem_key = ccgCat.semString()
+        self.syn_key = ccgCat.syn_string()
+        self.sem_key = ccgCat.sem_string()
         self.p = p
         self.q = q
         self.word_prob = 0.0
@@ -87,7 +87,7 @@ class ChartEntry:
     def lexKey(self):
         return self.word_target + " :: " + self.syn_key + " :: " + self.sem_key
 
-    def toString(self):
+    def to_string(self):
         return str(self.p) + ":" + str(
             self.q) + " :: " + self.word_target + " :: " + self.syn_key + " :: " + self.sem_key
 
@@ -113,27 +113,28 @@ class ChartEntry:
     def get_inside(self):
         return self.inside_prob
 
+
 def expand_chart(entry, chart, cat_store, sem_store, rule_set, lexicon, is_exclude_mwe, correct_index):
     """CatStore is a dictionary that maps pairs of syntactic and semantic forms
     to the set of pairs they can decompose to. It's a cache essentially.
     """
-    if entry.ccgCat.sem.getIsNull(): return
+    if entry.ccgCat.sem.get_is_null(): return
     if entry.p < entry.q - 1:
 
         for d in range(entry.p + 1, entry.q):
             words_l = ' '.join(entry.sentence[entry.p:d])
             words_r = ' '.join(entry.sentence[d:entry.q])
 
-            for pair in entry.ccgCat.allPairs(cat_store):
+            for pair in entry.ccgCat.all_pairs(cat_store):
                 l_cat = pair[0]
                 l_syncat = l_cat.syn
-                l_syn = l_cat.synString()
-                l_sem = l_cat.semString()
+                l_syn = l_cat.syn_string()
+                l_sem = l_cat.sem_string()
 
                 r_cat = pair[1]
                 r_syncat = r_cat.syn
-                r_syn = r_cat.synString()
-                r_sem = r_cat.semString()
+                r_syn = r_cat.syn_string()
+                r_sem = r_cat.sem_string()
 
                 direction = pair[2]
                 numcomp = pair[3]
@@ -142,7 +143,7 @@ def expand_chart(entry, chart, cat_store, sem_store, rule_set, lexicon, is_exclu
                 if not sem_store.check(r_sem): sem_store.add(r_cat.sem)
 
                 # - this is needed to build an actual parse - #
-                rule_set.check_rule(entry.ccgCat.synString(), l_syncat, r_syncat, direction, numcomp)
+                rule_set.check_rule(entry.ccgCat.syn_string(), l_syncat, r_syncat, direction, numcomp)
                 rule_set.check_rule(l_syn, None, None, None, None)
                 rule_set.check_rule(r_syn, None, None, None, None)
 
@@ -165,19 +166,20 @@ def expand_chart(entry, chart, cat_store, sem_store, rule_set, lexicon, is_exclu
                 chart[entry.q - d][(r_syn, r_sem, d, entry.q)].add_parent(entry, 'r')
                 entry.add_child(((l_syn, l_sem, entry.p, d), (r_syn, r_sem, d, entry.q)))
 
+
 def build_chart(top_cat_list, sentence, rule_set, lexicon, cat_store, sem_store, is_exclude_mwe):
     chart = {i:{} for i in range(1, len(sentence) + 1)}
     correct_index = (len(top_cat_list) - 1) / 2  # the index of the correct semantics
 
     for ind, top_cat in enumerate(top_cat_list):
         c1 = ChartEntry(top_cat, 0, len(sentence), sentence)
-        if not sem_store.check(top_cat.sem.toString(True)):
+        if not sem_store.check(top_cat.sem.to_string(True)):
             sem_store.add(top_cat.sem)
-        chart[len(sentence)][(top_cat.synString(), top_cat.semString(), 0, len(sentence))] = c1
+        chart[len(sentence)][(top_cat.syn_string(), top_cat.sem_string(), 0, len(sentence))] = c1
         rule_set.check_start_rule(top_cat.syn)
-        rule_set.check_rule(top_cat.synString(), None, None, None, None)
+        rule_set.check_rule(top_cat.syn_string(), None, None, None, None)
         wordspan = ' '.join(sentence)
-        lexicon.check(wordspan, top_cat.synString(), top_cat.semString(), top_cat.sem)
+        lexicon.check(wordspan, top_cat.syn_string(), top_cat.sem_string(), top_cat.sem)
         expand_chart(c1, chart, cat_store, sem_store, rule_set, lexicon, is_exclude_mwe, correct_index == ind)
 
     chart_size = 0

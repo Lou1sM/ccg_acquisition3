@@ -79,7 +79,7 @@ def main(args):
 
         if args.is_dump_verb_repo:
             verb_repository = verb_repo.VerbRepository()
-            for cur_cat in set([c.semString() for c in lexicon.cur_cats]):
+            for cur_cat in set([c.sem_string() for c in lexicon.cur_cats]):
                 verb_repository.add_verb(cur_cat, lexicon, sem_store, rule_set, sentence_count)
             verb_repo_dump_fpath = os.path.join(args.outdir, f'verb_repo_dump{i}.txt')
             with open(verb_repo_dump_fpath,'wb') as f:

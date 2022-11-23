@@ -22,13 +22,13 @@ def cat_prob_from_grammar(sc,rule_set):
     rule_prob = 1.0
     if sc.atomic(): return 1.0
     elif sc.direction=="fwd":
-        rule = (sc.funct.toString(),sc.toString()+'#####'+sc.arg.toString())
+        rule = (sc.funct.to_string(),sc.to_string()+'#####'+sc.arg.to_string())
         if rule_set.check_target(rule[1]):
             rule_prob = rule_set.return_prob(rule[0],rule[1])
         c_prob = c_prob*rule_prob
         c_prob = c_prob*cat_prob_from_grammar(sc.funct,rule_set)
     elif sc.direction=="back":
-        rule = (sc.funct.toString(),sc.arg.toString()+'#####'+sc.toString())
+        rule = (sc.funct.to_string(),sc.arg.to_string()+'#####'+sc.to_string())
         if rule_set.check_target(rule[1]):
             rule_prob = rule_set.return_prob(rule[0],rule[1])
         c_prob = c_prob*rule_prob
@@ -38,7 +38,7 @@ def cat_prob_from_grammar(sc,rule_set):
 
 # 2. get P(lf_{type}|cat) from lexicon.
 def get_sem_type_prob(lexicon,sem_store,cat,lf_type,pos_type,arity,varorder):
-    catkey = cat.toString()
+    catkey = cat.to_string()
     if catkey in lexicon.syntax:
         sem_typeprobs_ = lexicon.get_sem_from_type_prob(sem_store,catkey,lf_type,pos_type,arity,varorder)
         vo = ""
