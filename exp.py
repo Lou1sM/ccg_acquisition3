@@ -216,10 +216,6 @@ class Exp:
         print("should never be getting here, equals defined on subexps")
         print("this is ", self.to_string(True))
 
-    def equals_placeholder(self, other):
-        print("should never be getting here, equals defined on subexps")
-        print("this is ", self.to_string(True))
-
     def clear_parents(self):
         self.parents = []
         for a in self.arguments:
@@ -227,13 +223,6 @@ class Exp:
 
     def clear_parents2(self):
         self.parents = []
-
-    def remove_arg(self, arg):
-        for i in range(len(self.arguments)):
-            a = self.arguments[i]
-            if a==arg:
-                self.arguments.pop(i)
-                return
 
     def recalc_parents(self, top):
         if top:
@@ -461,7 +450,6 @@ class Exp:
                             type_raised_child = child_sem.type_raise(parent_sem)
                             print("Type raised child is : "+type_raised_child.to_string(True))
                             print("Parent _sem is : "+parent_sem.to_string(True))
-                            # don't know what to do with the new_lam integer
                             trfc = ["typeraised"]
                             trfc.extend(fixeddircats)
                             allpairs.append((type_raised_child, parent_sem.copy(), num_new_lam, 0, trfc))
@@ -615,13 +603,8 @@ class EmptyExp(Exp):
     def clear_names(self):
         self.name="?"
 
-    def equals_placeholder(self, other):
-        if other.__class__ != EmptyExp: return False
-        return True
-
     def equals(self, other):
-        if other.__class__ != EmptyExp: return False
-        return True
+        return isinstance(other,EmptyExp)
 
 class Variable(Exp):
     def __init__(self, e):
@@ -852,14 +835,6 @@ class Variable(Exp):
 
     def set_type(self, t):
         self.t = t
-
-    def equals_placeholder(self, other):
-        if len(self.arguments)!=len(other.arguments): return False
-        i = 0
-        for a in self.arguments:
-            if not a.equals_placeholder(other.arguments[i]): return False
-            i+=1
-        return other==self.equalother
 
     def equals(self, other):
         if other.__class__ != Variable: return False
@@ -1132,14 +1107,6 @@ class LambdaExp(Exp):
         self.var.name=None
         self.funct.clear_names()
 
-    def equals_placeholder(self, other):
-        if other.__class__ != LambdaExp or \
-                not other.var.equal_type(self.var):
-            return False
-        self.var.set_equal_to(other.var)
-        other.var.set_equal_to(self.var)
-        return other.funct.equals_placeholder(self.funct)
-
     def equals(self, other):
         if other.__class__ != LambdaExp or \
                 not other.var.equal_type(self.var):
@@ -1226,10 +1193,6 @@ class Neg(Exp):
 
     def type(self):
         return SemType.t_type()
-
-    def equals_placeholder(self, other):
-        if other.__class__!=Neg: return False
-        return other.arguments[0].equals_placeholder(self.arguments[0])
 
     def equals(self, other):
         if other.__class__!=Neg: return False
@@ -1365,15 +1328,6 @@ class Constant(Exp):
         c.linked_var = self.linked_var
         return c
 
-    def equals_placeholder(self, other):
-        if other.__class__ != Constant:
-            return False
-        if other.name!=self.name and not \
-                (other.name=="placeholder_c"
-                     or self.name=="placeholder_c"):
-            return False
-        return True
-
     def equals(self, other):
         if other.__class__ != Constant:
             return False
@@ -1388,7 +1342,7 @@ class Constant(Exp):
         if extra_format is None:
             return self.name + self._to_string(top, extra_format)
         elif extra_format == 'ubl':
-            return self.str_shell_prefix + 'e'
+            return self.str_shell_prefix + ':e'
         elif extra_format == 'shell':
             return "placeholder_c"
 
@@ -1413,7 +1367,7 @@ class Conjunction(Exp):
         t = None
         for a in self.arguments:
             if t and t!=a.get_return_type():
-                print("bad type for conj, ", self.to_string(True), " t was ", t.to_string(), " t now ", a.type().to_string())
+                print("bad type for conj,", self.to_string(True), "t was", t.to_string(), "t now", a.type().to_string())
                 return None
             else: t = a.get_return_type()
             return t
@@ -1456,13 +1410,6 @@ class Conjunction(Exp):
             c.set_arg(i, a2)
         return c
 
-    def remove_arg(self, arg):
-        for i in range(len(self.arguments)):
-            a = self.arguments[i]
-            if a==arg:
-                self.arguments.pop(i)
-                return
-
     def replace2(self, e1, e2):
         if e1==self:
             return e2
@@ -1488,36 +1435,15 @@ class Conjunction(Exp):
         print("fail on ", arg.to_string(True))
         return False
 
-    def has_arg_p(self, arg):
-        for a in self.arguments:
-            if a.equals_placeholder(arg):
-                return True
-        print("fail_p on ", arg.to_string(True), "  ", self.to_string(True))
-        return False
-
-    def equals_placeholder(self, other):
-        if other.__class__!=Conjunction:
-            return False
-        if len(self.arguments)!=len(other.arguments):
-            print("conj fail1 ", len(self.arguments), len(other.arguments), " on ", self.to_string(True))
-            return False
-        for a in self.arguments:
-            if not other.has_arg_p(a):
-                print("conj fail on ", self.to_string(True))
-                print("comparing to ", other.to_string(True))
-                return False
-        return True
-
     def equals(self, other):
-        if other.__class__!=Conjunction:
+        if not isinstance(other,Conjunction):
             return False
         if len(self.arguments)!=len(other.arguments):
-            print("conj fail1 ", len(self.arguments), len(other.arguments), " on ", self.to_string(True))
+            print("conj fail1 ", len(self.arguments), len(other.arguments), "on", self.to_string(True))
             return False
         for a in self.arguments:
             if not other.has_arg(a):
-                print("conj fail on ", self.to_string(True))
-                print("comparing to ", other.to_string(True))
+                print("conj fail on", self.to_string(True), "comparing to", other.to_string(True))
                 return False
         return True
 
@@ -1703,20 +1629,8 @@ class Predicate(Exp):
         if not (last_arg.__class__==EventMarker or (last_arg.__class__==Variable and last_arg.is_event)): return None
         return self.arguments[-1]
 
-    # this may need a little thinking
     def type(self):
         return self.return_type
-        # return SemType.t_type()
-
-    def equals_placeholder(self, other):
-        if other.__class__ != Predicate or \
-        (other.name!=self.name and not (("placeholder_p" in self.name) or ("placeholder_p" in other.name))) or \
-                    len(other.arguments)!=len(self.arguments):
-            return False
-        for i in range(len(self.arguments)):
-            if not self.arguments[i].equals_placeholder(other.arguments[i]):
-                return False
-        return True
 
     def equals(self, other):
         if other.__class__ != Predicate or \
@@ -1782,31 +1696,21 @@ class QMarker(Exp):
         else:
             q = QMarker(self.arguments[0].make_shell(exp_dict))
         exp_dict[self] = q
-        # q.set_event(self.arguments[1].make_shell())
         return q
 
     def copy(self):
-        #print "copying ",self.to_string(True)
         q = QMarker(self.arguments[0].copy())
         q.linked_var = self.linked_var
-        # q.set_event(self.arguments[1].copy())
         return q
 
     def copy_no_var(self):
         q = QMarker(self.arguments[0].copy_no_var())
         q.linked_var = self.linked_var
-        # q.set_event(self.arguments[1].copy_no_var())
         return q
 
     def equals(self, other):
         if other.__class__ != QMarker or \
         not other.arguments[0].equals(self.arguments[0]):
-            return False
-        return True
-
-    def equals_placeholder(self, other):
-        if other.__class__ != QMarker or \
-        not other.arguments[0].equals_placeholder(self.arguments[0]):
             return False
         return True
 

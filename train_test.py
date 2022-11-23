@@ -73,7 +73,6 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
             print(sentence_count, file=train_out)
             for top_cat in top_cat_list:
                 print("Cat : " + top_cat.to_string(), file=train_out)
-                print("Cat : " + top_cat.to_string(), file=train_out)
             cat_store = {}
             if len(words) > 8 or (skip_q and "?" in sentence):
                 sentence = []
@@ -84,6 +83,7 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
                 chart = build_chart(top_cat_list, words, rule_set, lexicon, cat_store, sem_store, is_one_word)
             except (AttributeError, IndexError):
                 print("Sent : " + sentence)
+                continue
             i_o_oneChart(chart, sem_store, lexicon, rule_set, True, 0.0, sentence_count)
             sentence_count += 1
 
