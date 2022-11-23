@@ -84,7 +84,6 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
                 chart = build_chart(top_cat_list, words, rule_set, lexicon, cat_store, sem_store, is_one_word)
             except (AttributeError, IndexError):
                 print("Sent : " + sentence)
-                continue
             i_o_oneChart(chart, sem_store, lexicon, rule_set, True, 0.0, sentence_count)
             sentence_count += 1
 

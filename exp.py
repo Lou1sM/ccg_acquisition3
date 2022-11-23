@@ -30,6 +30,8 @@ class Exp:
         self.inout = None
         self.double_quant = False
         self.string = ""
+        self.str_shell_prefix = 'placeholder_p'
+        self.str_ubl_prefix = self.name.replace(':','#')
 
     def set_string(self):
         self.string = self.to_string(True)
@@ -135,10 +137,6 @@ class Exp:
             var = Variable(e)
             self.arguments[self.arguments.index(e)] = var
             return var
-        return None
-
-    def bind(self, e):
-        pass
 
     def copy_no_var(self):
         pass
@@ -159,44 +157,27 @@ class Exp:
     def print_out(self, top, var_num):
         print(self.to_string(top))
 
-    def to_string(self, top):
-        s=self.name
-        if len(self.arguments)>0: s=s+"("
+    def _to_string(self, top, extra_format):
+        s = ''
         for a in self.arguments:
-            if isinstance(a, Exp): s=s+a.to_string(False)
+            if isinstance(a, Exp): s=s+a.to_string(False,extra_format)
             if self.arguments.index(a)<self.num_args-1: s=s+","
-        if len(self.arguments)>0: s=s+")"
+        if len(self.arguments)>0: s='('+s+')'
         if top:
             Exp.var_num = 0
             Exp.event_num = 0
             Exp.empty_num = 0
         return s
 
-    def to_string_shell(self, top):
-        s="placeholder_p"
-        if len(self.arguments)>0: s=s+"("
-        for a in self.arguments:
-            if isinstance(a, Exp): s=s+a.to_string_shell(False)
-            if self.arguments.index(a)<self.num_args-1: s=s+","
-        if len(self.arguments)>0: s=s+")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        return s
+    def to_string(self, top, extra_format=None):
+        if extra_format is None:
+            prefix = self.name
+        elif extra_format == 'shell':
+            prefix = self.str_shell_prefix
+        elif extra_format == 'ubl':
+            prefix = self.name.replace(':','#')
 
-    def to_string_uBL(self, top):
-        s=self.name.replace(":", "#")
-        if len(self.arguments)>0: s="("+s+str(len(self.arguments))+":t "
-        for a in self.arguments:
-            if isinstance(a, Exp): s=s+a.to_string_uBL(False)
-            if self.arguments.index(a)<self.num_args-1: s=s+" "
-        if len(self.arguments)>0: s=s+")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        return s
+        return prefix + self._to_string(top, extra_format)
 
     def add_arg(self, arg):
         self.arguments.append(arg)
@@ -564,10 +545,8 @@ class Exp:
                     nullpair = self.get_null_pair()
                     rep_pairs.append(nullpair)
                 continue
-            if e.__class__==Variable:# and e.arguments==[]:
+            if isinstance(e,Variable) or isinstance(e,EventMarker):
                 continue
-            if e.__class__==EventMarker: continue
-
             rep_pairs.extend(self.split_subexp(e))
         return rep_pairs
 
@@ -621,19 +600,7 @@ class EmptyExp(Exp):
     def all_extractable_sub_exps(self):
         return []
 
-    def to_string(self, top):
-        if self.name=="?":
-            self.name="?"+str(Exp.empty_num)
-            Exp.empty_num+=1
-        s=self.name
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-            # self.clear_names()
-        return s
-
-    def to_string_uBL(self, top):
+    def to_string(self, top, extra_format=None):
         if self.name=="?":
             self.name="?"+str(Exp.empty_num)
             Exp.empty_num+=1
@@ -839,18 +806,18 @@ class Variable(Exp):
     def add_at_front_arg(self, arg):
         self.arguments.insert(0, arg)
 
-    def to_string(self, top):
+    def to_string(self, top, extra_format=None):
         s=""
         if not self.name:
-            self.name="U_nBOUND"#+str(id(self)) #Exp.varNum)
-        s=self.name #+str(id(self))#+"_{"+self.type().to_string()+"}"#"_"+str(id(self))+"_{"+self.type().to_string()+"}"
+            self.name="U_nBOUND"
+        s=self.name
         if self.arguments!=[]: s = s+"("
         for a in self.arguments:
             if a is None:
                 print("none arg")
                 s=s+"NONE"+str(a)
             else:
-                s=s+a.to_string(False)
+                s=s+a.to_string(False, extra_format)
             if self.arguments.index(a)<(len(self.arguments)-1):
                 s=s+","
         if self.arguments!=[]: s = s+")"
@@ -859,53 +826,6 @@ class Variable(Exp):
             Exp.var_num = 0
             Exp.event_num = 0
             Exp.empty_num = 0
-            # self.clear_names()
-        return s
-
-    def to_string_shell(self, top):
-        s=""
-        if not self.name:
-            self.name="U_nBOUND"#+str(id(self)) #Exp.varNum)
-        s=self.name#+"_{"+self.type().to_string()+"}"#"_"+str(id(self))+"_{"+self.type().to_string()+"}"
-        if self.arguments!=[]: s = s+"("
-        for a in self.arguments:
-            if a is None:
-                print("none arg")
-                s=s+"NONE"+str(a)
-            else:
-                s=s+a.to_string_shell(False)
-            if self.arguments.index(a)<(len(self.arguments)-1):
-                s=s+","
-        if self.arguments!=[]: s = s+")"
-
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-            # self.clear_names()
-        return s
-
-    def to_string_uBL(self, top):
-        s=""
-        if not self.name:
-            self.name="U_nBOUND"#+str(id(self)) #Exp.varNum)
-        s=self.name#+"_{"+self.type().to_string()+"}"#"_"+str(id(self))+"_{"+self.type().to_string()+"}"
-        if self.arguments!=[]: s = "("+s
-        for a in self.arguments:
-            if a is None:
-                print("none arg")
-                s=s+"NONE"+str(a)
-            else:
-                s=s+a.to_string_uBL(False)
-            if self.arguments.index(a)<(len(self.arguments)-1):
-                s=s+" "
-        if self.arguments!=[]: s = s+")"
-
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-            self.clear_names()
         return s
 
     def clear_names(self):
@@ -1123,9 +1043,7 @@ class LambdaExp(Exp):
         self.funct.vars_above(other, vars)
 
     def null_sem(self):
-        if self.funct==self.var and len(self.funct.arguments)==0:
-            return True
-        return False
+        return self.funct==self.var and len(self.funct.arguments)==0
 
     def type(self):
         arg_type = self.var.type()
@@ -1200,43 +1118,14 @@ class LambdaExp(Exp):
     def set_arg(self, position, pred):
         self.funct.set_arg(position, pred)
 
-    def to_string(self, top):
-        s=""
-        self.var.name = "$"+str(Exp.var_num)#+"_"+str(id(self.var))
-        #print "name of ",self.var," is ",self.var.name
+    def to_string(self, top, extra_format=None):
+        self.var.name = "$"+str(Exp.var_num)
         Exp.var_num+=1
-        s=s+"lambda "+self.var.name+"_{"+self.var.type().to_string()+"}."+self.funct.to_string(False)#+"_"+str(id(self.var))+"_{"+self.var.type().to_string()+"}"+\
+        s="lambda "+self.var.name+"_{"+self.var.type().to_string()+"}."+self.funct.to_string(False,extra_format)
         if top:
             Exp.var_num = 0
             Exp.event_num = 0
             Exp.empty_num = 0
-            # self.clear_names()
-        return s
-
-    def to_string_shell(self, top):
-        s=""
-        self.var.name = "$"+str(Exp.var_num)#+"_"+str(id(self.var))
-        #print "name of ",self.var," is ",self.var.name
-        Exp.var_num+=1
-        s=s+"lambda "+self.var.name+"_{"+self.var.type().to_string()+"}."+self.funct.to_string_shell(False)#+"_"+str(id(self.var))+"_{"+self.var.type().to_string()+"}"+\
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-            # self.clear_names()
-        return s
-
-    def to_string_uBL(self, top):
-        s=""
-        self.var.name = "$"+str(Exp.var_num)#+"_"+str(id(self.var))
-        #print "name of ",self.var," is ",self.var.name
-        Exp.var_num+=1
-        s=s+"(lambda "+self.var.name+" "+self.var.type().to_string_uBL()+" "+self.funct.to_string_uBL(False)+"))"#+"_"+str(id(self.var))+"_{"+self.var.type().to_string()+"}"+\
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-            # self.clear_names()
         return s
 
     def clear_names(self):
@@ -1277,7 +1166,6 @@ class Neg(Exp):
             self.arguments=[arg, EventMarker()]
         else:
             self.arguments=[arg]
-            # self.noun_mod = arg.is_noun_mod()
         self.arg_types=arg.type()
         self.linked_var = None
         arg.add_parent(self)
@@ -1288,8 +1176,8 @@ class Neg(Exp):
         self.pos_type=None
         self.inout=None
         self.double_quant = False
-        #self
-        #self.event = None
+        self.str_shell_prefix = 'not'
+        self.str_ubl_prefix = self.name.replace(':','#')
 
     def semprior(self):
         return -1.0 + self.arguments[0].semprior()
@@ -1305,7 +1193,6 @@ class Neg(Exp):
         return n
 
     def copy(self):
-        #print "copying ",self.to_string(True)
         n = Neg(self.arguments[0].copy(), self.num_args)
         if self.num_args == 2:
             n.set_event(self.arguments[1].copy())
@@ -1318,27 +1205,6 @@ class Neg(Exp):
             n.set_event(self.arguments[1].copy_no_var())
         n.linked_var = self.linked_var
         return n
-
-    def to_string_shell(self, top):
-        s="not"
-        #if self.check_if_verb():
-            ##self.get_event().set_name("e"+str(Exp.event_num))
-            #Exp.event_num+=1
-
-        #print "tring for ",self.name
-        if len(self.arguments)>0: s=s+"("
-        for a in self.arguments:
-            if isinstance(a, Exp): s=s+str(a.to_string_shell(False))
-            if self.arguments.index(a)<self.num_args-1: s=s+","
-        if len(self.arguments)>0: s=s+")"
-        #if self.event:
-            #s=s+":"+self.event.to_string(False)
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        #print "returning "+s
-        return s
 
     def set_event(self, event):
         self.set_arg(1, event)
@@ -1399,12 +1265,7 @@ class EventMarker(Exp):
     def check_if_bound(self):
         return self.binder is not None
 
-    def to_string(self, top):
-        if not self.name:
-            self.name="UNBOUND"
-        return self.name
-
-    def to_string_uBL(self, top):
+    def to_string(self, top, extra_format=None):
         if not self.name:
             self.name="UNBOUND"
         return self.name
@@ -1523,12 +1384,13 @@ class Constant(Exp):
     def add_arg(self, arg):
         print("error, trying to add arg to const")
 
-    def to_string_uBL(self, top):
-        n = self.name.replace(":", "#")
-        return n+":e"
-
-    def to_string_shell(self, top):
-        return "placeholder_c"
+    def to_string(self, top, extra_format=None):
+        if extra_format is None:
+            return self.name + self._to_string(top, extra_format)
+        elif extra_format == 'ubl':
+            return self.str_shell_prefix + 'e'
+        elif extra_format == 'shell':
+            return "placeholder_c"
 
 class Conjunction(Exp):
     def __init__(self):
@@ -1666,43 +1528,13 @@ class Conjunction(Exp):
             subexps.extend(a.all_extractable_sub_exps())
         return subexps
 
-    def to_string(self, top):
-        s="and("
-        for i in range(len(self.arguments)):
-            s=s+self.arguments[i].to_string(False)
-            if i<len(self.arguments)-1: s=s+","
-        s=s+")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        return s
+    def to_string(self, top, extra_format=None):
+        if extra_format is None or extra_format == 'shell':
+            prefix = 'and('
+        elif extra_format == 'ubl':
+            prefix = '(and'
 
-    def to_string_shell(self, top):
-        s="and("
-        for i in range(len(self.arguments)):
-            s=s+self.arguments[i].to_string_shell(False)
-            if i<len(self.arguments)-1: s=s+","
-        s=s+")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        return s
-
-    def to_string_uBL(self, top):
-        s="(and "
-        for i in range(len(self.arguments)):
-            s = s + self.arguments[i].to_string_uBL(False)
-            if i<len(self.arguments)-1:
-                s = s + " "
-        s = s + ")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-            # self.clear_names()
-        return s
+        return prefix + self._to_string(top, extra_format)
 
 # Predicates take a number of arguments (not fixed) and
 # return a truth value
@@ -1719,6 +1551,8 @@ class Predicate(Exp):
         self.arg_types = arg_types
         self.arguments = []
         self.parents = []
+        self.str_shell_prefix = 'placeholder_p'
+        self.str_ubl_prefix = self.name.replace(':','#')
 
         for a_t in arg_types:
             self.arguments.append(EmptyExp())
@@ -1739,6 +1573,7 @@ class Predicate(Exp):
         self.inout = None
         self.double_quant = False
         self.string = ""
+        self.str_ubl_prefix = self.name
 
     def set_arg_helper(self, position, argument):
         self.arguments.pop(position)
@@ -1898,45 +1733,6 @@ class Predicate(Exp):
                 return False
         return True
 
-    def to_string(self, top):
-        s=self.name
-        if len(self.arguments)>0: s=s+"("
-        for a in self.arguments:
-            if isinstance(a, Exp): s=s+str(a.to_string(False))
-            if self.arguments.index(a)<self.num_args-1: s=s+","
-        if len(self.arguments)>0: s=s+")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        return s
-
-    def to_string_shell(self, top):
-        s="placeholder_p"
-        if len(self.arguments)>0: s=s+"("
-        for a in self.arguments:
-            if isinstance(a, Exp): s=s+str(a.to_string_shell(False))
-            if self.arguments.index(a)<self.num_args-1: s=s+","
-        if len(self.arguments)>0: s=s+")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        return s
-
-    def to_string_uBL(self, top):
-        s=self.name
-        if len(self.arguments)>0: s="("+s+str(len(self.arguments))+":t "
-        for a in self.arguments:
-            if isinstance(a, Exp): s=s+str(a.to_string_uBL(False))
-            if self.arguments.index(a)<self.num_args-1: s=s+" "
-        if len(self.arguments)>0: s=s+")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        return s
-
 class QMarker(Exp):
     def __init__(self, rep):
         #print "making Q for ",rep.to_string(True)
@@ -1964,24 +1760,8 @@ class QMarker(Exp):
     def is_q(self):
         return True
 
-    def to_string(self, top):
-        s = "Q("+self.arguments[0].to_string_uBL(False)+")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        return s
-
-    def to_string_shell(self, top):
-        s = "Q("+self.arguments[0].to_string_uBL(False)+")"
-        if top:
-            Exp.var_num = 0
-            Exp.event_num = 0
-            Exp.empty_num = 0
-        return s
-
-    def to_string_uBL(self, top):
-        s = "(Q:t "+self.arguments[0].to_string_uBL(False)+")"
+    def to_string(self, top, extra_format=None):
+        s = "Q("+self.arguments[0].to_string(False,extra_format='ubl')+")"
         if top:
             Exp.var_num = 0
             Exp.event_num = 0

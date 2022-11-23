@@ -37,8 +37,8 @@ class SemStore:
 
     def add(self, sem):
         self.store[sem.to_string(True)] = sem
-        if sem.to_string_shell(True) not in self.store:
-            self.store[sem.to_string_shell(True)] = sem.make_shell({})
+        if sem.to_string(True,extra_format='shell') not in self.store:
+            self.store[sem.to_string(True,extra_format='shell')] = sem.make_shell({})
 
     def get(self, sem_key):
         if sem_key in self.store:

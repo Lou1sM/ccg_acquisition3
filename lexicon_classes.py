@@ -705,7 +705,7 @@ class Lexicon:
             self.catcounts[syn_key] = 0.0
 
         if sem is not None:
-            shell_sem_key = sem.to_string_shell(True)
+            shell_sem_key = sem.to_string(True,extra_format='shell')
         else:
             shell_sem_key = sem_key
 

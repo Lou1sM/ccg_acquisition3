@@ -11,8 +11,6 @@ def i_o(sentence_charts, sem_store, lexicon, rule_set, old_log_prob):
     log_prob = 0
     # Get inside probs
     for c in sentence_charts:
-        #print 'sc is ', sentence_charts[c]
-        #print '\n\n'
         pass
 # really need to work out what this learning rate means....
 # delta alpha = (1/gamma) * (eta(tau) * T * E(param) + gamma0*alpha0 - gamma*alpha(tau-1))
