@@ -72,28 +72,6 @@ def i_o_oneChart(chart,sem_store,lexicon,rule_set,doupdates,old_norm,\
 
     top_down = list(range(1, len(chart)+1))
     top_down.reverse()
-    #for level in top_down:
-        #for item in chart[level]:
-            #entry = chart[level][item]
-            #for pair in entry.children:
-                #foundparentl = False
-                #foundparentr = False
-
-                #entryL = chart[pair[0][3]-pair[0][2]][pair[0]]
-                #entryR = chart[pair[1][3]-pair[1][2]][pair[1]]
-                #for parent in entryL.parents:
-                    #if parent[0]==entry and parent[2]=="l": foundparentl = True
-                #for parent in entryR.parents:
-                    #if parent[0]==entry and parent[2]=="r": foundparentr = True
-                #if not (foundparentl and foundparentr):
-                    #print "l ",foundparentl
-                    #print "r ",foundparentr
-                    #print entry.to_string()
-                    #print entryL.to_string()
-                    #print entryR.to_string()
-
-                    #error()
-
 
     for level in top_down:
         #print "level top down is ",level

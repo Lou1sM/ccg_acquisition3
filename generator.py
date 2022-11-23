@@ -3,7 +3,6 @@ from build_inside_outside_chart import build_chart
 from inside_outside_calc import i_o_oneChart
 from sample_most_probable_parse import sample
 from math import exp
-from errorFunct import error
 
 def assignWords(chart, lexicon):
     for level in chart:
@@ -25,7 +24,6 @@ def generateSent(lexicon, rule_set, top_cat, cat_store, sem_store, is_exclude_mw
     assignWords(chart, lexicon)
     i_o_oneChart(chart, sem_store, lexicon, rule_set, False, 0.0, lexicon.sentence_count, True)
     topparses = []
-    if len(chart[len(chart)])!=1: error()
     for entry in chart[len(chart)]:
         top = chart[len(chart)][entry]
         topparses.append((top.inside_score, top))

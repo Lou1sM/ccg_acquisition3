@@ -11,7 +11,6 @@ from tools import log_sum
 from tools import inf
 import scipy.special
 from collections import defaultdict
-from errorFunct import error
 
 class lambda_op:
     """Used with sem_rep below."""
@@ -216,7 +215,6 @@ class sem_rep:
                 if not len(self.lambdas)==2:
                     print('not 2. this is mental')
                     print(len(self.lambdas))
-                    error("not 2. this is mental")
                 self.lambdas.reverse()
 
             if dep in self.dependents:
@@ -247,8 +245,6 @@ class sem_rep:
                 if l.dep == dep:
                     l.add_separator(separator)
                     double_dep = True
-            if not double_dep:
-                error("")
             return True
 
     def combine(self, target):
@@ -330,8 +326,7 @@ class syn_cat:
             elif t[1] == 'back':
                 key = key+'\\'+t[0]
             else:
-                'not fwd or back - WHAAAT?'
-                error('not fwd or back - WHAAAT?')
+                print('not fwd or back - WHAAAT?')
         return key
 
 # Function to build rep from sem_comps #
@@ -377,7 +372,6 @@ class lexical_item:
         if self.alpha<-1E-5:
             print("negative alpha for ", self.to_string())
             print("alpha is ", self.alpha)
-            error("alpha is negative")
 
     def update_bleurgh_alpha(self, alpha):
         self.bleurgh_alpha = self.bleurgh_alpha+alpha
@@ -812,7 +806,7 @@ class Lexicon:
                     func(scale*sum_alpha + scale*self.word_alpha_o)
                 return log_prior
         else:
-            error("sem distribution doesn't have the required key")
+            print("sem distribution doesn't have the required key")
 
     def get_log_word_prob(self, word, syn_key, sem_key, sentence_count):
         """

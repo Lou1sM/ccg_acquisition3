@@ -1,6 +1,3 @@
-from errorFunct import error
-
-
 class MontagueType():
     def __init__(self,string,is_e,is_t,is_atomic):
         self.string_rep = string
@@ -105,7 +102,6 @@ class SemType:
         elif typestring=="r": return SemType.event
         elif typestring[0]!="<":
             print("type error ", typestring)
-            error('tye error')
         typestring = typestring[1:-1]
         leftbrack = 0
         i = 0

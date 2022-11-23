@@ -7,7 +7,6 @@ from math import log
 from scipy.special import psi
 from tools import inf
 from tools import log_sum
-from errorFunct import error
 
 hacked_prior = True  # The hack introduced by Omri Abend, 25/5/15 to make all 6 transitive
                      # verb categories possible
@@ -155,7 +154,6 @@ class Rule:
         if not at+10E-5>self.alpha_tot>at-10E-5:
             print("at = ", at)
             print("alpha tot = ", self.alpha_tot)
-            error("alpha_tot2 error")
 
     def return_temp_prob(self, target):
         # really need to work out how this actually deals
@@ -261,7 +259,7 @@ class Rules:
 
     def store_log_update(self, target, log_prob):
         if log_prob > 10E-4:
-            error("logprob is too large")
+            print("logprob is too large")
         if log_prob > 0.0: log_prob = 0.0
         prob = exp(log_prob)
         if target not in self.updates: self.updates[target]=prob
