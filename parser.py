@@ -187,7 +187,7 @@ def removemin(chart1, start, end, minscores):
     del chart1[start][end][minc]
     minscores[start][end]=secondmin
 
-def get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count):
+def get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count, test_out_parses):
     guesslex = True
     beamsize = 100//(len(sentence)+1)
     verbose = False
@@ -222,15 +222,15 @@ def get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count):
                 end = start+w.count(" ")+1
                 if verbose: print("start is ", start, " end is ", end, " for ", w)
                 if end-start>1 and lexicon.mwe is False: continue
-                poss_lex = []
                 poss_lex = lexicon.get_lex_items(w, guesslex, sem_store, beamsize)
+                print(*[pi.to_string() for pi in poss_lex], file=test_out_parses, sep='\n', end='')
                 if verbose: print(w, ' has ', len(poss_lex), ' realisations')
                 if len(poss_lex) > 0:
                     for pl in poss_lex:
                         if verbose: print("pl is ", pl)
                         l = pl
                         if verbose: print(l.to_string())
-                        syncat = SynCat.readCat(l.syn)
+                        syncat = SynCat.read_cat(l.syn)
                         if verbose: print("syn is ", l.syn, " syncat is ", syncat.to_string())
                         sem = sem_store.get(l.sem_key) # exp.make_exp_with_args(l.sem_key,{})[0]
                         if verbose: print("sem is ", sem.to_string(True))
@@ -263,11 +263,11 @@ def get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count):
                         elif verbose: print("not adding ", ce.to_string())
                 start += w.count(" ")+1
     returnchart = cky(chart1, sentence, minscores, rule_set, beamsize)
-    return returnchart
+    return returnchart, poss_lex
 
-def parse(sentence,sem_store,rule_set,lexicon,sentence_count,test_out_parses=None,target_top_cat=None):
+def parse(sentence,sem_store,rule_set,lexicon,sentence_count,test_out_parses,target_top_cat=None):
     verbose = False
-    returnchart = get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count)
+    returnchart, poss_lex = get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count, test_out_parses)
     if returnchart is None:
         return (None, None, None)
     if verbose:
@@ -299,11 +299,10 @@ def parse(sentence,sem_store,rule_set,lexicon,sentence_count,test_out_parses=Non
             print("parse : ", t[0], sample(t[1], returnchart, rule_set), " maxscore = ", t[1].max_score)
         print(f'\ntop parse: {top_parse}\n{topnode.inside_score}\n')
 
-    if test_out_parses:
-        print("\n\n", file=test_out_parses)
-        for t in reversed(topparses):
-            print("parse : ", t[0], sample(t[1], returnchart, rule_set),
-                " maxscore = ", t[1].max_score, file=test_out_parses)
-        print(f'\ntop parse: {top_parse}\n{topnode.inside_score}\n', file=test_out_parses)
+    print("\n\n", file=test_out_parses)
+    for t in reversed(topparses):
+        print("parse : ", t[0], sample(t[1], returnchart, rule_set),
+            " maxscore = ", t[1].max_score, file=test_out_parses)
+    print(f'\ntop parse: {top_parse}\n{topnode.inside_score}\n', file=test_out_parses)
 
     return (topnode.ccgCat.sem, top_parse, topnode.ccgCat)

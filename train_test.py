@@ -9,7 +9,7 @@ import exp
 
 
 def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
-                cats_to_check, train_out, test_out, sentence_count=0,
+                cats_to_check, train_out, sentence_count=0,
                 truncate_complex_exps=True, is_devel=False):
 
     datasize = 20000
@@ -167,12 +167,13 @@ def test(test_in, test_out, errors_out, sem_store, rule_set, current_lexicon, se
             top_parse = None
             try:
                 (retsem, top_parse, topcat) = parse(sentence, sem_store, rule_set, current_lexicon, sentence_count, test_out)
-            except (AttributeError, IndexError):
-                pass
+            except (AttributeError, IndexError) as e:
+                print(e)
+                #pass
             if retsem and sem and retsem.equals(sem):
                 print(f"CORRECT\n{retsem.to_string(True)}\n{topcat.to_string()}", file=test_out)
             elif not retsem:
-                print("NO PARSE", file=test_out)
+                print("\nNO PARSE\n\n", file=test_out)
                 continue
             else:
                 print(f"WRONG\n{retsem.to_string(True)}\n{topcat.to_string()}", file=test_out)

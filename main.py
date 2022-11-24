@@ -46,16 +46,13 @@ def main(args):
         with open(f'data/{args.corpus}.{i}') as f:
             inputpairs = f.readlines()
         train_out_fpath = os.path.join(args.outdir, f'train_out{i}.txt')
-        test_out_fpath = os.path.join(args.outdir, f'test_out{i}.txt')
 
-        with (  open(train_out_fpath, 'w') as train_out,
-                open(test_out_fpath, 'w') as test_out):
+        with open(train_out_fpath, 'w') as train_out:
             lexicon, rule_set, sem_store, chart = train_rules(lexicon,rule_set,sem_store,
                                     is_one_word=not args.include_mwe, inputpairs=inputpairs,
                                     skip_q=args.skip_q,
                                     cats_to_check=cats_to_check,sentence_count=sentence_count,
                                     train_out=train_out,
-                                    test_out=test_out,
                                     is_devel=args.devel)
 
         lexicon.cur_cats = []
@@ -95,15 +92,14 @@ def main(args):
             with open(pickle_file, "wb") as f:
                 pickle.dump(dict_to_pickle, f)
 
-    # end for
-    if args.dotest:
-        test_in_fpath = f'data/{args.corpus}.{args.test_session}'
-        test_out_fpath = os.path.join(args.outdir, f'test_out.txt')
-        errors_out_fpath = os.path.join(args.outdir, f'errors_out.txt')
-        with (  open(test_in_fpath, 'r') as test_in,
-                open(test_out_fpath, 'w') as test_out,
-                open(errors_out_fpath, 'w') as errors_out):
-            test(test_in, test_out, errors_out, sem_store, rule_set, lexicon, sentence_count)
+        if args.dotest:
+            test_in_fpath = f'data/{args.corpus}.{args.test_session}'
+            test_out_fpath = os.path.join(args.outdir, f'test_out.txt')
+            errors_out_fpath = os.path.join(args.outdir, f'errors_out.txt')
+            with (  open(test_in_fpath, 'r') as test_in,
+                    open(test_out_fpath, 'w') as test_out,
+                    open(errors_out_fpath, 'w') as errors_out):
+                test(test_in, test_out, errors_out, sem_store, rule_set, lexicon, sentence_count)
 
     print("at end, lexicon size is ", len(lexicon.lex))
 
@@ -142,6 +138,8 @@ if __name__ == '__main__':
     args.add_argument("--include_mwe", action="store_true")
     args = args.parse_args()
 
+    if not os.path.isdir(args.expname):
+        os.makedirs(args.expname)
     if args.devel:
         args.test_session = 2
     main(args)
