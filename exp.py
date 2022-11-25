@@ -53,11 +53,11 @@ class Exp:
         return False
 
     def check_if_wh(self):
-        is_lambda = self.__class__ == LambdaExp
+        is_lambda = isinstance(self,LambdaExp)
         if is_lambda:
             has_e_var = self.get_var().type() == SemType.e
             funct = self.get_funct()
-            funct_is_lambda = funct.__class__ == LambdaExp
+            funct_is_lambda = isinstance(funct,LambdaExp)
             if is_lambda and has_e_var and funct_is_lambda:
                 return True
         else:
@@ -108,7 +108,6 @@ class Exp:
     def num_args(self):
         return len(self.arguments)
 
-    # this version returns an expression
     def replace2(self, e1, e2):
         if self == e1:
             return e2
@@ -120,29 +119,11 @@ class Exp:
             #i+=1
         return self
 
-    # this function needs work!!!!            #
-    # have ALL the code to do this elsewhere  #
-    #                                         #
-    # will need to:                           #
-    #     - be able to recognise and abstract #
-    #    over complex logical forms           #
-    #    - abstract over one, or many of the  #
-    #    same instance of an equivalent       #
-    #    logical form.                        #
     def make_variable(self, e):
         if e in self.arguments:
             var = Variable(e)
             self.arguments[self.arguments.index(e)] = var
             return var
-
-    def copy_no_var(self):
-        pass
-        # need to change for binders
-        #return self.copy()
-
-    def copy(self):
-        print("copying ", self.to_string(True))
-        pass
 
     def is_empty(self):
         return False
@@ -150,7 +131,6 @@ class Exp:
     def get_name(self):
         return self.name
 
-    # var num will not work with different branches #
     def print_out(self, top, var_num):
         print(self.to_string(top))
 
@@ -193,7 +173,6 @@ class Exp:
         if self.pos_type: return self.pos_type
         return None
 
-    #IDA: used in other modules
     def top_node(self):
         if len(self.parents)==0: return self
         top = None
@@ -204,10 +183,6 @@ class Exp:
                 return None
             top = p.top_node()
         return top
-
-    def clear_names(self):
-        for a in self.arguments:
-            if a: a.clear_names()
 
     def clear_parents(self):
         self.parents = []
@@ -255,7 +230,7 @@ class Exp:
         vars = []
         sub_exps = self.all_sub_exps()
         for e in sub_exps:
-            if e.__class__ == Variable and e.binder:
+            if isinstance(e,Variable) and e.binder:
                 if e.binder in sub_exps:
                     bound_vars.append(e)
         self.get_all_vars(vars)
@@ -277,19 +252,12 @@ class Exp:
                 both_vars.append(v)
         return (below_vars, above_vars, both_vars)
 
-    # really want a function that takes an
-    # expression and two lists of nodes. One
-    # to remain with the expression and one
-    # to be pulled out. Will return a new
-    # (with no root level lambda terms) and
-    # a Variable (with root level lambda terms).
-
-    # return a pair copy for each way to pull the thing
-    # out. can be > 1 because of composition.
-    # each pair needs to say how many lambda terms go
-    # with composition.
-    # just have a different definition in LambdaExp???
     def pullout(self, e, vars, num_new_lam):
+        """Return a pair copy for each way to pull the thing
+         out. can be > 1 because of composition. Each pair needs
+         to say how many lambda terms go with composition.
+         just have a different definition in LambdaExp???
+         """
         vargset = []
         for v in vars:
             vset = []
@@ -302,9 +270,9 @@ class Exp:
         orige = e.copy()
         pairs = []
         (belowvars, abovevars, bothvars) = self.partition_vars(e)
-        ec = e.copy_no_var()
+        ec = e.copy(no_var=True)
 
-        if self.__class__==LambdaExp and len(vars)>0:
+        if isinstance(self,LambdaExp) and len(vars)>0:
             compdone = False
         else:
             compdone = True
@@ -320,7 +288,7 @@ class Exp:
                 p = compp.composition_split(vars, compvars, ec, e)
                 ptuple = (p[0], p[1], num_new_lam, num_by_comp)
                 pairs.append(ptuple)
-                if compp.funct.__class__==LambdaExp and\
+                if isinstance(compp.funct,LambdaExp) and\
                         len(vars)>varindex+1:
                     varindex-=1
                     compp = compp.funct
@@ -328,10 +296,10 @@ class Exp:
             else: compdone = True
 
         # all sorts of composition shit in here
-        ec = e.copy_no_var()
+        ec = e.copy(no_var=True)
         newvariable = Variable(ec)
         self.replace2(e, newvariable)
-        p = self.copy_no_var()
+        p = self.copy(no_var=True)
 
         for v in vars:
             nv = Variable(v)
@@ -376,7 +344,7 @@ class Exp:
     def has_var_order(self, varorder):
         varnum = 0
         for a in self.arguments:
-            if a.__class__ == Variable:
+            if isinstance(a,Variable):
                 if a.name!=varorder[varnum]:
                     return False
                 varnum+=1
@@ -388,13 +356,12 @@ class Exp:
         """Omri added 25/7"""
         varnum = 0
         for a in self.arguments:
-            if a.__class__ == Variable:
+            if isinstance(a,Variable):
                 L[varnum] = a.name
                 varnum+=1
 
     def get_null_pair(self):
-        # this should ALWAYS be by composition
-        # parent, child
+        """this should ALWAYS be by composition; parent, child"""
         child = self.copy()
         parent = LambdaExp()
 
@@ -408,12 +375,12 @@ class Exp:
         # fixeddircats will actually have the Variables
         fixeddircats = []
         f = self
-        done = not (f.__class__==LambdaExp)
+        done = not isinstance(f,LambdaExp)
         while not done:
-            if not f.__class__==LambdaExp:
+            if not isinstance(f,LambdaExp):
                 print("not a lambda expression, is  ", f.to_string(True))
             fixeddircats.append(f.var)
-            if not f.funct.__class__==LambdaExp: done = True
+            if not isinstance(f.funct,LambdaExp): done = True
             else: f = f.funct
 
         return (parent, child, 0, 0, None)
@@ -558,6 +525,9 @@ class EmptyExp(Exp):
         self.inout = None
         self.double_quant = False
 
+    def copy(self,no_var=False):
+        return EmptyExp()
+
     def make_shell(self, exp_dict):
         if self in exp_dict:
             e = exp_dict[self]
@@ -565,12 +535,6 @@ class EmptyExp(Exp):
             e = EmptyExp
         exp_dict[self] = e
         return e
-
-    def copy(self):
-        return EmptyExp()
-
-    def copy_no_var(self):
-        return EmptyExp()
 
     def is_empty(self):
         print("this is empty")
@@ -591,11 +555,7 @@ class EmptyExp(Exp):
             Exp.var_num = 0
             Exp.event_num = 0
             Exp.empty_num = 0
-            # self.clear_names()
         return s
-
-    def clear_names(self):
-        self.name="?"
 
     def equals(self, other):
         return isinstance(other,EmptyExp)
@@ -639,14 +599,43 @@ class Variable(Exp):
         else:
             self.num_args = 0
             self.arg_types = []
-            self.arguments = []
             # assume that we only introduce entity
             # vars from the corpus
-            #self.return_type = "e"
             self.return_type = SemType.e_type()
             self.t = SemType.e_type()
             self.is_event = False
         self.is_null = False
+
+    def copy(self,no_var=False):
+        if no_var:
+            return self
+        if self.varcopy is None:
+            newvar = Variable(self)
+            self.set_var_copy(newvar)
+        v = self.varcopy
+        v.linked_var = self.linked_var
+        v.var_is_const = self.var_is_const
+        v.arguments = []
+        if self.arguments:
+            v.arguments = [None for a in self.arguments]
+            if not self.bind_var or (self.bind_var and self.var_is_const):
+                arg0Bound = False
+            else:
+                arg0Bound = self.arguments[0].binder == self
+            # Variable in place of normal Predicate
+            args = [None if a is None else a.copy() for a in self.arguments]
+            if self.bind_var and arg0Bound:
+                # Variable in place of quant with bound Variable
+                if not self.var_is_const:
+                    newvar = Variable(None)
+                    self.arguments[0].set_var_copy(newvar)
+                # Variable in place of quant with Constant
+                else:
+                    newvar = self.arguments[0].copy()
+                args[0] = newvar
+            for i, a in enumerate(args):
+                v.set_arg(i, a)
+        return v
 
     def set_arg_helper(self, position, argument):
         self.arguments.pop(position)
@@ -660,9 +649,9 @@ class Variable(Exp):
             self.set_arg_helper(position, argument)
         else:
             if position == 0:
-                if argument.__class__ == Variable and not argument.is_event:
+                if isinstance(argument,Variable) and not argument.is_event:
                     if self.var_is_const is None:
-                        argument.set_binder(self)
+                        argument.binder = self
                         self.var_is_const = False
                         self.return_type = SemType.e_type()
                 else:
@@ -685,9 +674,6 @@ class Variable(Exp):
 
     def type(self):
         return self.t
-
-    def set_binder(self, e):
-        self.binder = e
 
     def semprior(self):
         p = 0.0
@@ -715,46 +701,6 @@ class Variable(Exp):
 
     def is_empty(self):
         return False
-
-    def copy(self):
-        if self.varcopy is None:
-            newvar = self.make_shell({})
-            self.set_var_copy(newvar)
-        # Variable with no arguments
-        v = self.varcopy
-        v.linked_var = self.linked_var
-        v.arguments = []
-        v.var_is_const = self.var_is_const
-        if self.arguments:
-            v.arguments = [None for a in self.arguments]
-            if not self.bind_var or (self.bind_var and self.var_is_const):
-                arg0Bound = False
-            else:
-                arg0Bound = self.arguments[0].binder == self
-            # Variable in place of normal Predicate
-            # if not self.bind_var or (self.bind_var and len(self.arguments) == 1):
-            if not self.bind_var or not arg0Bound:
-                args = []
-                for a in self.arguments:
-                    args.append(None if a is None else a.copy())
-                for i, a in enumerate(args):
-                    v.set_arg(i, a)
-            else:
-                # Variable in place of quant with bound Variable
-                if not self.var_is_const:
-                    newvar = Variable(None)
-                    self.arguments[0].set_var_copy(newvar)
-                # Variable in place of quant with Constant
-                else:
-                    newvar = self.arguments[0].copy()
-                args = [newvar]
-                args.extend([a.copy() for a in self.arguments[1:]])
-                for i, a in enumerate(args):
-                    v.set_arg(i, a)
-        return v
-
-    def copy_no_var(self):
-        return self
 
     def all_sub_exps(self):
         subexps = [self]
@@ -808,11 +754,6 @@ class Variable(Exp):
             Exp.empty_num = 0
         return s
 
-    def clear_names(self):
-        self.name=None
-        for a in self.arguments:
-            a.clear_names()
-
     def apply(self, other):
         print("cannot apply Variable ", self)
     # checking equality here is tricky because the
@@ -826,7 +767,7 @@ class Variable(Exp):
         self.varcopy = other
 
     def equal_type(self, other):
-        if other.__class__ != Variable: return False
+        if not isinstance(other,Variable): return False
         if not other.type().equals(self.type()): return False
         return True
 
@@ -834,7 +775,7 @@ class Variable(Exp):
         self.t = t
 
     def equals(self, other):
-        if other.__class__ != Variable: return False
+        if not isinstance(other,Variable): return False
         if len(self.arguments)!=len(other.arguments): return False
         if self.is_event != other.is_event: return False
         # if self and other both bind a Variable, and bound Variables are the first arguments
@@ -877,9 +818,20 @@ class LambdaExp(Exp):
         self.name = "lam"
         pass
 
+    def copy(self,no_var=False):
+        lambda_exp = LambdaExp()
+        v = Variable(self.var)
+        self.var.set_var_copy(v)
+        lambda_exp.set_var(v)
+        lambda_exp.linked_var = self.linked_var
+        f = self.funct.copy(no_var)
+        lambda_exp.set_funct(f)
+        if self.get_is_null(): lambda_exp.set_is_null()
+        return lambda_exp
+
     # really need to go down from top filling in
     def semprior(self):
-        if self.funct.__class__==Variable:
+        if isinstance(self.funct,Variable):
             return self.funct.vartopprior()
         else:
             return self.funct.semprior()
@@ -906,27 +858,6 @@ class LambdaExp(Exp):
                 lambda_exp.set_is_null()
         return lambda_exp
 
-    def copy(self):
-        lambda_exp = LambdaExp()
-        v = Variable(self.var)
-        self.var.set_var_copy(v)
-        lambda_exp.set_var(v)
-        lambda_exp.linked_var = self.linked_var
-        f = self.funct.copy()
-        lambda_exp.set_funct(f)
-        if self.get_is_null(): lambda_exp.set_is_null()
-        return lambda_exp
-
-    def copy_no_var(self):
-        lambda_exp = LambdaExp()
-        lambda_exp.set_var(self.var)
-        lambda_exp.linked_var = self.linked_var
-        f = self.funct.copy_no_var()
-        if f is None: print("f is none for ", self.to_string(True))
-        lambda_exp.set_funct(f)
-        if self.get_is_null(): lambda_exp.set_is_null()
-        return lambda_exp
-
     def get_lvars(self):
         lvars = [self.var]
         lvars.extend(self.funct.get_lvars())
@@ -950,7 +881,7 @@ class LambdaExp(Exp):
 
         newvariable = Variable(ec)
         self.replace2(e, newvariable)
-        p = self.copy_no_var()
+        p = self.copy(no_var=True)
         self.replace2(newvariable, e)
         settype=False
         # lambdas are wrong way around
@@ -978,7 +909,7 @@ class LambdaExp(Exp):
             if p.var in compvars:
                 p = p.funct
             else: gotp = True
-            if p.__class__!=LambdaExp: gotp = True
+            if not isinstance(p,LambdaExp): gotp = True
         lambda_exp = LambdaExp()
         lambda_exp.set_funct(p)
         lambda_exp.set_var(newvariable)
@@ -1039,7 +970,7 @@ class LambdaExp(Exp):
 
     def set_var(self, var):
         self.var = var
-        var.set_binder(self)
+        var.binder = self
 
     def get_var(self):
         return self.var
@@ -1048,7 +979,7 @@ class LambdaExp(Exp):
         return self.funct
 
     def get_deep_funct(self):
-        if self.funct.__class__!=LambdaExp: return self.funct
+        if isinstance(self.funct,LambdaExp): return self.funct
         else: return self.funct.get_deep_funct()
 
     def arity(self):
@@ -1060,7 +991,7 @@ class LambdaExp(Exp):
         arg_type = e.type()
         if var_type.equals(arg_type):
             for a in self.var.arguments:
-                if e.__class__==Variable:
+                if isinstance(e,Variable):
                     e.add_arg(a)
                 else:
                     e = e.apply(a)
@@ -1069,7 +1000,7 @@ class LambdaExp(Exp):
             return new_exp
 
     def compose(self, arg):
-        if arg.__class__!=LambdaExp: return None
+        if not isinstance(arg,LambdaExp): return None
         sem = self.apply(arg.funct)
         if not sem:
             sem = self.compose(arg.funct)
@@ -1108,12 +1039,8 @@ class LambdaExp(Exp):
             Exp.empty_num = 0
         return s
 
-    def clear_names(self):
-        self.var.name=None
-        self.funct.clear_names()
-
     def equals(self, other):
-        if other.__class__ != LambdaExp or \
+        if not isinstance(other,LambdaExp) or \
                 not other.var.equal_type(self.var):
             return False
         self.var.set_equal_to(other.var)
@@ -1121,7 +1048,7 @@ class LambdaExp(Exp):
         return other.funct.equals(self.funct)
 
     def equals_placeholder(self,other):
-        if other.__class__ != LambdaExp or \
+        if not isinstance(other,LambdaExp) or \
         not other.var.equal_type(self.var):
             return False
         self.var.set_equal_to(other.var)
@@ -1159,6 +1086,13 @@ class Neg(Exp):
         self.str_shell_prefix = 'not'
         self.str_ubl_prefix = self.name.replace(':','#')
 
+    def copy(self,no_var=False):
+        n = Neg(self.arguments[0].copy(no_var), self.num_args)
+        if self.num_args == 2:
+            n.set_event(self.arguments[1].copy(no_var))
+        n.linked_var = self.linked_var
+        return n
+
     def semprior(self):
         return -1.0 + self.arguments[0].semprior()
 
@@ -1170,20 +1104,6 @@ class Neg(Exp):
             if self.num_args == 2:
                 n.set_event(self.arguments[1].make_shell(exp_dict))
         exp_dict[self] = n
-        return n
-
-    def copy(self):
-        n = Neg(self.arguments[0].copy(), self.num_args)
-        if self.num_args == 2:
-            n.set_event(self.arguments[1].copy())
-        n.linked_var = self.linked_var
-        return n
-
-    def copy_no_var(self):
-        n = Neg(self.arguments[0].copy_no_var(), self.num_args)
-        if self.num_args == 2:
-            n.set_event(self.arguments[1].copy_no_var())
-        n.linked_var = self.linked_var
         return n
 
     def set_event(self, event):
@@ -1208,7 +1128,7 @@ class Neg(Exp):
         return SemType.t_type()
 
     def equals(self, other):
-        if other.__class__!=Neg: return False
+        if not isinstance(other,Neg): return False
         return other.arguments[0].equals(self.arguments[0])
 
 class EventMarker(Exp):
@@ -1228,18 +1148,8 @@ class EventMarker(Exp):
         if e:
             self.name=e.name
 
-    def set_binder(self, e):
-        #print "setting binder = ",e," for ",self
-        self.binder = e
-
-    def set_name(self, name):
-        self.name = name
-
-    def get_binder(self):
-        return self.binder
-
-    def check_if_bound(self):
-        return self.binder is not None
+    def copy(self,no_var):
+        return self
 
     def to_string(self, top=True, extra_format=None):
         if not self.name:
@@ -1258,16 +1168,7 @@ class EventMarker(Exp):
         if self not in vars:
             vars.append(self)
 
-    def clear_names(self):
-        self.name=None
-
     def make_shell(self, exp_dict):
-        return self
-
-    def copy(self):
-        return self
-
-    def copy_no_var(self):
         return self
 
     def replace2(self, e1, e2):
@@ -1276,30 +1177,33 @@ class EventMarker(Exp):
         return self
 
     def equals(self, other):
-        if other.__class__ != EventMarker:
+        if not isinstance(other,EventMarker):
             return False
         # always need to have set other_event first
         if self.other_event is None:
             print("other event is None")
-            print("comparing to ", other.get_binder().to_string(True), " which has event ", other.get_binder().get_event())
-            if not self.binder.equals(other.get_binder()):
+            print("comparing to ", other.binder.to_string(True), " which has event ", other.binder.get_event())
+            if not self.binder.equals(other.binder):
                 return False
         # need to make sure other_event is set
-        #if not self.binder.equals(other.get_binder()):
-            #return False
-        if other.__class__ != EventMarker or \
+        if not isinstance(other,EventMarker) or \
                 not self.other_event==other:
             print("failing on event")
             print("other is ", other, " other_event is ", self.other_event)
             print("this is ", self)
             return False
-        #print "succeeding on event"
         return True
 
     def type(self):
         return SemType.event_type()
 
 class Constant(Exp):
+    def copy(self,no_var=False):
+        c = Constant(self.name, self.num_args, self.arg_types, self.pos_type)
+        c.make_comp_name_set()
+        c.linked_var = self.linked_var
+        return c
+
     def set_return_type(self):
         self.return_type = SemType.e_type()
 
@@ -1330,19 +1234,8 @@ class Constant(Exp):
             exp_dict[self] = c
         return c
 
-    def copy(self):
-        c = Constant(self.name, self.num_args, self.arg_types, self.pos_type)
-        c.make_comp_name_set()
-        c.linked_var = self.linked_var
-        return c
-
-    def copy_no_var(self):
-        c = self.copy()
-        c.linked_var = self.linked_var
-        return c
-
     def equals(self, other):
-        if other.__class__ != Constant:
+        if not isinstance(other,Constant):
             return False
         if other.name!=self.name:
             return False
@@ -1372,6 +1265,15 @@ class Conjunction(Exp):
         self.name="and"
         self.is_null = False
         self.inout = None
+
+    def copy(self,no_var=False):
+        c = Conjunction()
+        c.linked_var = self.linked_var
+        c.set_type(self.name)
+        for i, a in enumerate(self.arguments):
+            a2 = a.copy(no_var)
+            c.set_arg(i, a2)
+        return c
 
     def set_type(self, name):
         self.name = name
@@ -1403,24 +1305,6 @@ class Conjunction(Exp):
             a2 = a.make_shell(exp_dict)
             c.set_arg(i, a2)
         exp_dict[self] = c
-        return c
-
-    def copy(self):
-        c = Conjunction()
-        c.linked_var = self.linked_var
-        c.set_type(self.name)
-        for i, a in enumerate(self.arguments):
-            a2 = a.copy()
-            c.set_arg(i, a2)
-        return c
-
-    def copy_no_var(self):
-        c = Conjunction()
-        c.linked_var = self.linked_var
-        c.set_type(self.name)
-        for i, a in enumerate(self.arguments):
-            a2 = a.copy_no_var()
-            c.set_arg(i, a2)
         return c
 
     def replace2(self, e1, e2):
@@ -1511,6 +1395,68 @@ class Predicate(Exp):
         self.string = ""
         self.str_ubl_prefix = self.name
 
+    def copy(self,no_var=False):
+        if not no_var:
+            if not self.bind_var:
+                args = []
+                for a in self.arguments:
+                    args.append(None if a is None else a.copy())
+                args = [None if a is None else a.copy(no_var) for a in self.arguments]
+                e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, return_type=self.return_type)
+            else:
+                if not self.var_is_const:
+                    newvar = Variable(None)
+                    self.arguments[0].set_var_copy(newvar)
+                    e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, return_type=self.return_type)
+                else:
+                    newvar = self.arguments[0].copy()
+                    e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, var_is_const=self.var_is_const, return_type=self.return_type)
+                args = [newvar]
+                args.extend([a.copy() for a in self.arguments[1:]])
+
+        else:
+            if not self.bind_var:
+                args = []
+                for a in self.arguments:
+                    args.append(None if a is None else a.copy(no_var=True))
+                args = []
+                args = [None if a is None else a.copy(no_var) for a in self.arguments]
+                e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, return_type=self.return_type)
+            else:
+                if self.var_is_const:
+                    args = [a.copy_no_var() for a in self.arguments]
+                    e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, var_is_const=self.var_is_const, return_type=self.return_type)
+                else:
+                    args = [self.arguments[0]]
+                    args.extend([a.copy_no_var() for a in self.arguments[1:]])
+                    e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, return_type=self.return_type)
+        for i, a in enumerate(args):
+            e.set_arg(i, a)
+        e.linked_var = self.linked_var
+        return e
+
+    def copy(self,no_var=False):
+        args = [None if a is None else a.copy(no_var) for a in self.arguments]
+        var_is_const_for_copy = True if self.bind_var and self.var_is_const else None
+        copied_version = Predicate(self.name, self.num_args, self.arg_types, self.pos_type,
+                        return_type=self.return_type, bind_var=self.bind_var,
+                        var_is_const=var_is_const_for_copy)
+        copied_version.linked_var = self.linked_var
+        if self.bind_var:
+            if not no_var:
+                if self.var_is_const:
+                    newvar = self.arguments[0].copy(no_var)
+                else:
+                    newvar = Variable(None)
+                    self.arguments[0].set_var_copy(newvar)
+            else:
+                newvar = args[0] if self.var_is_const else self.arguments[0]
+            args[0] = newvar
+
+        for i, a in enumerate(args):
+            copied_version.set_arg(i, a)
+        return copied_version
+
     def set_arg_helper(self, position, argument):
         self.arguments.pop(position)
         self.arguments.insert(position, argument)
@@ -1523,9 +1469,9 @@ class Predicate(Exp):
             self.set_arg_helper(position, argument)
         else:
             if position == 0:
-                if argument.__class__ == Variable:
+                if isinstance(argument,Variable):
                     if self.var_is_const is None:
-                        argument.set_binder(self)
+                        argument.binder = self
                         self.var_is_const = False
                         self.return_type = SemType.e_type()
                 else:
@@ -1578,85 +1524,24 @@ class Predicate(Exp):
         exp_dict[self] = e
         return e
 
-    def copy(self):
-        if not self.bind_var:
-            args = []
-            if None in self.arguments:
-                breakpoint()
-            for a in self.arguments:
-                args.append(None if a is None else a.copy())
-            e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, return_type=self.return_type)
-        else:
-            if not self.var_is_const:
-                newvar = Variable(None)
-                self.arguments[0].set_var_copy(newvar)
-                e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, return_type=self.return_type)
-            else:
-                newvar = self.arguments[0].copy()
-                e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, var_is_const=self.var_is_const, return_type=self.return_type)
-            args = [newvar]
-            args.extend([a.copy() for a in self.arguments[1:]])
-        for i, a in enumerate(args):
-            e.set_arg(i, a)
-        e.linked_var = self.linked_var
-        return e
-
-        #init_params = {k:getattr(self,k) for k in signature(Predicate.__init__).parameters.keys() if k != 'self'}
-        #copied_version = Predicate(**init_params)
-        #if self.bind_var:
-        #    if self.var_is_const:
-        #        copied_version.var_is_const = True
-        #    else:
-        #        newvar = Variable(None)
-        #        copied_version.arguments[0] = newvar
-        #        self.arguments[0].set_var_copy(newvar)
-        #return copied_version
-
-    def copy_no_var(self):
-        if not self.bind_var:
-            args = []
-            for a in self.arguments:
-                args.append(None if a is None else a.copy_no_var())
-            e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, return_type=self.return_type)
-        else:
-            if self.var_is_const:
-                args = [a.copy_no_var() for a in self.arguments]
-                e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, var_is_const=self.var_is_const, return_type=self.return_type)
-            else:
-                args = [self.arguments[0]]
-                args.extend([a.copy_no_var() for a in self.arguments[1:]])
-                e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, return_type=self.return_type)
-        for i, a in enumerate(args):
-            e.set_arg(i, a)
-        e.linked_var = self.linked_var
-        return e
-
-        #init_params = {k:getattr(self,k) for k in signature(Predicate.__init__).parameters.keys() if k != 'self'}
-        #copied_version = Predicate(**init_params)
-        #for i,a in enumerate(self.arguments):
-        #    copied_version.set_arg(i,a.copy_no_var())
-        #if self.bind_var and not self.var_is_const:
-        #    copied_version.set_arg(0,self.arguments[0])
-        #return copied_version
-
     def repair_binding(self, orig):
         if self.bind_var and not self.var_is_const:
             if orig.arguments[0].binder == orig:
-                self.arguments[0].set_binder(self)
+                self.arguments[0].binder = self
         for arg, orig_arg in zip(self.arguments, orig.arguments):
             arg.repair_binding(orig_arg)
 
     def get_event(self):
         last_arg = self.arguments[-1]
         if not last_arg: return None
-        if not (last_arg.__class__==EventMarker or (last_arg.__class__==Variable and last_arg.is_event)): return None
+        if not (isinstance(last_arg,EventMarker) or (isinstance(last_arg,Variable) and last_arg.is_event)): return None
         return self.arguments[-1]
 
     def type(self):
         return self.return_type
 
     def equals(self, other):
-        if other.__class__ != Predicate or \
+        if not isinstance(other,Predicate) or \
                 other.name!=self.name or \
                 len(other.arguments)!=len(self.arguments):
             return False
@@ -1672,8 +1557,6 @@ class Predicate(Exp):
 
 class QMarker(Exp):
     def __init__(self, rep):
-        #print "making Q for ",rep.to_string(True)
-        # second arg is event
         self.linked_var = None
         self.num_args=1
         self.arguments=[rep]
@@ -1690,6 +1573,11 @@ class QMarker(Exp):
         self.inout = None
         self.double_quant = False
         self.noun_mod = False
+
+    def copy(self,no_var=False):
+        q = QMarker(self.arguments[0].copy(no_var))
+        q.linked_var = self.linked_var
+        return q
 
     def set_event(self, event):
         self.set_arg(1, event)
@@ -1721,18 +1609,8 @@ class QMarker(Exp):
         exp_dict[self] = q
         return q
 
-    def copy(self):
-        q = QMarker(self.arguments[0].copy())
-        q.linked_var = self.linked_var
-        return q
-
-    def copy_no_var(self):
-        q = QMarker(self.arguments[0].copy_no_var())
-        q.linked_var = self.linked_var
-        return q
-
     def equals(self, other):
-        if other.__class__ != QMarker or \
+        if not isinstance(other,QMarker) or \
         not other.arguments[0].equals(self.arguments[0]):
             return False
         return True
@@ -1760,6 +1638,7 @@ def make_exp(pred_string, exp_string, exp_dict):
     name_no_index = re.compile(r"_\d+").split(name)[0]
     pos = name.split("|")[0]
     args, exp_string_remaining = extract_arguments(exp_string, exp_dict)
+    print(exp_string, '>>>>>', args)
     arg_types = [x.type() for x in args]
     num_args = len(args)
 
@@ -1795,15 +1674,10 @@ def get_covered_string(exp_string, exp_string_remaining):
     return covered_string
 
 def check_whether_is_quant(args):
-    quant_with_var = args[0].__class__ == Variable and args[0] in args[1].all_sub_exps()
-    quant_with_const = args[0].__class__ == Constant and any([args[0].equals(x) for x in args[1].all_sub_exps()])
+    quant_with_var = isinstance(args[0],Variable) and args[0] in args[1].all_sub_exps()
+    quant_with_const = isinstance(args[0],Constant) and any([args[0].equals(x) for x in args[1].all_sub_exps()])
     if len(args) == 2:
         return quant_with_var or quant_with_const
-#    if len(args) == 3:
-#        if args[2].__class__ not in [Variable, EventMarker]:
-#            return False
-#        else:
-#            return quant_with_var or quant_with_const
     else:
         return False
 
@@ -1872,6 +1746,8 @@ def extract_arguments(exp_string, exp_dict):
     i = 0
     j = 0
     arglist = []
+    #if exp_string == '$0,Q(not(placeholder_p($1,(and(placeholder_p($1),placeholder_p($1))),$0)))':
+        #breakpoint()
     while not finished:
         if num_brack==0:
             finished = True

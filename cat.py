@@ -337,7 +337,7 @@ class SynCat:
 
     @staticmethod
     def all_syn_cats_with_pos(e):  # put subscripts and shit
-        if e.__class__ == Variable:
+        if isinstance(e,Variable):
             return SynCat.all_syn_cats(e.type())
         cat_type = e.type()
         SynCats = []
@@ -464,7 +464,7 @@ class NPCat(SynCat):
         return self.head
 
     def equals(self, other):
-        return other.__class__ == NPCat
+        return isinstance(other,NPCat)
 
 class NCat(SynCat):
     def __init__(self):
@@ -490,7 +490,7 @@ class NCat(SynCat):
         return self.head
 
     def equals(self, other):
-        return other.__class__ == NCat
+        return isinstance(other,NCat)
 
 class STCat(SynCat):
     def __init__(self):
@@ -516,7 +516,7 @@ class STCat(SynCat):
         return self.head
 
     def equals(self, other):
-        return other.__class__ == STCat
+        return isinstance(other,STCat)
 
 class SCat(SynCat):
     def __init__(self):
@@ -542,7 +542,7 @@ class SCat(SynCat):
         return self.head
 
     def equals(self, other):
-        return other.__class__ == SCat
+        return isinstance(other,SCat)
 
 class SWhCat(SynCat):
     def __init__(self):
@@ -568,7 +568,7 @@ class SWhCat(SynCat):
         return self.head
 
     def equals(self, other):
-        return other.__class__ == SWhCat
+        return isinstance(other,SWhCat)
 
 class QCat(SynCat):
     def __init__(self):
@@ -594,7 +594,7 @@ class QCat(SynCat):
         return self.head
 
     def equals(self, other):
-        return other.__class__ == QCat
+        return isinstance(other,QCat)
 
 def get_cat(cat_type):
     cats = []
