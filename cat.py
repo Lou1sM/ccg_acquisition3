@@ -388,10 +388,7 @@ class SynCat:
             # bracketing, but need to be careful about where it goes.
             # should put in implicit bracketing.
             # arg not always bracketed
-
-            # print "arg_cat is ",arg_cat.to_string()
             for funct_cat in funct_cats:
-                # print "funct_cat is ",funct_cat.to_string()
                 # fwd
                 SynCats.append(SynCat(funct_cat, arg_cat, "fwd"))
                 # back
@@ -411,11 +408,7 @@ class SynCat:
 
     @staticmethod
     def read_cat(synstring):
-        # print "synstring is ",synstring
         if synstring[0] != "(":
-            # atomic
-            # if synstring == "PP":
-            #     return SynCat.pp
             if synstring == "NP":
                 return SynCat.np
             elif synstring == "S":
@@ -434,7 +427,6 @@ class SynCat:
             i = 0
             foundslash = False
             while not foundslash:
-                # print "i is ",i," char is ",synstring[i]," numbrack is ",numbrack
                 if synstring[i] in ["/", "\\"] and numbrack == 0:
                     funct = SynCat.read_cat(synstring[:i])
                     arg = SynCat.read_cat(synstring[i + 1:])

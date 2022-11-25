@@ -292,7 +292,7 @@ def parse(sentence,sem_store,rule_set,lexicon,sentence_count,test_out_parses,tar
         return (None, None, None)
 
     topparses = sorted(topparses, key=lambda x: x[0])
-    topnode = topparses[-1]
+    topnode = topparses[-1][1]
     top_parse = sample(topnode, returnchart, rule_set)
     if verbose:
         for t in reversed(topparses):

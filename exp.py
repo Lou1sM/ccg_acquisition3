@@ -1,5 +1,6 @@
 # expression, on which everything else is built
 from sem_type import SemType
+from inspect import signature
 from tools import permutations
 import re
 
@@ -22,7 +23,6 @@ class Exp:
             self.arguments.append(EmptyExp())
         self.set_return_type()
         self.function_exp = self
-        # self.noun_mod = False
         self.pos_type = pos_type
         self.arg_set = False
         self.is_verb=False
@@ -79,6 +79,12 @@ class Exp:
     def is_entity(self):
         return False
 
+    def equals(self,other):
+        pass
+
+    def equals_placeholder(self,other):
+        return self.equals(other)
+
     def add_parent(self, e):
         if e not in self.parents:
             self.parents.append(e)
@@ -102,25 +108,16 @@ class Exp:
     def num_args(self):
         return len(self.arguments)
 
-    def replace(self, e1, e2):
-        # replaces all instances of e1 with e2r
-        i=0
-        for a in self.arguments:
-            if a==e1:
-                self.set_arg(i, e2)
-                e2.add_parent(self)
-            else: a.replace(e1, e2)
-            i+=1
-
     # this version returns an expression
     def replace2(self, e1, e2):
         if self == e1:
             return e2
-        i=0
-        for a in self.arguments:
-            self.arguments.pop(i)
-            self.arguments.insert(i, a.replace2(e1, e2))
-            i+=1
+        self.arguments = [None if a is None else a.replace2(e1, e2) for a in self.arguments]
+        #i=0
+        #for a in self.arguments:
+            #self.arguments.pop(i)
+            #self.arguments.insert(i, a.replace2(e1, e2))
+            #i+=1
         return self
 
     # this function needs work!!!!            #
@@ -169,7 +166,7 @@ class Exp:
             Exp.empty_num = 0
         return s
 
-    def to_string(self, top, extra_format=None):
+    def to_string(self, top=True, extra_format=None):
         if extra_format is None:
             prefix = self.name
         elif extra_format == 'shell':
@@ -211,10 +208,6 @@ class Exp:
     def clear_names(self):
         for a in self.arguments:
             if a: a.clear_names()
-
-    def equals(self, other):
-        print("should never be getting here, equals defined on subexps")
-        print("this is ", self.to_string(True))
 
     def clear_parents(self):
         self.parents = []
@@ -372,7 +365,8 @@ class Exp:
 
         e.repair_binding(orige)
         self.repair_binding(origsem)
-        if not sem.equals(self):
+        #if not sem.equals(self):
+        if self.to_string() != sem.to_string():
             print("sems dont match : "+sem.to_string(True)+"  "+self.to_string(True))
         return pairs
 
@@ -432,12 +426,9 @@ class Exp:
         evars = e.unbound_vars()
         # control the arity of the child
         # this may well be problematic
-        if len(evars)>4: return (None, None)
-        ordernum=0
-
+        #if len(evars)>4: return (None, None)
         (orders, num_new_lam, fixeddircats) = self.get_orders(evars)
         for order in orders:
-            ordernum+=1
             splits = self.pullout(e, order, num_new_lam)
             for parent_sem, child_sem, num_new_lam, num_by_comp in splits:
                 allpairs.append((parent_sem, child_sem, num_new_lam, num_by_comp, fixeddircats))
@@ -454,6 +445,7 @@ class Exp:
                             trfc.extend(fixeddircats)
                             allpairs.append((type_raised_child, parent_sem.copy(), num_new_lam, 0, trfc))
             if len(order)!=len(evars): print("unmatching varlist lengths")
+        #print(len(evars),len(orders))
         return allpairs
 
     def can_type_raise(self):
@@ -477,14 +469,14 @@ class Exp:
         uv2 = []
         evm = None
         for v in undervars:
-            if v.__class__ == EventMarker:
+            if isinstance(v,EventMarker):
                 if evm: print("already got event marker")
                 evm = v
             else: uv2.append(v)
 
         fixedorder = []
 
-        for lvar in self.get_lvars():
+        for lvar in self.get_lvars(): # all left descendents, I think, why must these be fixed?
             if lvar in undervars:
                 fixedorder.append(lvar)
                 del uv2[uv2.index(lvar)]
@@ -536,6 +528,8 @@ class Exp:
             if isinstance(e,Variable) or isinstance(e,EventMarker):
                 continue
             rep_pairs.extend(self.split_subexp(e))
+            if None in rep_pairs:
+                breakpoint()
         return rep_pairs
 
     def null_sem(self):
@@ -588,7 +582,7 @@ class EmptyExp(Exp):
     def all_extractable_sub_exps(self):
         return []
 
-    def to_string(self, top, extra_format=None):
+    def to_string(self, top=True, extra_format=None):
         if self.name=="?":
             self.name="?"+str(Exp.empty_num)
             Exp.empty_num+=1
@@ -605,6 +599,9 @@ class EmptyExp(Exp):
 
     def equals(self, other):
         return isinstance(other,EmptyExp)
+
+    def equals_placeholder(self, other):
+        return self.equals(other)
 
 class Variable(Exp):
     def __init__(self, e):
@@ -721,7 +718,8 @@ class Variable(Exp):
 
     def copy(self):
         if self.varcopy is None:
-            return None
+            newvar = self.make_shell({})
+            self.set_var_copy(newvar)
         # Variable with no arguments
         v = self.varcopy
         v.linked_var = self.linked_var
@@ -738,7 +736,7 @@ class Variable(Exp):
             if not self.bind_var or not arg0Bound:
                 args = []
                 for a in self.arguments:
-                    args.append(a.copy())
+                    args.append(None if a is None else a.copy())
                 for i, a in enumerate(args):
                     v.set_arg(i, a)
             else:
@@ -789,10 +787,9 @@ class Variable(Exp):
     def add_at_front_arg(self, arg):
         self.arguments.insert(0, arg)
 
-    def to_string(self, top, extra_format=None):
-        s=""
+    def to_string(self, top=True, extra_format=None):
         if not self.name:
-            self.name="U_nBOUND"
+            self.name="UNBOUND"
         s=self.name
         if self.arguments!=[]: s = s+"("
         for a in self.arguments:
@@ -853,6 +850,14 @@ class Variable(Exp):
         i = 0
         for a in self.arguments:
             if not a.equals(other.arguments[i]): return False
+            i+=1
+        return other==self.equalother
+
+    def equals_placeholder(self,other):
+        if len(self.arguments)!=len(other.arguments): return False
+        i = 0
+        for a in self.arguments:
+            if not a.equals_placeholder(other.arguments[i]): return False
             i+=1
         return other==self.equalother
 
@@ -1093,7 +1098,7 @@ class LambdaExp(Exp):
     def set_arg(self, position, pred):
         self.funct.set_arg(position, pred)
 
-    def to_string(self, top, extra_format=None):
+    def to_string(self, top=True, extra_format=None):
         self.var.name = "$"+str(Exp.var_num)
         Exp.var_num+=1
         s="lambda "+self.var.name+"_{"+self.var.type().to_string()+"}."+self.funct.to_string(False,extra_format)
@@ -1114,6 +1119,14 @@ class LambdaExp(Exp):
         self.var.set_equal_to(other.var)
         other.var.set_equal_to(self.var)
         return other.funct.equals(self.funct)
+
+    def equals_placeholder(self,other):
+        if other.__class__ != LambdaExp or \
+        not other.var.equal_type(self.var):
+            return False
+        self.var.set_equal_to(other.var)
+        other.var.set_equal_to(self.var)
+        return other.funct.equals_placeholder(self.funct)
 
     def replace2(self, e1, e2):
         if self.var == e1:
@@ -1228,7 +1241,7 @@ class EventMarker(Exp):
     def check_if_bound(self):
         return self.binder is not None
 
-    def to_string(self, top, extra_format=None):
+    def to_string(self, top=True, extra_format=None):
         if not self.name:
             self.name="UNBOUND"
         return self.name
@@ -1338,7 +1351,7 @@ class Constant(Exp):
     def add_arg(self, arg):
         print("error, trying to add arg to const")
 
-    def to_string(self, top, extra_format=None):
+    def to_string(self, top=True, extra_format=None):
         if extra_format is None:
             return self.name + self._to_string(top, extra_format)
         elif extra_format == 'ubl':
@@ -1454,7 +1467,7 @@ class Conjunction(Exp):
             subexps.extend(a.all_extractable_sub_exps())
         return subexps
 
-    def to_string(self, top, extra_format=None):
+    def to_string(self, top=True, extra_format=None):
         if extra_format is None or extra_format == 'shell':
             prefix = 'and('
         elif extra_format == 'ubl':
@@ -1465,7 +1478,7 @@ class Conjunction(Exp):
 # Predicates take a number of arguments (not fixed) and
 # return a truth value
 class Predicate(Exp):
-    def __init__(self,name,num_args,arg_types,pos_type,bind_var=False,var_is_const=None,args=[], return_type=None):
+    def __init__(self,name,num_args,arg_types,pos_type,bind_var=False,var_is_const=None,return_type=None):
         self.bind_var = bind_var
         self.var_is_const = var_is_const
         self.onlyinout = None
@@ -1479,10 +1492,8 @@ class Predicate(Exp):
         self.parents = []
         self.str_shell_prefix = 'placeholder_p'
         self.str_ubl_prefix = self.name.replace(':','#')
-
         for a_t in arg_types:
             self.arguments.append(EmptyExp())
-
         if return_type:
             self.return_type = return_type
         else:
@@ -1490,7 +1501,6 @@ class Predicate(Exp):
                 self.return_type = SemType.e_type()
             else:
                 self.return_type = SemType.t_type()
-
         self.function_exp = self
         self.pos_type = pos_type
         self.arg_set = False
@@ -1571,12 +1581,11 @@ class Predicate(Exp):
     def copy(self):
         if not self.bind_var:
             args = []
+            if None in self.arguments:
+                breakpoint()
             for a in self.arguments:
-                args.append(a.copy())
+                args.append(None if a is None else a.copy())
             e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, return_type=self.return_type)
-            e.linked_var = self.linked_var
-            for i, a in enumerate(args):
-                e.set_arg(i, a)
         else:
             if not self.var_is_const:
                 newvar = Variable(None)
@@ -1587,22 +1596,28 @@ class Predicate(Exp):
                 e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, var_is_const=self.var_is_const, return_type=self.return_type)
             args = [newvar]
             args.extend([a.copy() for a in self.arguments[1:]])
-            for i, a in enumerate(args):
-                e.set_arg(i, a)
-            e.linked_var = self.linked_var
+        for i, a in enumerate(args):
+            e.set_arg(i, a)
+        e.linked_var = self.linked_var
         return e
+
+        #init_params = {k:getattr(self,k) for k in signature(Predicate.__init__).parameters.keys() if k != 'self'}
+        #copied_version = Predicate(**init_params)
+        #if self.bind_var:
+        #    if self.var_is_const:
+        #        copied_version.var_is_const = True
+        #    else:
+        #        newvar = Variable(None)
+        #        copied_version.arguments[0] = newvar
+        #        self.arguments[0].set_var_copy(newvar)
+        #return copied_version
 
     def copy_no_var(self):
         if not self.bind_var:
             args = []
             for a in self.arguments:
-                args.append(a.copy_no_var())
+                args.append(None if a is None else a.copy_no_var())
             e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, return_type=self.return_type)
-            e.linked_var = self.linked_var
-            i=0
-            for a in args:
-                e.set_arg(i, a)
-                i+=1
         else:
             if self.var_is_const:
                 args = [a.copy_no_var() for a in self.arguments]
@@ -1611,10 +1626,18 @@ class Predicate(Exp):
                 args = [self.arguments[0]]
                 args.extend([a.copy_no_var() for a in self.arguments[1:]])
                 e = Predicate(self.name, self.num_args, self.arg_types, self.pos_type, bind_var=True, return_type=self.return_type)
-            for i, a in enumerate(args):
-                e.set_arg(i, a)
-            e.linked_var = self.linked_var
+        for i, a in enumerate(args):
+            e.set_arg(i, a)
+        e.linked_var = self.linked_var
         return e
+
+        #init_params = {k:getattr(self,k) for k in signature(Predicate.__init__).parameters.keys() if k != 'self'}
+        #copied_version = Predicate(**init_params)
+        #for i,a in enumerate(self.arguments):
+        #    copied_version.set_arg(i,a.copy_no_var())
+        #if self.bind_var and not self.var_is_const:
+        #    copied_version.set_arg(0,self.arguments[0])
+        #return copied_version
 
     def repair_binding(self, orig):
         if self.bind_var and not self.var_is_const:
@@ -1674,7 +1697,7 @@ class QMarker(Exp):
     def is_q(self):
         return True
 
-    def to_string(self, top, extra_format=None):
+    def to_string(self, top=True, extra_format=None):
         s = "Q("+self.arguments[0].to_string(False,extra_format='ubl')+")"
         if top:
             Exp.var_num = 0
@@ -1749,11 +1772,11 @@ def make_exp(pred_string, exp_string, exp_dict):
             e = Conjunction()
             e.set_type(name)
         elif is_quant:
-            e = Predicate(name_no_index, num_args, arg_types, pos, bind_var=True, args=args)
+            e = Predicate(name_no_index, num_args, arg_types, pos, bind_var=True)
         else:
-            e = Predicate(name_no_index, num_args, arg_types, pos, args=args)
+            e = Predicate(name_no_index, num_args, arg_types, pos)
     else:
-        e = Predicate(name_no_index, num_args, arg_types, pos, args=args)
+        e = Predicate(name_no_index, num_args, arg_types, pos)
 
     for i, arg in enumerate(args):
         e.set_arg(i, arg)
@@ -1926,3 +1949,11 @@ def make_log_exp(predstring, exp_string, vardict):
         exp_string = exp_string[1:]
 
     return e, exp_string
+
+def init_clone(class_obj):
+    init_params = {k:getattr(class_obj,k) for k in signature(class_obj.__class__.__init__).parameters.keys() if k != 'self' and k in dir(class_obj)}
+    copied_version = class_obj.__class__(**init_params)
+    return copied_version
+
+def unpack_lists(nested_lists):
+    return [nested_lists] + [x for item in nested_lists.arguments for x in unpack_lists(item)]

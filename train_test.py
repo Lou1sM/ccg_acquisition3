@@ -165,10 +165,10 @@ def test(test_in, test_out, errors_out, sem_store, rule_set, current_lexicon, se
             print(sentence, file=test_out)
             retsem = None
             top_parse = None
-            try:
-                (retsem, top_parse, topcat) = parse(sentence, sem_store, rule_set, current_lexicon, sentence_count, test_out)
-            except (AttributeError, IndexError) as e:
-                print(e)
+            #try:
+            (retsem, top_parse, topcat) = parse(sentence, sem_store, rule_set, current_lexicon, sentence_count, test_out)
+            #except (AttributeError, IndexError) as e:
+                #print(e)
                 #pass
             if retsem and sem and retsem.equals(sem):
                 print(f"CORRECT\n{retsem.to_string(True)}\n{topcat.to_string()}", file=test_out)
@@ -178,7 +178,7 @@ def test(test_in, test_out, errors_out, sem_store, rule_set, current_lexicon, se
             else:
                 print(f"WRONG\n{retsem.to_string(True)}\n{topcat.to_string()}", file=test_out)
                 print(sem.to_string(True), file=test_out)
-                if sem and retsem.equalsPlaceholder(sem):
+                if sem and retsem.equals_placeholder(sem):
                     print(f"CORRECTPlaceholder\n{retsem.to_string(True)}\n{topcat.to_string()}", file=test_out)
 
             print(f'top parse:\n{top_parse}\n\n', file=test_out)
