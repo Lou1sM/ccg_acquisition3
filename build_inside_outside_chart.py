@@ -27,7 +27,12 @@ class SemStore:
 
     def get_log_prior(self, sem_key):
         if not self.check(sem_key):
-            sem = exp.make_exp_with_args(sem_key, {})
+            try:
+                sem = exp.make_exp_with_args(sem_key, {})
+            except IndexError:
+                with open('cannot_make_into_exps.txt','w') as f:
+                    print(sem_key,file=f)
+                return -1
             # OMRI ADDED THE NEXT TWO LINES
             if isinstance(sem, tuple):
                 sem = sem[0]
