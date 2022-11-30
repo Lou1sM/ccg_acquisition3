@@ -64,16 +64,6 @@ class LogicalForm:
         else:
             return self.string
 
-    def prepend_new_lamba(self):
-        shifted_lf_string = shift_variable_names(self.subtree_as_string())
-        new_lf_string = 'lambda $0.' + shifted_lf_string
-        breakpoint()
-        copied_version = LogicalForm(new_lf_string)
-        assert len(copied_version.list_descendents()) == len(self.list_descendents())+1
-        for orig,copied, in zip(self.list_descendents(),copied_version.list_descendents()[1:]):
-            assert copied.node_type == orig.node_type
-        return copied_version
-
     def copy(self):
         copied_version = LogicalForm(self.subtree_as_string())
         assert copied_version == self
@@ -87,19 +77,55 @@ class LogicalForm:
             return False
         return other.subtree_as_string() == self.subtree_as_string()
 
+    @property
+    def max_var_index(self):
+        var_occurrences = re.findall(r'\$\d',self.subtree_as_string())
+        var_indices = [int(v[1]) for v in var_occurrences]
+        return -1 if len(var_indices)==0 else max(var_indices)
+
     def split_off_leaves(self):
         splits = []
+        new_lf_string = f'lambda ${self.max_var_index+1}.' + self.subtree_as_string()
         for to_remove_idx, d in enumerate(self.list_descendents()):
             if not d.is_leaf or d==self or d.node_type=='bound_var':
                 continue
-            f = self.prepend_new_lamba()
+            f = LogicalForm(new_lf_string)
+            assert len(f.list_descendents()) == len(self.list_descendents())+1
+            for orig,copied, in zip(self.list_descendents(),f.list_descendents()[1:]):
+                assert copied.node_type == orig.node_type
             node_being_removed = f.list_descendents()[to_remove_idx+1]
             assert node_being_removed == d
             node_being_removed.node_type = 'bound_var'
-            node_being_removed.string = '$0'
+            node_being_removed.string = f'${self.max_var_index+1}'
             g = d.copy()
             splits.append((f,g))
         return splits
+
+
+class TreeNode():
+    def __init__(self,lf,words,syntactic_category='TODO'):
+        self.logical_form = lf
+        self.words = words
+        self.syntactic_category = syntactic_category
+        self.possible_splits = []
+        lf_splits = self.logical_form.split_off_leaves()
+        for f,g in lf_splits:
+            for split_point in range(1,len(self.words)-1):
+                left_words = self.words[:split_point]
+                right_words = self.words[split_point:]
+                left_child_forward = TreeNode(f,left_words)
+                right_child_forward = TreeNode(g,right_words)
+                self.possible_splits.append((left_child_forward,right_child_forward))
+                left_child_backward = TreeNode(g,left_words)
+                right_child_backward = TreeNode(f,right_words)
+                self.possible_splits.append((left_child_backward,right_child_backward))
+
+    #def all_parses(self):
+
+
+    def __repr__(self):
+        return (f"Treenode\nWords: {' '.join(self.words)}\n"
+                f"With {self.logical_form.__repr__()}\n")
 
 
 def split_respecting_parentheses(s):
@@ -117,20 +143,29 @@ def split_respecting_parentheses(s):
     splits = [s[split_points[i]+1:split_points[i+1]] for i in range(len(split_points)-1)]
     return splits
 
-def shift_variable_names(lf_as_string):
-    var_occurrences = re.findall(r'\$\d',lf_as_string)
-    var_idxs_used = set([int(v[1]) for v in var_occurrences])
-    for vidx in sorted(var_idxs_used,reverse=True):
-        lf_as_string = re.sub(f'\${vidx}',f'${vidx+1}',lf_as_string)
+def shift_variable_names(lf_as_string,shift_from=[0]):
+    for sf in shift_from:
+        var_occurrences = re.findall(r'\$\d',lf_as_string)
+        var_idxs_to_shift = set([int(v[1]) for v in var_occurrences if int(v[1]) >= sf])
+        for vidx in sorted(var_idxs_to_shift,reverse=True):
+            lf_as_string = re.sub(f'\${vidx}',f'${vidx+1}',lf_as_string)
+    for sf in shift_from:
+        assert f'${sf}' not in lf_as_string
     return lf_as_string
 
 
-for inp_string in y:
+for sentence,inp_string in zip(X[:3],y[:3]):
     inp_string = re.sub(r'_\d','',inp_string)
     inp_string = re.sub(r'_\{[er]\}','',inp_string)
     inp_string = re.sub(r'[\w:]+\|','',inp_string)
     lf = LogicalForm(inp_string)
     splits = lf.split_off_leaves()
-    for f,g in splits:
-        print(f.subtree_as_string(), g.subtree_as_string())
+    sentence == sentence.rstrip('.')
+    tn = TreeNode(lf,sentence.split())
+    print(tn)
+    for f,g in tn.possible_splits:
+        print(f)
+        print(g)
+        print('\n')
+    breakpoint()
     break
