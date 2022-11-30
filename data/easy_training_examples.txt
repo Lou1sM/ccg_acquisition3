@@ -1,0 +1,44 @@
+Sent: he 's a man .
+Sem: lambda $0_{r}.det:art|a_3(pro:sub|he_1,n|man_4(pro:sub|he_1,$0))
+
+Sent: he has big wings .
+Sem: lambda $0_{r}.aux|have-3s_2(pro:sub|he_1,BARE($1,and(adj|big_3($1),n|wing-pl_4($1))),$0)
+
+Sent: I can fly .
+Sem: lambda $0_{r}.mod|can_2(v|fly_3(pro:sub|i_1,$0),$0)
+
+Sent: that 's a dinosaur .
+Sem: lambda $0_{r}.det:art|a_3(pro:dem|that_1,n|dinosaur_4(pro:dem|that_1,$0))
+
+Sent: that 's not a peacock .
+Sem: lambda $0_{r}.not(det:art|a_4(pro:dem|that_1,n|peacock_5(pro:dem|that_1,$0)),$0)
+
+Sent: I 'm drinking espresso .
+Sem: lambda $0_{r}.aux|~be_2(part|drink-presp_3(pro:sub|i_1,BARE($1,n|espresso_4($1)),$0),$0)
+
+Sent: I see your back .
+Sem: lambda $0_{r}.v|see_2(pro:sub|i_1,det:poss|your_3($1,n|back_4($1)),$0)
+
+Sent: you 're looking for it .
+Sem: lambda $0_{r}.aux|~be_2(and(part|look-presp_3(pro:per|you_1,$0),prep|for_4(pro:per|it_5,$0)),$0)
+
+Sent: Chocks are vitamins .
+Sem: lambda $0_{r}.n|vitamin-pl_3(n:prop|chocks_1,$0)
+
+Sent: you 're tired .
+Sem: lambda $0_{r}.part|tire-pastp_3(pro:per|you_1,$0)
+
+Sent: you blow it .
+Sem: lambda $0_{r}.v|blow_2(pro:per|you_1,pro:per|it_3,$0)
+
+Sent: you hit your shoulder .
+Sem: lambda $0_{r}.v|hit-zero_2(pro:per|you_1,det:poss|your_3($1,n|shoulder_4($1)),$0)
+
+Sent: Adam sit down .
+Sem: lambda $0_{r}.and(v|sit_2(you,$0),adv|down_3($0))
+
+Sent: you tell me .
+Sem: lambda $0_{r}.v|tell_2(pro:per|you_1,pro:obj|me_3,$0)
+
+Sent: you tell me .
+Sem: lambda $0_{r}.v|tell_2(pro:per|you_1,pro:obj|me_3,$0)
