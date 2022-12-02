@@ -29,12 +29,8 @@ class Exp:
         self.is_null = False
         self.inout = None
         self.double_quant = False
-        self.string = ""
         self.str_shell_prefix = 'placeholder_p'
         self.str_ubl_prefix = self.name.replace(':','#')
-
-    def set_string(self):
-        self.string = self.to_string(True)
 
     def repair_binding(self, orig):
         for arg, orig_arg in zip(self.arguments, orig.arguments):
@@ -333,9 +329,15 @@ class Exp:
 
         e.repair_binding(orige)
         self.repair_binding(origsem)
-        #if not sem.equals(self):
-        if self.to_string() != sem.to_string():
+        if not sem.equals(self):
+            #if self.to_string() != sem.to_string():
             print("sems dont match : "+sem.to_string(True)+"  "+self.to_string(True))
+            if len(self.to_string()) == len(sem.to_string()):
+                print(self.to_string())
+                print(sem.to_string())
+                breakpoint()
+        else:
+            print(111111111)
         return pairs
 
     def arity(self):
@@ -684,21 +686,6 @@ class Variable(Exp):
     def vartopprior(self):
         return -2.0
 
-    def make_shell(self, exp_dict):
-        if self.varcopy:
-            v = self.varcopy
-        elif self in exp_dict:
-            v = exp_dict[self]
-        else:
-            v = Variable(self)
-            v.name = self.name
-            exp_dict[self] = v
-        args = []
-        for a in self.arguments:
-            args.append(a.make_shell(exp_dict))
-        v.arguments = args
-        return v
-
     def is_empty(self):
         return False
 
@@ -844,19 +831,6 @@ class LambdaExp(Exp):
     def is_q(self):
         return self.funct.is_q()
 
-    def make_shell(self, exp_dict):
-        if self in exp_dict:
-            lambda_exp = exp_dict[self]
-        else:
-            lambda_exp = LambdaExp()
-            v = Variable(self.var)
-            exp_dict[self.var] = v
-            lambda_exp.set_var(v)
-            f = self.funct.make_shell(exp_dict)
-            lambda_exp.set_funct(f)
-            if self.get_is_null():
-                lambda_exp.set_is_null()
-        return lambda_exp
 
     def get_lvars(self):
         lvars = [self.var]
@@ -1096,16 +1070,6 @@ class Neg(Exp):
     def semprior(self):
         return -1.0 + self.arguments[0].semprior()
 
-    def make_shell(self, exp_dict):
-        if self in exp_dict:
-            n = exp_dict[self]
-        else:
-            n = Neg(self.arguments[0].make_shell(exp_dict), self.num_args)
-            if self.num_args == 2:
-                n.set_event(self.arguments[1].make_shell(exp_dict))
-        exp_dict[self] = n
-        return n
-
     def set_event(self, event):
         self.set_arg(1, event)
 
@@ -1295,18 +1259,6 @@ class Conjunction(Exp):
         for a in self.arguments: p += a.semprior()
         return p
 
-    def make_shell(self, exp_dict):
-        if self in exp_dict:
-            c = exp_dict[self]
-        else:
-            c = Conjunction()
-            c.set_type(self.name)
-        for i, a in enumerate(self.arguments):
-            a2 = a.make_shell(exp_dict)
-            c.set_arg(i, a2)
-        exp_dict[self] = c
-        return c
-
     def replace2(self, e1, e2):
         if e1==self:
             return e2
@@ -1392,7 +1344,6 @@ class Predicate(Exp):
         self.is_null = False
         self.inout = None
         self.double_quant = False
-        self.string = ""
         self.str_ubl_prefix = self.name
 
     def copy(self,no_var=False):
@@ -1503,27 +1454,6 @@ class Predicate(Exp):
         for a in self.arguments: p += a.semprior()
         return p
 
-    def make_shell(self, exp_dict):
-        args = []
-        for a in self.arguments:
-            args.append(a.make_shell(exp_dict))
-        if self in exp_dict:
-            e = exp_dict[self]
-        elif self.bind_var and len(args) > 1:
-            e = Predicate("placeholder_p", self.num_args, self.arg_types, self.pos_type,
-                          bind_var=self.bind_var, return_type=self.return_type)
-        elif self.bind_var:
-            e = Predicate("placeholder_p", self.num_args, self.arg_types, self.pos_type,
-                          bind_var=self.bind_var, var_is_const=self.var_is_const, return_type=self.return_type)
-        else:
-            e = Predicate("placeholder_p", self.num_args, self.arg_types, self.pos_type, return_type=self.return_type)
-        i=0
-        for a in args:
-            e.set_arg(i, a)
-            i+=1
-        exp_dict[self] = e
-        return e
-
     def repair_binding(self, orig):
         if self.bind_var and not self.var_is_const:
             if orig.arguments[0].binder == orig:
@@ -1586,7 +1516,8 @@ class QMarker(Exp):
         return True
 
     def to_string(self, top=True, extra_format=None):
-        s = "Q("+self.arguments[0].to_string(False,extra_format='ubl')+")"
+        #s = "Q("+self.arguments[0].to_string(False,extra_format='ubl')+")"
+        s = "Q("+self.arguments[0].to_string(False,extra_format=None)+")"
         if top:
             Exp.var_num = 0
             Exp.event_num = 0
@@ -1600,14 +1531,6 @@ class QMarker(Exp):
         p = -1.0
         for a in self.arguments: p += a.semprior()
         return p
-
-    def make_shell(self, exp_dict):
-        if self in exp_dict:
-            q = exp_dict[self]
-        else:
-            q = QMarker(self.arguments[0].make_shell(exp_dict))
-        exp_dict[self] = q
-        return q
 
     def equals(self, other):
         if not isinstance(other,QMarker) or \
@@ -1659,7 +1582,6 @@ def make_exp(pred_string, exp_string, exp_dict):
 
     for i, arg in enumerate(args):
         e.set_arg(i, arg)
-    e.set_string()
 
     exp_dict[pred_string] = [e, get_covered_string(exp_string, exp_string_remaining)]
     return e, exp_string_remaining
@@ -1711,7 +1633,6 @@ def make_lambda(exp_string, exp_dict):
     e = LambdaExp()
     e.set_funct(f)
     e.set_var(v)
-    e.set_string()
     return e, exp_string_remaining
 
 def make_complex_expression(exp_string, exp_dict):
@@ -1727,7 +1648,7 @@ def make_complex_expression(exp_string, exp_dict):
     return e, exp_string_remaining
 
 def make_var_or_const(exp_string, exp_dict):
-    if exp_string.__contains__(",") and exp_string.__contains__(")"):
+    if ',' in exp_string and ')' in exp_string:
         constend = min(exp_string.find(","), exp_string.find(")"))
     else:
         constend = max(exp_string.find(","), exp_string.find(")"))
@@ -1795,7 +1716,6 @@ def make_log_exp(predstring, exp_string, vardict):
         args, exp_string = extract_arguments(exp_string, vardict)
         for i, arg in enumerate(args):
             e.set_arg(i, arg)
-        e.set_string()
 
     elif predstring=="not":
         Negargs = []
@@ -1809,7 +1729,6 @@ def make_log_exp(predstring, exp_string, vardict):
             if len(Negargs) > 1:
                 e.set_event(Negargs[1])
         exp_string = exp_string[1:]
-        e.set_string()
 
     elif predstring == "Q":
         qargs = []

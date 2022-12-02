@@ -205,8 +205,7 @@ def get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count, test
         ms = {}
         for j in range(i+1, len(sentence)+1):
             sc[j]={}
-            #ms[j]=[] Louis: changed from this, think it should be -inf based on line 286 below
-            ms[j] = -inf
+            ms[j] = -inf #Louis: changed from '[]'
         chart1[i] = sc
         minscores[i] = ms
     if verbose: print("wordset is ", wordset)

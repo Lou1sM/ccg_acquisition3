@@ -1,4 +1,5 @@
 from generator import generateSent
+import re
 from inside_outside_calc import i_o_oneChart
 from parser import parse
 from build_inside_outside_chart import build_chart
@@ -36,6 +37,9 @@ def train_rules(lexicon,rule_set,sem_store, is_one_word, inputpairs, skip_q,
             semstring = line[5:].strip().rstrip()
             try:
                 sem, _ = exp.make_exp_with_args(semstring, {})
+                if not sem.to_string() == re.sub(r'_\d','',semstring):
+                    breakpoint()
+                    print('sem string doesn\'t match original')
             except (AttributeError, IndexError):
                 print("LF could not be parsed\nSent : " + sentence)
                 print("Sem: " + semstring + "\n\n")
