@@ -1,13 +1,6 @@
-import numpy as np
-from copy import deepcopy
+import json
+import argparse
 import re
-
-
-with open('data/easy_training_examples.txt') as f:
-    data = f.readlines()
-
-X = [x[6:-1] for x in data if x.startswith('Sent')]
-y = [x[5:-1] for x in data if x.startswith('Sem')]
 
 
 class LogicalForm:
@@ -120,9 +113,6 @@ class TreeNode():
                 right_child_backward = TreeNode(f,right_words)
                 self.possible_splits.append((left_child_backward,right_child_backward))
 
-    #def all_parses(self):
-
-
     def __repr__(self):
         return (f"Treenode\nWords: {' '.join(self.words)}\n"
                 f"With {self.logical_form.__repr__()}\n")
@@ -154,14 +144,30 @@ def shift_variable_names(lf_as_string,shift_from=[0]):
     return lf_as_string
 
 
-for sentence,inp_string in zip(X[:3],y[:3]):
-    inp_string = re.sub(r'_\d','',inp_string)
-    inp_string = re.sub(r'_\{[er]\}','',inp_string)
-    inp_string = re.sub(r'[\w:]+\|','',inp_string)
-    lf = LogicalForm(inp_string)
+ARGS = argparse.ArgumentParser()
+ARGS.add_argument("--expname", type=str, default='tmp',
+                      help="the directory to write output files")
+ARGS.add_argument("--dset", type=str, choices=['easy-adam','geo'], default="geo")
+ARGS.add_argument("--is_dump_verb_repo", action="store_true",
+                      help="whether to dump the verb repository")
+ARGS.add_argument("--devel", "--development_mode", action="store_true")
+ARGS = ARGS.parse_args()
+
+if ARGS.dset == 'easy-adam':
+    with open('data/easy_training_examples.txt') as f:
+        data = f.readlines()
+
+    X = [re.sub(r'_\d|_\{[er]\}|[\w:]+\|','',x[6:-1]) for x in data if x.startswith('Sent')]
+    y = [x[5:-2] for x in data if x.startswith('Sem')]
+
+else:
+    with open('preprocessed_geoqueries.json') as f: d=json.load(f)
+
+for dpoint in d['data']:
+    words, parse = dpoint['words'], dpoint['parse']
+    lf = LogicalForm(parse)
     splits = lf.split_off_leaves()
-    sentence == sentence.rstrip('.')
-    tn = TreeNode(lf,sentence.split())
+    tn = TreeNode(lf,words)
     print(tn)
     for f,g in tn.possible_splits:
         print(f)
