@@ -4,9 +4,9 @@ import re
 def is_balanced_nums_brackets(s):
     return len(re.findall(r'\(',s)) == len(re.findall(r'\)',s))
 
-def outermost_first_bracketted_chunk(s):
+def outermost_first_bracketed_chunk(s):
     """Similar to the first argument returned by split_respecting_brackets,
-    but here we don't need a separator, just split as soon as brackest are
+    but here we don't need a separator, just split as soon as brackets are
     closed, e.g. f(x,y)g(z) --> f(x,y)
     """
 
@@ -23,7 +23,6 @@ def outermost_first_bracketted_chunk(s):
             assert is_balanced_nums_brackets(s[i+1:])
             return s[:i+1], s[i+1:]
     breakpoint()
-
 
 def split_respecting_brackets(s,sep=' '):
     """Only make a split when there are no open brackets."""
@@ -49,3 +48,13 @@ def all_sublists(x):
 
     recursed = all_sublists(x[1:])
     return recursed + [[x[0]]+item for item in recursed]
+
+def remove_possible_outer_brackets(s):
+    while True:
+        if not is_bracketed(s):
+            return s
+        elif outermost_first_bracketed_chunk(s)[0] == s:
+            s = s[1:-1]
+        else:
+            break
+    return s

@@ -1,5 +1,5 @@
 import json
-from utils import split_respecting_brackets, is_bracketed, all_sublists
+from utils import split_respecting_brackets, is_bracketed, all_sublists, remove_possible_outer_brackets
 import argparse
 import re
 
@@ -86,6 +86,22 @@ class LogicalForm:
         num = len(self.var_descendents)
         return num
 
+    @property
+    def new_var_num(self):
+        return '$0' if self.var_descendents == [] else max(self.var_descendents)+1
+
+    @property
+    def max_var_index(self):
+        var_occurrences = re.findall(r'\$\d',self.subtree_as_string())
+        var_indices = [int(v[1]) for v in var_occurrences]
+        return -1 if len(var_indices)==0 else max(var_indices)
+
+    @property
+    def num_lambda_binders(self):
+        maybe_lambda_list = self.subtree_as_string().split('.')
+        assert all([x.startswith('lambda') for x in maybe_lambda_list[:-1]])
+        return len(maybe_lambda_list)-1
+
     def extend_var_descendents(self,var_num):
         if var_num not in self.var_descendents:
             self.var_descendents.append(var_num)
@@ -132,12 +148,6 @@ class LogicalForm:
             return False
         return other.subtree_as_string() == self.subtree_as_string()
 
-    @property
-    def max_var_index(self):
-        var_occurrences = re.findall(r'\$\d',self.subtree_as_string())
-        var_indices = [int(v[1]) for v in var_occurrences]
-        return -1 if len(var_indices)==0 else max(var_indices)
-
     def turn_nodes_to_vars(self,nodes):
         copied = self.copy()
         if len(nodes) == 0:
@@ -148,7 +158,7 @@ class LogicalForm:
         # i.e. node itself, rather than its copy in the list
         vars_abstracted = []
         for desc in to_remove:
-            var_num = copied.num_var_descendents
+            var_num = copied.new_var_num
             desc.string = f'${var_num}'
             vars_abstracted.append(var_num)
             desc.extend_var_descendents(var_num)
@@ -158,8 +168,11 @@ class LogicalForm:
         return copied
 
     def all_splits(self):
+        if self.is_leaf:
+            return []
+        if self.num_lambda_binders > 4:
+            return []
         splits = []
-        new_lf_string = f'lambda ${self.max_var_index+1}.' + self.subtree_as_string()
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
         for removee_idxs in all_sublists(possible_removee_idxs):
             if removee_idxs == []: continue
@@ -177,17 +190,29 @@ class LogicalForm:
                         changed = True
                         entry_point = entry_point.parent
                         break
+            print('entry point', entry_point)
             g = entry_point.copy()
             to_present_as_args_to_g = [d for d in entry_point.leaf_descendents if d not in to_remove]
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
-            g_sub_var_num = f.num_var_descendents + g.num_var_descendents
-            new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(set([n.string for n in to_present_as_args_to_g])))
+            if g.num_lambda_binders > 4:
+                continue
+            g_sub_var_num = max(self.var_descendents)+2
+            #new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(set([n.string for n in to_present_as_args_to_g])))
+            new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
             entry_point.__init__(new_entry_point_in_f_as_str)
             f.__init__(f'lambda ${g_sub_var_num}.' + f.subtree_as_string())
-            breakpoint()
+            if f.num_lambda_binders > 4:
+                continue
+            concatted = concat_lfs(f,g)
+            print(beta_normalize(concatted))
+            if not beta_normalize(concatted) == self.subtree_as_string():
+                breakpoint()
+            beta_normalize(concatted)
             splits.append((f,g))
         return splits
 
+def concat_lfs(lf1,lf2):
+    return '(' + lf1.subtree_as_string() + ') (' + lf2.subtree_as_string() + ')'
 
 class TreeNode():
     def __init__(self,lf,words,parent,parent_rule=None):
@@ -207,8 +232,7 @@ class TreeNode():
         else:
             self.syntactic_category = 'PLACEHOLDER'
 
-        lf_splits = self.logical_form.all_splits()
-        for f,g in lf_splits:
+        for f,g in self.logical_form.all_splits():
             for split_point in range(1,len(self.words)-1):
                 left_words = self.words[:split_point]
                 right_words = self.words[split_point:]
@@ -225,20 +249,39 @@ class TreeNode():
                 f"and syn-cat {self.syntactic_category}\n")
 
 def beta_normalize(m):
+    m = remove_possible_outer_brackets(m)
+    if m.startswith('lambda'):
+        lambda_binder = re.match(r'lambda \$\d+\.',m).group(0)
+        body = m[len(lambda_binder):]
+        return lambda_binder + beta_normalize(body)
+    if re.match(r'^[\w\$]*$',m):
+        return m
     splits = split_respecting_brackets(m)
     if len(splits) == 1:
         return m
     # left-associative, so recurse to the left
-    left = beta_normalize(' '.join(splits[:-1]))
-    right = beta_normalize(splits[-1])
+    left_ = remove_possible_outer_brackets(' '.join(splits[:-1]))
+    #left = '('+beta_normalize(left_)+')'
+    left = beta_normalize(left_)
+    assert 'lambda (' not in left
+    right_ = splits[-1]
+    right = beta_normalize(right_)
+    if not re.match(r'^[\w\$]*$',right):
+        right = '('+right+')'
+
     if left.startswith('lambda'):
         lambda_binder,_,rest = left.partition('.')
-        assert len(lambda_binder) == 9
-        var_name = lambda_binder[-2:]
+        assert re.match(r'lambda \$\d{1,2}',lambda_binder)
+        var_name = lambda_binder[7:]
         assert re.match(r'\$\d',var_name)
         combined = re.sub(re.escape(var_name),right,rest)
+        #return '('+beta_normalize(combined)+')'
         return beta_normalize(combined)
     else:
+        #if re.match(r'^[\w\$]*$',right):
+            #return f'{left} {right}'
+        #else:
+            #return f'{left} ({right})'
         return ' '.join([left,right])
 
 

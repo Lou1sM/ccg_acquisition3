@@ -1,5 +1,5 @@
 import re
-from utils import split_respecting_brackets, is_bracketed, outermost_first_bracketted_chunk
+from utils import split_respecting_brackets, is_bracketed, outermost_first_bracketed_chunk
 import json
 
 with open('geoqueries880') as f:
@@ -51,7 +51,7 @@ def convert_to_no_comma_form(parse):
         return parse
     end_of_lambda = parse.rfind('.')
     to_split = parse[end_of_lambda+1:] if end_of_lambda!=-1 else parse
-    first_chunk, rest = outermost_first_bracketted_chunk(to_split)
+    first_chunk, rest = outermost_first_bracketed_chunk(to_split)
     if first_chunk.startswith('('):
         if '(' in first_chunk[1:]: # not just list of variables
             arg_splits = split_respecting_brackets(first_chunk[1:-1],sep=',')
