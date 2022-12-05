@@ -1,5 +1,5 @@
 import re
-from utils import split_respecting_parentheses, is_bracketed, outermost_first_bracketted_chunk
+from utils import split_respecting_brackets, is_bracketed, outermost_first_bracketted_chunk
 import json
 
 with open('geoqueries880') as f:
@@ -53,13 +53,16 @@ def convert_to_no_comma_form(parse):
     to_split = parse[end_of_lambda+1:] if end_of_lambda!=-1 else parse
     first_chunk, rest = outermost_first_bracketted_chunk(to_split)
     if first_chunk.startswith('('):
-        converted = convert_to_no_comma_form(to_split[1:-1])
-        if '(' in converted:
-            converted = f'AND ({converted})'
+        if '(' in first_chunk[1:]: # not just list of variables
+            arg_splits = split_respecting_brackets(first_chunk[1:-1],sep=',')
+            recursed = ' '.join(['('+convert_to_no_comma_form(x)+')' for x in arg_splits])
+            converted = f'AND {recursed}'
+        else:
+            converted = convert_to_no_comma_form(to_split[1:-1])
     else:
         end_of_predicate = first_chunk.find('(')
         pred = first_chunk[:end_of_predicate]
-        arg_splits = split_respecting_parentheses(first_chunk[end_of_predicate+1:-1],sep=',')
+        arg_splits = split_respecting_brackets(first_chunk[end_of_predicate+1:-1],sep=',')
         recursed = ' '.join([convert_to_no_comma_form(x) for x in arg_splits])
         converted = f'{pred} {recursed}'
     if rest.startswith(','): rest = rest[1:]
@@ -82,7 +85,7 @@ for gl in geoquery_data:
     print(f'\n{parse}\n')
     decommaified = convert_to_no_comma_form(parse)
     print(parse,'\t',decommaified)
-    dpoints.append({'words':words,'parse':parse})
+    dpoints.append({'words':words,'parse':decommaified,'parse_with_commas':parse})
 
 processed_dset = {'np_list':np_list, 'intransitive_verbs':list(intransitives),
                     'transitive_verbs': list(transitives), 'data':dpoints}

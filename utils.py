@@ -5,6 +5,11 @@ def is_balanced_nums_brackets(s):
     return len(re.findall(r'\(',s)) == len(re.findall(r'\)',s))
 
 def outermost_first_bracketted_chunk(s):
+    """Similar to the first argument returned by split_respecting_brackets,
+    but here we don't need a separator, just split as soon as brackest are
+    closed, e.g. f(x,y)g(z) --> f(x,y)
+    """
+
     num_open_brackets = 0
     has_been_bracketed = False
     for i,c in enumerate(s):
@@ -20,11 +25,8 @@ def outermost_first_bracketted_chunk(s):
     breakpoint()
 
 
-def split_respecting_parentheses(s,sep=' '):
-    """Only make a split when there are no open parentheses. Second return is
-    a bool indicating if there are superfluous surrounding parentheses."""
-    #while s.startswith('(') and s.endswith(')'):
-        #s = s[1:-1]
+def split_respecting_brackets(s,sep=' '):
+    """Only make a split when there are no open brackets."""
     num_open_brackets = 0
     split_points = [-1]
     for i,c in enumerate(s):
@@ -34,12 +36,16 @@ def split_respecting_parentheses(s,sep=' '):
             num_open_brackets += 1
         elif c == ')':
             num_open_brackets -= 1
-    #if split_points == [-1] and ',' in s and s.startswith('(') and s.endswith(')'):
-        #splits, _ =  split_respecting_parentheses(s[1:-1],sep=sep)
-        #return splits, True
     split_points.append(len(s))
     splits = [s[split_points[i]+1:split_points[i+1]] for i in range(len(split_points)-1)]
     return splits
 
 def is_bracketed(s):
     return s.startswith('(') and s.endswith(')')
+
+def all_sublists(x):
+    if len(x) == 0:
+        return [[]]
+
+    recursed = all_sublists(x[1:])
+    return recursed + [[x[0]]+item for item in recursed]
