@@ -1,10 +1,14 @@
 import json
+from utils import split_respecting_brackets, is_bracketed, all_sublists
 import argparse
 import re
 
 
 class LogicalForm:
-    def __init__(self,defining_string):
+    def __init__(self,defining_string,parent=None):
+        had_surrounding_brackets = False
+        self.var_descendents = []
+        self.parent = parent
         if '.' in defining_string:
             lambda_string, _, remaining_string = defining_string.partition('.')
             assert bool(re.match(r'lambda \$\d',lambda_string))
@@ -12,33 +16,91 @@ class LogicalForm:
             self.is_leaf = False
             self.string = lambda_string
             self.node_type = 'lmbda'
-            self.children = [LogicalForm(remaining_string)]
+            self.children = [LogicalForm(remaining_string,parent=self)]
 
-            for d in self.list_descendents():
+            for d in self.descendents:
                 if d.node_type == 'unbound_var' and d.string == variable_index:
                     d.binder = self
                     d.node_type = 'bound_var'
         else:
-            head_string, _, possible_args = defining_string.partition('(')
-            self.string = head_string
-            if len(possible_args) > 0:
-                self.node_type = 'pred'
-                arguments = split_respecting_parentheses(possible_args[:-1]) # -1 removes final ')'
-                self.children = [LogicalForm(a) for a in arguments]
+            if ' ' in defining_string:
+                self.string = ''
+                self.node_type = 'composite'
+                arguments = split_respecting_brackets(defining_string)
+                if len(arguments) == 1 and is_bracketed(defining_string):
+                    had_surrounding_brackets = True
+                    assert not is_bracketed(defining_string[1:-1])
+                    arguments = split_respecting_brackets(defining_string[1:-1])
+                self.children = [LogicalForm(a,parent=self) for a in arguments]
                 self.is_leaf = False
             else:
+                self.string = defining_string
                 self.children = []
                 self.is_leaf = True
                 if self.string.startswith('$'):
                     self.node_type = 'unbound_var'
+                    self.extend_var_descendents(int(self.string[1:]))
+                elif self.string == 'AND':
+                    self.node_type = 'connective'
                 else:
                     self.node_type = 'const'
-        assert self.subtree_as_string() == defining_string
+        if had_surrounding_brackets:
+            assert self.subtree_as_string() == defining_string[1:-1], f'string of created node, {self.subtree_as_string()} is not equal to defining string {defining_string}'
+        else:
+            assert self.subtree_as_string() == defining_string, f'string of created node, {self.subtree_as_string()} is not equal to defining string {defining_string}'
 
-    def list_descendents(self):
-        return [self] + [x for item in self.children for x in item.list_descendents()]
+    @property
+    def right_siblings(self):
+        if self.parent is None:
+            return [self]
+        siblings = self.parent.children
+        idx = siblings.index(self)
+        return siblings[idx+1:]
+
+    @property
+    def descendents_and_right_siblings(self):
+        return [d for s in [self]+self.right_siblings for d in s.descendents]
+
+    @property
+    def descendents(self):
+        return [self] + [x for item in self.children for x in item.descendents]
+
+    @property
+    def leaf_descendents(self):
+        if self.is_leaf:
+            return [self]
+        return [x for item in self.children for x in item.leaf_descendents]
+
+    @property
+    def BFSdescendents(self):
+        descendents = []
+        frontier = [self]
+        while len(frontier) > 0:
+            new = frontier.pop()
+            frontier += new.children
+            descendents.append(new)
+        return descendents
+
+    @property
+    def num_var_descendents(self):
+        num = len(self.var_descendents)
+        return num
+
+    def extend_var_descendents(self,var_num):
+        if var_num not in self.var_descendents:
+            self.var_descendents.append(var_num)
+        if self.parent is not None:
+            self.parent.extend_var_descendents(var_num)
 
     def subtree_as_string(self,show_treelike=False):
+        x = self.subtree_as_string_(show_treelike)
+        assert is_bracketed(x) or ' ' not in x or self.node_type == 'lmbda'
+        if is_bracketed(x):
+            return x[1:-1]
+        else:
+            return x
+
+    def subtree_as_string_(self,show_treelike):
         if self.node_type == 'lmbda':
             subtree_string = self.children[0].subtree_as_string(show_treelike)
             if show_treelike:
@@ -46,13 +108,13 @@ class LogicalForm:
                 return f'{self.string}\n\t{subtree_string}\n'
             else:
                 return f'{self.string}.{subtree_string}'
-        elif self.node_type == 'pred':
-            child_trees = [c.subtree_as_string(show_treelike) for c in self.children]
+        elif self.node_type == 'composite':
+            child_trees = [c.subtree_as_string_(show_treelike) for c in self.children]
             if show_treelike:
                 subtree_string = '\n\t'.join([c.replace('\n\t','\n\t\t') for c in child_trees])
                 return f'{self.string}\n\t{subtree_string}'
             else:
-                subtree_string = ','.join(child_trees)
+                subtree_string = ' '.join(child_trees)
                 return f'{self.string}({subtree_string})'
         else:
             return self.string
@@ -76,62 +138,109 @@ class LogicalForm:
         var_indices = [int(v[1]) for v in var_occurrences]
         return -1 if len(var_indices)==0 else max(var_indices)
 
-    def split_off_leaves(self):
+    def turn_nodes_to_vars(self,nodes):
+        copied = self.copy()
+        if len(nodes) == 0:
+            return copied
+        to_remove = [d for d in copied.descendents if d in nodes]
+        # node may be 'in' another list if there is another node in that list
+        # that has the same defining string as node, but we want the reference,
+        # i.e. node itself, rather than its copy in the list
+        vars_abstracted = []
+        for desc in to_remove:
+            var_num = copied.num_var_descendents
+            desc.string = f'${var_num}'
+            vars_abstracted.append(var_num)
+            desc.extend_var_descendents(var_num)
+            desc.node_type = 'bound_var'
+        lambda_prefix = '.'.join([f'lambda ${vn}' for vn in reversed(vars_abstracted)])
+        copied = LogicalForm(lambda_prefix+'.' + copied.subtree_as_string())
+        return copied
+
+    def all_splits(self):
         splits = []
         new_lf_string = f'lambda ${self.max_var_index+1}.' + self.subtree_as_string()
-        for to_remove_idx, d in enumerate(self.list_descendents()):
-            if not d.is_leaf or d==self or d.node_type=='bound_var':
-                continue
-            f = LogicalForm(new_lf_string)
-            assert len(f.list_descendents()) == len(self.list_descendents())+1
-            for orig,copied, in zip(self.list_descendents(),f.list_descendents()[1:]):
-                assert copied.node_type == orig.node_type
-            node_being_removed = f.list_descendents()[to_remove_idx+1]
-            assert node_being_removed == d
-            node_being_removed.node_type = 'bound_var'
-            node_being_removed.string = f'${self.max_var_index+1}'
-            g = d.copy()
+        possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
+        for removee_idxs in all_sublists(possible_removee_idxs):
+            if removee_idxs == []: continue
+            f = self.copy()
+            to_remove = [f.descendents[i] for i in removee_idxs]
+            leftmost = f.descendents[min(removee_idxs)]
+            entry_point = leftmost # where to substitute g into f
+            changed = True
+            while changed:
+                if entry_point.parent is None:
+                    break
+                changed = False
+                for tr in to_remove:
+                    if tr not in entry_point.descendents:
+                        changed = True
+                        entry_point = entry_point.parent
+                        break
+            g = entry_point.copy()
+            to_present_as_args_to_g = [d for d in entry_point.leaf_descendents if d not in to_remove]
+            g = g.turn_nodes_to_vars(to_present_as_args_to_g)
+            g_sub_var_num = f.num_var_descendents + g.num_var_descendents
+            new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(set([n.string for n in to_present_as_args_to_g])))
+            entry_point.__init__(new_entry_point_in_f_as_str)
+            f.__init__(f'lambda ${g_sub_var_num}.' + f.subtree_as_string())
+            breakpoint()
             splits.append((f,g))
         return splits
 
 
 class TreeNode():
-    def __init__(self,lf,words,syntactic_category='TODO'):
+    def __init__(self,lf,words,parent,parent_rule=None):
         self.logical_form = lf
         self.words = words
-        self.syntactic_category = syntactic_category
         self.possible_splits = []
-        lf_splits = self.logical_form.split_off_leaves()
+        self.parent = parent
+        self.parent_rule = parent_rule
+        if self.parent == 'START':
+            self.syntactic_category = 'S'
+        elif self.logical_form.string in NPS:
+            self.syntactic_category = 'NP'
+        elif self.logical_form.string in INTRANSITIVES:
+            self.syntactic_category = 'S|NP'
+        elif self.logical_form.string in TRANSITIVES:
+            self.syntactic_category = 'S|NP|NP'
+        else:
+            self.syntactic_category = 'PLACEHOLDER'
+
+        lf_splits = self.logical_form.all_splits()
         for f,g in lf_splits:
             for split_point in range(1,len(self.words)-1):
                 left_words = self.words[:split_point]
                 right_words = self.words[split_point:]
-                left_child_forward = TreeNode(f,left_words)
-                right_child_forward = TreeNode(g,right_words)
+                left_child_forward = TreeNode(f,left_words,parent=self,parent_rule='fwd')
+                right_child_forward = TreeNode(g,right_words,parent=self,parent_rule='fwd')
                 self.possible_splits.append((left_child_forward,right_child_forward))
-                left_child_backward = TreeNode(g,left_words)
-                right_child_backward = TreeNode(f,right_words)
+                left_child_backward = TreeNode(g,left_words,parent=self,parent_rule='bckwd')
+                right_child_backward = TreeNode(f,right_words,parent=self,parent_rule='bckwd')
                 self.possible_splits.append((left_child_backward,right_child_backward))
 
     def __repr__(self):
         return (f"Treenode\nWords: {' '.join(self.words)}\n"
-                f"With {self.logical_form.__repr__()}\n")
+                f"With {self.logical_form.__repr__()}\n"
+                f"and syn-cat {self.syntactic_category}\n")
 
+def beta_normalize(m):
+    splits = split_respecting_brackets(m)
+    if len(splits) == 1:
+        return m
+    # left-associative, so recurse to the left
+    left = beta_normalize(' '.join(splits[:-1]))
+    right = beta_normalize(splits[-1])
+    if left.startswith('lambda'):
+        lambda_binder,_,rest = left.partition('.')
+        assert len(lambda_binder) == 9
+        var_name = lambda_binder[-2:]
+        assert re.match(r'\$\d',var_name)
+        combined = re.sub(re.escape(var_name),right,rest)
+        return beta_normalize(combined)
+    else:
+        return ' '.join([left,right])
 
-def split_respecting_parentheses(s):
-    """Only make a split when there are no open parentheses."""
-    num_open_brackets = 0
-    split_points = [-1]
-    for i,c in enumerate(s):
-        if c == ',' and num_open_brackets == 0:
-            split_points.append(i)
-        elif c == '(':
-            num_open_brackets += 1
-        elif c == ')':
-            num_open_brackets -= 1
-    split_points.append(len(s))
-    splits = [s[split_points[i]+1:split_points[i+1]] for i in range(len(split_points)-1)]
-    return splits
 
 def shift_variable_names(lf_as_string,shift_from=[0]):
     for sf in shift_from:
@@ -161,13 +270,19 @@ if ARGS.dset == 'easy-adam':
     y = [x[5:-2] for x in data if x.startswith('Sem')]
 
 else:
-    with open('preprocessed_geoqueries.json') as f: d=json.load(f)
+    with open('data/preprocessed_geoqueries.json') as f: d=json.load(f)
+
+NPS = d['np_list']
+TRANSITIVES = d['transitive_verbs']
+INTRANSITIVES = d['intransitive_verbs']
 
 for dpoint in d['data']:
     words, parse = dpoint['words'], dpoint['parse']
     lf = LogicalForm(parse)
-    splits = lf.split_off_leaves()
-    tn = TreeNode(lf,words)
+    splits = lf.all_splits()
+    if '.' in words:
+        breakpoint()
+    tn = TreeNode(lf,words,'START')
     print(tn)
     for f,g in tn.possible_splits:
         print(f)
