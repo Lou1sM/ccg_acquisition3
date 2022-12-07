@@ -5,11 +5,19 @@ import argparse
 import re
 
 
+# is_leaf means its atomic in lambda calculus
+# is_semantic_leaf means we shouldn't consider breaking it further
+# e.g. lambda $0. state $0 is a semantic leaf but a leaf
 class LogicalForm:
     def __init__(self,defining_string,parent=None):
         had_surrounding_brackets = False
         self.var_descendents = []
+        self.splits = []
         self.parent = parent
+        if parent == 'START':
+            self.semantic_category = 'S'
+            self.is_semantic_leaf = False
+
         if '.' in defining_string:
             lambda_string, _, remaining_string = defining_string.partition('.')
             assert bool(re.match(r'lambda \$\d',lambda_string))
@@ -50,23 +58,35 @@ class LogicalForm:
         else:
             assert self.subtree_string() == defining_string, f'string of created node, {self.subtree_string()} is not equal to defining string {defining_string}'
 
-        if self.stripped_string in NPS:
-            self.is_syntactic_leaf = True
-            self.syntactic_category = 'NP'
-        elif self.stripped_string in INTRANSITIVES:
-            self.is_syntactic_leaf = True
-            self.syntactic_category = 'S|NP'
-        elif self.stripped_string in TRANSITIVES:
-            self.is_syntactic_leaf = True
-            self.syntactic_category = 'S|NP|NP'
+        if self.parent != 'START':
+            self.infer_semantic_category_shallow()
+
+    def infer_semantic_category_shallow(self):
+        """Just check if in base lexicon, no recursive split."""
+        if lookup_base_lexicon(self.stripped_subtree_string) != 'XXX':
+            self.is_semantic_leaf = True
+            self.semantic_category = lookup_base_lexicon(self.stripped_subtree_string)
         else:
-            self.is_syntactic_leaf = False
-            self.syntactic_category = 'XXX'
+            self.is_semantic_leaf = False
+            self.semantic_category = 'XXX'
+            #if self.num_lambda_binders == 2 and re.match(r'((lambda \$\d{1,2}\.?)+AND)',self.subtree_string()) is not None:
+            #    assert self.stripped_subtree_string.startswith('AND')
+            #    # check if a type-raised version
+            #    if lookup_base_lexicon(self.stripped_subtree_string[3:]) != 'XXX': # only thing apart from AND is in base_lexicon
+            #        inner_var = self.subtree_string().split('.')[-2].split(' ')[1]
+            #        terms_after_the_AND = re.sub(r'^(lambda \$\d{1,2}\.?)*AND ','',self.subtree_string())
+            #        if all([inner_var in x for x in split_respecting_brackets(terms_after_the_AND)]):
+            #            breakpoint()
+            #            self.is_semantic_leaf = True
+            #            untyperaised = lookup_base_lexicon(self.stripped_subtree_string[3:])
+            #            self.semantic_category = f'S|({untyperaised})' # always assume S for now
 
     @property
-    def stripped_string(self):
+    def stripped_subtree_string(self):
         ss = re.sub(r'lambda \$\d{1,2}\.','',self.subtree_string())
-        ss = re.sub(r'[\$\d \(\)]','',ss) # assuming '$' and '\d' not in string
+        ss = re.sub(r'( \$\d)+$','',ss).replace('()','')
+        # allowed to have trailing bound variables
+        return strip_string(self.subtree_string())
         return ss
 
     @property
@@ -92,7 +112,7 @@ class LogicalForm:
     def extend_var_descendents(self,var_num):
         if var_num not in self.var_descendents:
             self.var_descendents.append(var_num)
-        if self.parent is not None:
+        if self.parent is not None and self.parent != 'START':
             self.parent.extend_var_descendents(var_num)
 
     def subtree_string(self,show_treelike=False):
@@ -125,10 +145,12 @@ class LogicalForm:
     def copy(self):
         copied_version = LogicalForm(self.subtree_string())
         assert copied_version == self
+        copied_version.semantic_category = self.semantic_category
         return copied_version
 
     def __repr__(self):
-        return f'LogicalForm of type {self.node_type.upper()}: {self.subtree_string()}'
+        return (f'LogicalForm of type {self.node_type.upper()}: {self.subtree_string()}'
+                f'\n\tsemantic category: {self.semantic_category}')
 
     def __eq__(self,other):
         if not isinstance(other,LogicalForm):
@@ -154,12 +176,11 @@ class LogicalForm:
         copied = LogicalForm(lambda_prefix+'.' + copied.subtree_string())
         return copied
 
-    def all_splits(self):
-        if self.is_leaf:
+    def infer_splits(self):
+        if self.is_semantic_leaf:
             return []
         if self.num_lambda_binders > 4:
             return []
-        splits = []
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
         for removee_idxs in all_sublists(possible_removee_idxs):
             if removee_idxs == []: continue
@@ -180,20 +201,48 @@ class LogicalForm:
             g = entry_point.copy()
             to_present_as_args_to_g = [d for d in entry_point.leaf_descendents if d not in to_remove]
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
-            if g.num_lambda_binders > 4:
+            if g.num_lambda_binders > 4 or strip_string(f.subtree_string().replace(' AND','')): # don't consider only variables
                 continue
             g_sub_var_num = self.new_var_num+1
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
             entry_point.__init__(new_entry_point_in_f_as_str)
+            if strip_string(f.subtree_string().replace(' AND','')) == '': # also exclude case where only substantive is 'AND'
+                continue
             f.__init__(f'lambda ${g_sub_var_num}.' + f.subtree_string())
             if f.num_lambda_binders > 4:
                 continue
             concatted = concat_lfs(f,g)
             if not beta_normalize(concatted) == self.subtree_string():
                 breakpoint()
-            beta_normalize(concatted)
-            splits.append((f,g))
-        return splits
+            assert f != self
+            assert g != self
+            f.infer_splits();
+            g.infer_splits()
+            self.splits.append((f,g))
+            if g.sem_cat_is_set:
+                if f.sem_cat_is_set:
+                    hits = re.findall(fr'\(?{re.escape(g.semantic_category)}\)?$',f.semantic_category)
+                    for hit in hits:
+                        self.semantic_category = f.semantic_category[:-len(hit)-1]
+                if self.sem_cat_is_set:
+                    self.propagate_semantic_category_leftward(f,g)
+            assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
+        return self.splits
+
+    def propagate_semantic_category_leftward(self,f,g):
+        if '|' in g.semantic_category:
+            new_assigned_category = f'{self.semantic_category}|({g.semantic_category})'
+        else:
+            new_assigned_category = f'{self.semantic_category}|{g.semantic_category}'
+        assert f.semantic_category in [new_assigned_category,'XXX']
+        f.semantic_category = new_assigned_category
+        for f1,g1 in f.splits:
+            if g1.sem_cat_is_set:
+                f.propagate_semantic_category_leftward(f1,g1)
+
+    @property
+    def sem_cat_is_set(self):
+        return self.semantic_category != 'XXX'
 
 def concat_lfs(lf1,lf2):
     return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'
@@ -212,27 +261,31 @@ class ParseNode():
             f"you're failing to specify a parent for a non-root node"
         assert (sibling is None) or (node_type != 'ROOT'), \
             f"you're trying to specify a sibling for the root node"
-        self.syntactic_category = self.logical_form.syntactic_category
-        self.is_syntactic_leaf = self.logical_form.is_syntactic_leaf
-        if self.logical_form.stripped_string in NPS:
+        self.semantic_category = self.logical_form.semantic_category
+        self.is_leaf = self.logical_form.is_semantic_leaf
+        if self.logical_form.stripped_subtree_string in NPS:
             self.is_leaf = True
-            self.syntactic_category_placeholder = 'NP'
-        elif self.logical_form.stripped_string in INTRANSITIVES:
+            self.semantic_category_placeholder = 'NP'
+        elif self.logical_form.stripped_subtree_string in INTRANSITIVES:
             self.is_leaf = True
-            self.syntactic_category_placeholder = 'S|NP'
-        elif self.logical_form.stripped_string in TRANSITIVES:
+            self.semantic_category_placeholder = 'S|NP'
+        elif self.logical_form.stripped_subtree_string in TRANSITIVES:
             self.is_leaf = True
-            self.syntactic_category_placeholder = 'S|NP|NP'
+            self.semantic_category_placeholder = 'S|NP|NP'
         else:
             self.is_leaf = False
-            self.syntactic_category_placeholder = 'XXX'
+            self.semantic_category_placeholder = 'XXX'
 
             if len(self.words) == 1:
                 return
 
-            for f,g in self.logical_form.all_splits():
-                if f.is_syntactic_leaf and g.is_syntactic_leaf:
-                    if re.match(fr'.*\|{g.syntactic_category}',f.syntactic_category):
+            self.logical_form.infer_splits()
+            for f,g in self.logical_form.splits:
+                if not f.sem_cat_is_set:
+                    print(f)
+                    print(g)
+                if f.is_semantic_leaf and g.is_semantic_leaf:
+                    if re.match(fr'.*\|{g.semantic_category}',f.semantic_category):
                         self.add_splits(f,g,'fwd')
                         self.add_splits(f,g,'bckwd')
                 else:
@@ -249,15 +302,15 @@ class ParseNode():
             if direction == 'fwd':
                 left_child = ParseNode(f,left_words,parent=self,node_type='left_fwd')
                 right_child = ParseNode(g,right_words,parent=self,node_type='right_fwd')
-                hits = re.findall(fr'[/\|]\(?{re.escape(right_child.syntactic_category)}\)?$',left_child.syntactic_category)
+                hits = re.findall(fr'[/\|]\(?{re.escape(right_child.semantic_category)}\)?$',left_child.semantic_category)
                 for hit in hits:
-                    self.syntactic_category = left_child.syntactic_category[:-len(hit)]
+                    self.semantic_category = left_child.semantic_category[:-len(hit)]
             elif direction == 'bckwd':
                 right_child = ParseNode(f,right_words,parent=self,node_type='right_bckwd')
                 left_child = ParseNode(g,left_words,parent=self,node_type='right_fwd')
-                hits = re.findall(fr'[\\\|]\(?{re.escape(right_child.syntactic_category)}\)?$',left_child.syntactic_category)
+                hits = re.findall(fr'[\\\|]\(?{re.escape(right_child.semantic_category)}\)?$',left_child.semantic_category)
             for hit in hits:
-                self.syntactic_category_placeholder = left_child.syntactic_category[:-len(hit)-1]
+                self.semantic_category_placeholder = left_child.semantic_category[:-len(hit)-1]
             if  (not left_child.is_leaf and len(left_child.possible_splits) == 0 or
                  not right_child.is_leaf and len(right_child.possible_splits) == 0):
                 continue
@@ -275,15 +328,12 @@ class ParseNode():
 
     def is_fwd(self):
         return self.node_type in ['right_fwd','left_fwd']
-    @property
-    def syn_cat_is_set(self):
-        return self.syntactic_category_placeholder.is_set
 
     def __repr__(self):
         return (f"ParseNode\n"
                 f"\tWords: {' '.join(self.words)}\n"
                 f"\tLogical Form: {self.logical_form.subtree_string()}\n"
-                f"\tSyntactic Category: {self.syntactic_category}\n")
+                f"\tSyntactic Category: {self.semantic_category}\n")
 
     def siblingify(self,other):
         self.sibling = other
@@ -319,6 +369,22 @@ def beta_normalize(m):
     else:
         return ' '.join([left,right])
 
+def lookup_base_lexicon(s):
+    if s in NPS:
+        return 'NP'
+    elif s in INTRANSITIVES:
+        return 'S|NP'
+    elif s in TRANSITIVES:
+        return 'S|NP|NP'
+    else:
+        return 'XXX'
+
+def strip_string(ss):
+    ss = re.sub(r'lambda \$\d+\.','',ss)
+    ss = re.sub(r'( ?\$\d+)+$','',ss.replace('(','').replace(')',''))
+    # allowed to have trailing bound variables
+    return ss
+
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("--expname", type=str, default='tmp',
@@ -345,13 +411,12 @@ if __name__ == "__main__":
 
     for dpoint in d['data']:
         words, parse = dpoint['words'], dpoint['parse']
-        lf = LogicalForm(parse)
-        splits = lf.all_splits()
+        lf = LogicalForm(parse,'START')
         if '.' in words:
             breakpoint()
-        #pn = ParseNode(lf,words,'ROOT')
-        lf = LogicalForm('loc colorado virginia')
-        pn = ParseNode(lf, ['colarado', 'is', 'in', 'virginia'],'ROOT')
+        pn = ParseNode(lf,words,'ROOT')
+        #lf = LogicalForm('loc colorado virginia')
+        #pn = ParseNode(lf, ['colarado', 'is', 'in', 'virginia'],'ROOT')
         print(pn)
         for ps in pn.possible_splits:
             pprint(ps)
