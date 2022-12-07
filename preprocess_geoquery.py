@@ -55,7 +55,7 @@ def convert_to_no_comma_form(parse):
     if first_chunk.startswith('('):
         if '(' in first_chunk[1:]: # not just list of variables
             arg_splits = split_respecting_brackets(first_chunk[1:-1],sep=',')
-            recursed = ' '.join(['('+convert_to_no_comma_form(x)+')' for x in arg_splits])
+            recursed = ' '.join(sorted(['('+convert_to_no_comma_form(x)+')' for x in arg_splits]))
             converted = f'AND {recursed}'
         else:
             converted = convert_to_no_comma_form(to_split[1:-1])
@@ -78,7 +78,6 @@ def convert_to_no_comma_form(parse):
         return parse[:end_of_lambda+1] + converted
 
 
-np_list = list(set(np_list))
 dpoints = []
 for gl in geoquery_data:
     words, parse = process_line(gl)
@@ -87,6 +86,10 @@ for gl in geoquery_data:
     print(parse,'\t',decommaified)
     dpoints.append({'words':words,'parse':decommaified,'parse_with_commas':parse})
 
+np_list = list(set(np_list))
+print(np_list)
+print(intransitives)
+print(transitives)
 processed_dset = {'np_list':np_list, 'intransitive_verbs':list(intransitives),
                     'transitive_verbs': list(transitives), 'data':dpoints}
 with open('data/preprocessed_geoqueries.json','w') as f:
