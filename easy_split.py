@@ -64,22 +64,10 @@ class LogicalForm:
             self.syntactic_category = 'XXX'
 
     @property
-    def right_siblings(self):
-        if self.parent is None:
-            return [self]
-        siblings = self.parent.children
-        idx = siblings.index(self)
-        return siblings[idx+1:]
-
-    @property
     def stripped_string(self):
         ss = re.sub(r'lambda \$\d{1,2}\.','',self.subtree_string())
         ss = re.sub(r'[\$\d \(\)]','',ss) # assuming '$' and '\d' not in string
         return ss
-
-    @property
-    def descendents_and_right_siblings(self):
-        return [d for s in [self]+self.right_siblings for d in s.descendents]
 
     @property
     def descendents(self):
@@ -92,29 +80,8 @@ class LogicalForm:
         return [x for item in self.children for x in item.leaf_descendents]
 
     @property
-    def BFSdescendents(self):
-        descendents = []
-        frontier = [self]
-        while len(frontier) > 0:
-            new = frontier.pop()
-            frontier += new.children
-            descendents.append(new)
-        return descendents
-
-    @property
-    def num_var_descendents(self):
-        num = len(self.var_descendents)
-        return num
-
-    @property
     def new_var_num(self):
         return 0 if self.var_descendents == [] else max(self.var_descendents)+1
-
-    @property
-    def max_var_index(self):
-        var_occurrences = re.findall(r'\$\d',self.subtree_string())
-        var_indices = [int(v[1]) for v in var_occurrences]
-        return -1 if len(var_indices)==0 else max(var_indices)
 
     @property
     def num_lambda_binders(self):
@@ -216,7 +183,6 @@ class LogicalForm:
             if g.num_lambda_binders > 4:
                 continue
             g_sub_var_num = self.new_var_num+1
-            #new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(set([n.string for n in to_present_as_args_to_g])))
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
             entry_point.__init__(new_entry_point_in_f_as_str)
             f.__init__(f'lambda ${g_sub_var_num}.' + f.subtree_string())
@@ -241,18 +207,13 @@ class ParseNode():
         self.node_type = node_type
         self.sibling = sibling
         assert (parent is None) or (node_type != 'ROOT'), \
-        f"you're trying to specify a parent for the root node"
+            f"you're trying to specify a parent for the root node"
         assert (parent is not None) or (node_type == 'ROOT'), \
-        f"you're failing to specify a parent for a non-root node"
+            f"you're failing to specify a parent for a non-root node"
         assert (sibling is None) or (node_type != 'ROOT'), \
-        f"you're trying to specify a sibling for the root node"
+            f"you're trying to specify a sibling for the root node"
         self.syntactic_category = self.logical_form.syntactic_category
         self.is_syntactic_leaf = self.logical_form.is_syntactic_leaf
-        #if self.node_type == 'ROOT':
-            #self.is_leaf = False
-            #self.syntactic_category_placeholder = 'S'
-        #if re.match(r'\(?loc \$\d{1,2} virginia\)?',lf.subtree_string()):
-            #breakpoint()
         if self.logical_form.stripped_string in NPS:
             self.is_leaf = True
             self.syntactic_category_placeholder = 'NP'
@@ -288,33 +249,19 @@ class ParseNode():
             if direction == 'fwd':
                 left_child = ParseNode(f,left_words,parent=self,node_type='left_fwd')
                 right_child = ParseNode(g,right_words,parent=self,node_type='right_fwd')
-                #hits = re.findall(fr'.*\|\(?{re.escape(right_child.syntactic_category)}\)?$',left_child.syntactic_category)
                 hits = re.findall(fr'[/\|]\(?{re.escape(right_child.syntactic_category)}\)?$',left_child.syntactic_category)
                 for hit in hits:
                     self.syntactic_category = left_child.syntactic_category[:-len(hit)]
             elif direction == 'bckwd':
                 right_child = ParseNode(f,right_words,parent=self,node_type='right_bckwd')
                 left_child = ParseNode(g,left_words,parent=self,node_type='right_fwd')
-                hits = re.findall(fr'[\\/\|]\(?{re.escape(right_child.syntactic_category)}\)?$',left_child.syntactic_category)
-                for hit in hits:
-                    self.syntactic_category_placeholder = left_child.syntactic_category[:-len(hit)-1]
+                hits = re.findall(fr'[\\\|]\(?{re.escape(right_child.syntactic_category)}\)?$',left_child.syntactic_category)
+            for hit in hits:
+                self.syntactic_category_placeholder = left_child.syntactic_category[:-len(hit)-1]
             if  (not left_child.is_leaf and len(left_child.possible_splits) == 0 or
                  not right_child.is_leaf and len(right_child.possible_splits) == 0):
                 continue
             self.append_split(left_child,right_child,direction)
-
-    def propagate_syn_cats_to_f_sibling_and_parent(self):
-        assert self.is_g
-        new_sibling_cats = []
-        new_parent_cats = []
-        for self_cat in self.possible_syntactic_categories:
-            for parent_cat in self.parent.possible_syntactic_categories:
-                if self.is_fwd:
-                    new_sibling_cats.append(f'{parent_cat} / {self_cat}')
-                else:
-                    new_sibling_cats.append(f'{parent_cat} \\ {self_cat}')
-            for sibling_cat in self.sibling.possible_syntactic_categories:
-                pass
 
     def append_split(self,left,right,combinator):
         left.siblingify(right)
@@ -332,34 +279,6 @@ class ParseNode():
     def syn_cat_is_set(self):
         return self.syntactic_category_placeholder.is_set
 
-    #@property
-    #def syntactic_category(self):
-    #    return self.syntactic_category_placeholder
-    #    if self.node_type == 'ROOT':
-    #        return self.syntactic_category_placeholder.string
-    #    if not self.syn_cat_is_set and self.parent.syn_cat_is_set and self.sibling.syn_cat_is_set:
-    #        if self.node_type == 'left_fwd':
-    #            return f'({self.parent.syntactic_category_placeholder.string} / {self.sibling.syntactic_category_placeholder.string})'
-    #        elif self.node_type == 'right_bckwd':
-    #            return f'({self.parent.syntactic_category_placeholder.string} \\ {self.sibling.syntactic_category_placeholder.string})'
-
-    #    if not self.syntactic_category_placeholder.is_set and self.node_type == 'left_fwd':
-    #        return f'({self.parent.syntactic_category_placeholder.string} / {self.sibling.syntactic_category_placeholder.string})'
-    #    elif not self.syntactic_category_placeholder.is_set and self.node_type == 'right_bckwd':
-    #        return f'({self.parent.syntactic_category_placeholder.string} \\ {self.sibling.syntactic_category_placeholder.string})'
-    #    else:
-    #        return self.syntactic_category_placeholder.string
-
-    def possible_syntactic_categories(self):
-        if self.syntactic_category != 'XXX':
-            return {self.syntactic_category: 1}
-
-        possibilites = {}
-        #if self.node_type == 'fwd_f','bckwd_f':
-            #for p_cat in self.parent.possible_syntactic_categories():
-                #for
-        return {k:v/len(self.children) for child in self.children for k,v in child.possible_syntactic_categories()}
-
     def __repr__(self):
         return (f"ParseNode\n"
                 f"\tWords: {' '.join(self.words)}\n"
@@ -369,20 +288,6 @@ class ParseNode():
     def siblingify(self,other):
         self.sibling = other
         other.sibling = self
-
-class PlaceHolder():
-    def __init__(self,string='XXX'):
-        self.string = string
-
-    def set(self,string):
-        self.string = string
-
-    @property
-    def is_set(self):
-        return self.string != 'XXX'
-
-    def __repr__(self):
-        return f'PlaceHolder Object: {self.string}'
 
 
 def beta_normalize(m):
@@ -396,9 +301,7 @@ def beta_normalize(m):
     splits = split_respecting_brackets(m)
     if len(splits) == 1:
         return m
-    # left-associative, so recurse to the left
     left_ = remove_possible_outer_brackets(' '.join(splits[:-1]))
-    #left = '('+beta_normalize(left_)+')'
     left = beta_normalize(left_)
     assert 'lambda (' not in left
     right_ = splits[-1]
@@ -412,62 +315,46 @@ def beta_normalize(m):
         var_name = lambda_binder[7:]
         assert re.match(r'\$\d',var_name)
         combined = re.sub(re.escape(var_name),right,rest)
-        #return '('+beta_normalize(combined)+')'
         return beta_normalize(combined)
     else:
-        #if re.match(r'^[\w\$]*$',right):
-            #return f'{left} {right}'
-        #else:
-            #return f'{left} ({right})'
         return ' '.join([left,right])
 
+if __name__ == "__main__":
+    ARGS = argparse.ArgumentParser()
+    ARGS.add_argument("--expname", type=str, default='tmp',
+                          help="the directory to write output files")
+    ARGS.add_argument("--dset", type=str, choices=['easy-adam','geo'], default="geo")
+    ARGS.add_argument("--is_dump_verb_repo", action="store_true",
+                          help="whether to dump the verb repository")
+    ARGS.add_argument("--devel", "--development_mode", action="store_true")
+    ARGS = ARGS.parse_args()
 
-def shift_variable_names(lf_as_string,shift_from=[0]):
-    for sf in shift_from:
-        var_occurrences = re.findall(r'\$\d',lf_as_string)
-        var_idxs_to_shift = set([int(v[1]) for v in var_occurrences if int(v[1]) >= sf])
-        for vidx in sorted(var_idxs_to_shift,reverse=True):
-            lf_as_string = re.sub(f'\${vidx}',f'${vidx+1}',lf_as_string)
-    for sf in shift_from:
-        assert f'${sf}' not in lf_as_string
-    return lf_as_string
+    if ARGS.dset == 'easy-adam':
+        with open('data/easy_training_examples.txt') as f:
+            data = f.readlines()
 
+        X = [re.sub(r'_\d|_\{[er]\}|[\w:]+\|','',x[6:-1]) for x in data if x.startswith('Sent')]
+        y = [x[5:-2] for x in data if x.startswith('Sem')]
 
-ARGS = argparse.ArgumentParser()
-ARGS.add_argument("--expname", type=str, default='tmp',
-                      help="the directory to write output files")
-ARGS.add_argument("--dset", type=str, choices=['easy-adam','geo'], default="geo")
-ARGS.add_argument("--is_dump_verb_repo", action="store_true",
-                      help="whether to dump the verb repository")
-ARGS.add_argument("--devel", "--development_mode", action="store_true")
-ARGS = ARGS.parse_args()
+    else:
+        with open('data/preprocessed_geoqueries.json') as f: d=json.load(f)
 
-if ARGS.dset == 'easy-adam':
-    with open('data/easy_training_examples.txt') as f:
-        data = f.readlines()
+    NPS = d['np_list']
+    TRANSITIVES = d['transitive_verbs']
+    INTRANSITIVES = d['intransitive_verbs']
 
-    X = [re.sub(r'_\d|_\{[er]\}|[\w:]+\|','',x[6:-1]) for x in data if x.startswith('Sent')]
-    y = [x[5:-2] for x in data if x.startswith('Sem')]
-
-else:
-    with open('data/preprocessed_geoqueries.json') as f: d=json.load(f)
-
-NPS = d['np_list']
-TRANSITIVES = d['transitive_verbs']
-INTRANSITIVES = d['intransitive_verbs']
-
-for dpoint in d['data']:
-    words, parse = dpoint['words'], dpoint['parse']
-    lf = LogicalForm(parse)
-    splits = lf.all_splits()
-    if '.' in words:
+    for dpoint in d['data']:
+        words, parse = dpoint['words'], dpoint['parse']
+        lf = LogicalForm(parse)
+        splits = lf.all_splits()
+        if '.' in words:
+            breakpoint()
+        #pn = ParseNode(lf,words,'ROOT')
+        lf = LogicalForm('loc colorado virginia')
+        pn = ParseNode(lf, ['colarado', 'is', 'in', 'virginia'],'ROOT')
+        print(pn)
+        for ps in pn.possible_splits:
+            pprint(ps)
+            print('\n')
         breakpoint()
-    #pn = ParseNode(lf,words,'ROOT')
-    lf = LogicalForm('loc colorado virginia')
-    pn = ParseNode(lf, ['colarado', 'is', 'in', 'virginia'],'ROOT')
-    print(pn)
-    for ps in pn.possible_splits:
-        pprint(ps)
-        print('\n')
-    breakpoint()
-    break
+        break
