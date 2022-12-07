@@ -12,7 +12,7 @@ class LogicalForm:
     def __init__(self,defining_string,parent=None):
         had_surrounding_brackets = False
         self.var_descendents = []
-        self.splits = []
+        self.possible_splits = []
         self.parent = parent
         if parent == 'START':
             self.semantic_category = 'S'
@@ -201,7 +201,7 @@ class LogicalForm:
             g = entry_point.copy()
             to_present_as_args_to_g = [d for d in entry_point.leaf_descendents if d not in to_remove]
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
-            if g.num_lambda_binders > 4 or strip_string(f.subtree_string().replace(' AND','')): # don't consider only variables
+            if (g.num_lambda_binders > 4) or (strip_string(g.subtree_string().replace(' AND','')) == ''): # don't consider only variables
                 continue
             g_sub_var_num = self.new_var_num+1
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
@@ -218,7 +218,7 @@ class LogicalForm:
             assert g != self
             f.infer_splits();
             g.infer_splits()
-            self.splits.append((f,g))
+            self.possible_splits.append((f,g))
             if g.sem_cat_is_set:
                 if f.sem_cat_is_set:
                     hits = re.findall(fr'\(?{re.escape(g.semantic_category)}\)?$',f.semantic_category)
@@ -227,7 +227,7 @@ class LogicalForm:
                 if self.sem_cat_is_set:
                     self.propagate_semantic_category_leftward(f,g)
             assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
-        return self.splits
+        return self.possible_splits
 
     def propagate_semantic_category_leftward(self,f,g):
         if '|' in g.semantic_category:
@@ -236,7 +236,7 @@ class LogicalForm:
             new_assigned_category = f'{self.semantic_category}|{g.semantic_category}'
         assert f.semantic_category in [new_assigned_category,'XXX']
         f.semantic_category = new_assigned_category
-        for f1,g1 in f.splits:
+        for f1,g1 in f.possible_splits:
             if g1.sem_cat_is_set:
                 f.propagate_semantic_category_leftward(f1,g1)
 
@@ -272,15 +272,15 @@ class ParseNode():
         elif self.logical_form.stripped_subtree_string in TRANSITIVES:
             self.is_leaf = True
             self.semantic_category_placeholder = 'S|NP|NP'
+        elif len(self.words) == 1:
+            self.is_leaf = True
         else:
             self.is_leaf = False
             self.semantic_category_placeholder = 'XXX'
 
-            if len(self.words) == 1:
-                return
-
-            self.logical_form.infer_splits()
-            for f,g in self.logical_form.splits:
+            if self.logical_form.possible_splits == []:
+                self.logical_form.infer_splits()
+            for f,g in self.logical_form.possible_splits:
                 if not f.sem_cat_is_set:
                     print(f)
                     print(g)
@@ -311,10 +311,13 @@ class ParseNode():
                 hits = re.findall(fr'[\\\|]\(?{re.escape(right_child.semantic_category)}\)?$',left_child.semantic_category)
             for hit in hits:
                 self.semantic_category_placeholder = left_child.semantic_category[:-len(hit)-1]
-            if  (not left_child.is_leaf and len(left_child.possible_splits) == 0 or
-                 not right_child.is_leaf and len(right_child.possible_splits) == 0):
-                continue
+            #if  (not left_child.is_leaf and len(left_child.possible_splits) == 0 or
+                 #not right_child.is_leaf and len(right_child.possible_splits) == 0):
+                #continue
             self.append_split(left_child,right_child,direction)
+
+        if len(self.possible_splits) == 0:
+            self.is_leaf = True
 
     def append_split(self,left,right,combinator):
         left.siblingify(right)
