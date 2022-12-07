@@ -1,4 +1,5 @@
 import json
+from pprint import pprint
 from utils import split_respecting_brackets, is_bracketed, all_sublists, remove_possible_outer_brackets
 import argparse
 import re
@@ -45,9 +46,22 @@ class LogicalForm:
                 else:
                     self.node_type = 'const'
         if had_surrounding_brackets:
-            assert self.subtree_as_string() == defining_string[1:-1], f'string of created node, {self.subtree_as_string()} is not equal to defining string {defining_string}'
+            assert self.subtree_string() == defining_string[1:-1], f'string of created node, {self.subtree_string()} is not equal to defining string {defining_string}'
         else:
-            assert self.subtree_as_string() == defining_string, f'string of created node, {self.subtree_as_string()} is not equal to defining string {defining_string}'
+            assert self.subtree_string() == defining_string, f'string of created node, {self.subtree_string()} is not equal to defining string {defining_string}'
+
+        if self.stripped_string in NPS:
+            self.is_syntactic_leaf = True
+            self.syntactic_category = 'NP'
+        elif self.stripped_string in INTRANSITIVES:
+            self.is_syntactic_leaf = True
+            self.syntactic_category = 'S|NP'
+        elif self.stripped_string in TRANSITIVES:
+            self.is_syntactic_leaf = True
+            self.syntactic_category = 'S|NP|NP'
+        else:
+            self.is_syntactic_leaf = False
+            self.syntactic_category = 'XXX'
 
     @property
     def right_siblings(self):
@@ -56,6 +70,12 @@ class LogicalForm:
         siblings = self.parent.children
         idx = siblings.index(self)
         return siblings[idx+1:]
+
+    @property
+    def stripped_string(self):
+        ss = re.sub(r'lambda \$\d{1,2}\.','',self.subtree_string())
+        ss = re.sub(r'[\$\d \(\)]','',ss) # assuming '$' and '\d' not in string
+        return ss
 
     @property
     def descendents_and_right_siblings(self):
@@ -88,17 +108,17 @@ class LogicalForm:
 
     @property
     def new_var_num(self):
-        return '$0' if self.var_descendents == [] else max(self.var_descendents)+1
+        return 0 if self.var_descendents == [] else max(self.var_descendents)+1
 
     @property
     def max_var_index(self):
-        var_occurrences = re.findall(r'\$\d',self.subtree_as_string())
+        var_occurrences = re.findall(r'\$\d',self.subtree_string())
         var_indices = [int(v[1]) for v in var_occurrences]
         return -1 if len(var_indices)==0 else max(var_indices)
 
     @property
     def num_lambda_binders(self):
-        maybe_lambda_list = self.subtree_as_string().split('.')
+        maybe_lambda_list = self.subtree_string().split('.')
         assert all([x.startswith('lambda') for x in maybe_lambda_list[:-1]])
         return len(maybe_lambda_list)-1
 
@@ -108,24 +128,24 @@ class LogicalForm:
         if self.parent is not None:
             self.parent.extend_var_descendents(var_num)
 
-    def subtree_as_string(self,show_treelike=False):
-        x = self.subtree_as_string_(show_treelike)
+    def subtree_string(self,show_treelike=False):
+        x = self.subtree_string_(show_treelike)
         assert is_bracketed(x) or ' ' not in x or self.node_type == 'lmbda'
         if is_bracketed(x):
             return x[1:-1]
         else:
             return x
 
-    def subtree_as_string_(self,show_treelike):
+    def subtree_string_(self,show_treelike):
         if self.node_type == 'lmbda':
-            subtree_string = self.children[0].subtree_as_string(show_treelike)
+            subtree_string = self.children[0].subtree_string(show_treelike)
             if show_treelike:
                 subtree_string = subtree_string.replace('\n\t','\n\t\t')
                 return f'{self.string}\n\t{subtree_string}\n'
             else:
                 return f'{self.string}.{subtree_string}'
         elif self.node_type == 'composite':
-            child_trees = [c.subtree_as_string_(show_treelike) for c in self.children]
+            child_trees = [c.subtree_string_(show_treelike) for c in self.children]
             if show_treelike:
                 subtree_string = '\n\t'.join([c.replace('\n\t','\n\t\t') for c in child_trees])
                 return f'{self.string}\n\t{subtree_string}'
@@ -136,17 +156,17 @@ class LogicalForm:
             return self.string
 
     def copy(self):
-        copied_version = LogicalForm(self.subtree_as_string())
+        copied_version = LogicalForm(self.subtree_string())
         assert copied_version == self
         return copied_version
 
     def __repr__(self):
-        return f'LogicalForm of type {self.node_type.upper()}: {self.subtree_as_string()}'
+        return f'LogicalForm of type {self.node_type.upper()}: {self.subtree_string()}'
 
     def __eq__(self,other):
         if not isinstance(other,LogicalForm):
             return False
-        return other.subtree_as_string() == self.subtree_as_string()
+        return other.subtree_string() == self.subtree_string()
 
     def turn_nodes_to_vars(self,nodes):
         copied = self.copy()
@@ -164,7 +184,7 @@ class LogicalForm:
             desc.extend_var_descendents(var_num)
             desc.node_type = 'bound_var'
         lambda_prefix = '.'.join([f'lambda ${vn}' for vn in reversed(vars_abstracted)])
-        copied = LogicalForm(lambda_prefix+'.' + copied.subtree_as_string())
+        copied = LogicalForm(lambda_prefix+'.' + copied.subtree_string())
         return copied
 
     def all_splits(self):
@@ -190,63 +210,180 @@ class LogicalForm:
                         changed = True
                         entry_point = entry_point.parent
                         break
-            print('entry point', entry_point)
             g = entry_point.copy()
             to_present_as_args_to_g = [d for d in entry_point.leaf_descendents if d not in to_remove]
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
             if g.num_lambda_binders > 4:
                 continue
-            g_sub_var_num = max(self.var_descendents)+2
+            g_sub_var_num = self.new_var_num+1
             #new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(set([n.string for n in to_present_as_args_to_g])))
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
             entry_point.__init__(new_entry_point_in_f_as_str)
-            f.__init__(f'lambda ${g_sub_var_num}.' + f.subtree_as_string())
+            f.__init__(f'lambda ${g_sub_var_num}.' + f.subtree_string())
             if f.num_lambda_binders > 4:
                 continue
             concatted = concat_lfs(f,g)
-            print(beta_normalize(concatted))
-            if not beta_normalize(concatted) == self.subtree_as_string():
+            if not beta_normalize(concatted) == self.subtree_string():
                 breakpoint()
             beta_normalize(concatted)
             splits.append((f,g))
         return splits
 
 def concat_lfs(lf1,lf2):
-    return '(' + lf1.subtree_as_string() + ') (' + lf2.subtree_as_string() + ')'
+    return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'
 
-class TreeNode():
-    def __init__(self,lf,words,parent,parent_rule=None):
+class ParseNode():
+    def __init__(self,lf,words,node_type,parent=None,sibling=None):
         self.logical_form = lf
         self.words = words
         self.possible_splits = []
         self.parent = parent
-        self.parent_rule = parent_rule
-        if self.parent == 'START':
-            self.syntactic_category = 'S'
-        elif self.logical_form.string in NPS:
-            self.syntactic_category = 'NP'
-        elif self.logical_form.string in INTRANSITIVES:
-            self.syntactic_category = 'S|NP'
-        elif self.logical_form.string in TRANSITIVES:
-            self.syntactic_category = 'S|NP|NP'
+        self.node_type = node_type
+        self.sibling = sibling
+        assert (parent is None) or (node_type != 'ROOT'), \
+        f"you're trying to specify a parent for the root node"
+        assert (parent is not None) or (node_type == 'ROOT'), \
+        f"you're failing to specify a parent for a non-root node"
+        assert (sibling is None) or (node_type != 'ROOT'), \
+        f"you're trying to specify a sibling for the root node"
+        self.syntactic_category = self.logical_form.syntactic_category
+        self.is_syntactic_leaf = self.logical_form.is_syntactic_leaf
+        #if self.node_type == 'ROOT':
+            #self.is_leaf = False
+            #self.syntactic_category_placeholder = 'S'
+        #if re.match(r'\(?loc \$\d{1,2} virginia\)?',lf.subtree_string()):
+            #breakpoint()
+        if self.logical_form.stripped_string in NPS:
+            self.is_leaf = True
+            self.syntactic_category_placeholder = 'NP'
+        elif self.logical_form.stripped_string in INTRANSITIVES:
+            self.is_leaf = True
+            self.syntactic_category_placeholder = 'S|NP'
+        elif self.logical_form.stripped_string in TRANSITIVES:
+            self.is_leaf = True
+            self.syntactic_category_placeholder = 'S|NP|NP'
         else:
-            self.syntactic_category = 'PLACEHOLDER'
+            self.is_leaf = False
+            self.syntactic_category_placeholder = 'XXX'
 
-        for f,g in self.logical_form.all_splits():
-            for split_point in range(1,len(self.words)-1):
-                left_words = self.words[:split_point]
-                right_words = self.words[split_point:]
-                left_child_forward = TreeNode(f,left_words,parent=self,parent_rule='fwd')
-                right_child_forward = TreeNode(g,right_words,parent=self,parent_rule='fwd')
-                self.possible_splits.append((left_child_forward,right_child_forward))
-                left_child_backward = TreeNode(g,left_words,parent=self,parent_rule='bckwd')
-                right_child_backward = TreeNode(f,right_words,parent=self,parent_rule='bckwd')
-                self.possible_splits.append((left_child_backward,right_child_backward))
+            if len(self.words) == 1:
+                return
+
+            for f,g in self.logical_form.all_splits():
+                if f.is_syntactic_leaf and g.is_syntactic_leaf:
+                    if re.match(fr'.*\|{g.syntactic_category}',f.syntactic_category):
+                        self.add_splits(f,g,'fwd')
+                        self.add_splits(f,g,'bckwd')
+                else:
+                    self.add_splits(f,g,'fwd')
+                    self.add_splits(f,g,'bckwd')
+
+    def add_splits(self,f,g,direction):
+        for split_point in range(1,len(self.words)):
+            left_words = self.words[:split_point]
+            right_words = self.words[split_point:]
+            # CONVENTION: child with the words on the left of sentence is
+            # the 'left' child, even if bck application, left child is g in
+            # that case
+            if direction == 'fwd':
+                left_child = ParseNode(f,left_words,parent=self,node_type='left_fwd')
+                right_child = ParseNode(g,right_words,parent=self,node_type='right_fwd')
+                #hits = re.findall(fr'.*\|\(?{re.escape(right_child.syntactic_category)}\)?$',left_child.syntactic_category)
+                hits = re.findall(fr'[/\|]\(?{re.escape(right_child.syntactic_category)}\)?$',left_child.syntactic_category)
+                for hit in hits:
+                    self.syntactic_category = left_child.syntactic_category[:-len(hit)]
+            elif direction == 'bckwd':
+                right_child = ParseNode(f,right_words,parent=self,node_type='right_bckwd')
+                left_child = ParseNode(g,left_words,parent=self,node_type='right_fwd')
+                hits = re.findall(fr'[\\/\|]\(?{re.escape(right_child.syntactic_category)}\)?$',left_child.syntactic_category)
+                for hit in hits:
+                    self.syntactic_category_placeholder = left_child.syntactic_category[:-len(hit)-1]
+            if  (not left_child.is_leaf and len(left_child.possible_splits) == 0 or
+                 not right_child.is_leaf and len(right_child.possible_splits) == 0):
+                continue
+            self.append_split(left_child,right_child,direction)
+
+    def propagate_syn_cats_to_f_sibling_and_parent(self):
+        assert self.is_g
+        new_sibling_cats = []
+        new_parent_cats = []
+        for self_cat in self.possible_syntactic_categories:
+            for parent_cat in self.parent.possible_syntactic_categories:
+                if self.is_fwd:
+                    new_sibling_cats.append(f'{parent_cat} / {self_cat}')
+                else:
+                    new_sibling_cats.append(f'{parent_cat} \\ {self_cat}')
+            for sibling_cat in self.sibling.possible_syntactic_categories:
+                pass
+
+    def append_split(self,left,right,combinator):
+        left.siblingify(right)
+        assert left.sibling is not None
+        assert right.sibling is not None
+        self.possible_splits.append({'left':left,'right':right,'combinator':combinator})
+
+    @property
+    def is_g(self):
+        return self.node_type in ['right_fwd','left_bckwd']
+
+    def is_fwd(self):
+        return self.node_type in ['right_fwd','left_fwd']
+    @property
+    def syn_cat_is_set(self):
+        return self.syntactic_category_placeholder.is_set
+
+    #@property
+    #def syntactic_category(self):
+    #    return self.syntactic_category_placeholder
+    #    if self.node_type == 'ROOT':
+    #        return self.syntactic_category_placeholder.string
+    #    if not self.syn_cat_is_set and self.parent.syn_cat_is_set and self.sibling.syn_cat_is_set:
+    #        if self.node_type == 'left_fwd':
+    #            return f'({self.parent.syntactic_category_placeholder.string} / {self.sibling.syntactic_category_placeholder.string})'
+    #        elif self.node_type == 'right_bckwd':
+    #            return f'({self.parent.syntactic_category_placeholder.string} \\ {self.sibling.syntactic_category_placeholder.string})'
+
+    #    if not self.syntactic_category_placeholder.is_set and self.node_type == 'left_fwd':
+    #        return f'({self.parent.syntactic_category_placeholder.string} / {self.sibling.syntactic_category_placeholder.string})'
+    #    elif not self.syntactic_category_placeholder.is_set and self.node_type == 'right_bckwd':
+    #        return f'({self.parent.syntactic_category_placeholder.string} \\ {self.sibling.syntactic_category_placeholder.string})'
+    #    else:
+    #        return self.syntactic_category_placeholder.string
+
+    def possible_syntactic_categories(self):
+        if self.syntactic_category != 'XXX':
+            return {self.syntactic_category: 1}
+
+        possibilites = {}
+        #if self.node_type == 'fwd_f','bckwd_f':
+            #for p_cat in self.parent.possible_syntactic_categories():
+                #for
+        return {k:v/len(self.children) for child in self.children for k,v in child.possible_syntactic_categories()}
 
     def __repr__(self):
-        return (f"Treenode\nWords: {' '.join(self.words)}\n"
-                f"With {self.logical_form.__repr__()}\n"
-                f"and syn-cat {self.syntactic_category}\n")
+        return (f"ParseNode\n"
+                f"\tWords: {' '.join(self.words)}\n"
+                f"\tLogical Form: {self.logical_form.subtree_string()}\n"
+                f"\tSyntactic Category: {self.syntactic_category}\n")
+
+    def siblingify(self,other):
+        self.sibling = other
+        other.sibling = self
+
+class PlaceHolder():
+    def __init__(self,string='XXX'):
+        self.string = string
+
+    def set(self,string):
+        self.string = string
+
+    @property
+    def is_set(self):
+        return self.string != 'XXX'
+
+    def __repr__(self):
+        return f'PlaceHolder Object: {self.string}'
+
 
 def beta_normalize(m):
     m = remove_possible_outer_brackets(m)
@@ -325,11 +462,12 @@ for dpoint in d['data']:
     splits = lf.all_splits()
     if '.' in words:
         breakpoint()
-    tn = TreeNode(lf,words,'START')
-    print(tn)
-    for f,g in tn.possible_splits:
-        print(f)
-        print(g)
+    #pn = ParseNode(lf,words,'ROOT')
+    lf = LogicalForm('loc colorado virginia')
+    pn = ParseNode(lf, ['colarado', 'is', 'in', 'virginia'],'ROOT')
+    print(pn)
+    for ps in pn.possible_splits:
+        pprint(ps)
         print('\n')
     breakpoint()
     break
