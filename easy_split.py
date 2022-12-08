@@ -14,6 +14,10 @@ class LogicalForm:
         self.var_descendents = []
         self.possible_splits = []
         self.parent = parent
+        self.stored_subtree_string = ''
+        self.stored_shell_subtree_string = ''
+        self.stored_alpha_normalized_subtree_string = ''
+        self.stored_alpha_normalized_shell_subtree_string = ''
         if parent == 'START':
             self.semantic_category = 'S'
             self.is_semantic_leaf = False
@@ -54,9 +58,9 @@ class LogicalForm:
                 else:
                     self.node_type = 'const'
         if had_surrounding_brackets:
-            assert self.subtree_string() == defining_string[1:-1], f'string of created node, {self.subtree_string()} is not equal to defining string {defining_string}'
+            assert self.subtree_string() == defining_string[1:-1]
         else:
-            assert self.subtree_string() == defining_string, f'string of created node, {self.subtree_string()} is not equal to defining string {defining_string}'
+            assert self.subtree_string() == defining_string
 
         if self.parent != 'START':
             self.infer_semantic_category_shallow()
@@ -115,32 +119,68 @@ class LogicalForm:
         if self.parent is not None and self.parent != 'START':
             self.parent.extend_var_descendents(var_num)
 
-    def subtree_string(self,show_treelike=False):
-        x = self.subtree_string_(show_treelike)
-        assert is_bracketed(x) or ' ' not in x or self.node_type == 'lmbda'
-        if is_bracketed(x):
-            return x[1:-1]
+    def set_subtree_string(self,as_shell,alpha_normalized,string):
+        if as_shell and alpha_normalized:
+            self.stored_alpha_normalized_shell_subtree_string = string
+        elif as_shell and not alpha_normalized:
+            self.stored_shell_subtree_string = string
+        elif not as_shell and alpha_normalized:
+            assert 'PLACEHOLDER' not in string
+            self.stored_alpha_normalized_subtree_string = string
         else:
-            return x
+            assert 'PLACEHOLDER' not in string
+            self.stored_subtree_string = string
 
-    def subtree_string_(self,show_treelike):
+    def get_stored_subtree_string(self,as_shell,alpha_normalized):
+        if as_shell and alpha_normalized:
+            return self.stored_alpha_normalized_shell_subtree_string
+        elif as_shell and not alpha_normalized:
+            return self.stored_shell_subtree_string
+        elif not as_shell and alpha_normalized:
+            return self.stored_alpha_normalized_subtree_string
+        else:
+            return self.stored_subtree_string
+
+    def subtree_string(self,alpha_normalized=False,as_shell=False,recompute=False,show_treelike=False):
+        x = self.get_stored_subtree_string(as_shell,alpha_normalized)
+        if x == '' or recompute:
+            x = self.subtree_string_(show_treelike=show_treelike,as_shell=as_shell,recompute=recompute)
+            assert is_bracketed(x) or ' ' not in x or self.node_type == 'lmbda'
+            if is_bracketed(x):
+                x = x[1:-1]
+            if alpha_normalized:
+                trans_list = sorted(self.var_descendents)
+                for v_new, v_old in enumerate(trans_list):
+                    x = re.sub(fr'\${v_old}',f'${v_new}',x)
+        return x
+
+    def subtree_string_(self,show_treelike,as_shell,recompute):
         if self.node_type == 'lmbda':
-            subtree_string = self.children[0].subtree_string(show_treelike)
+            subtree_string = self.children[0].subtree_string(as_shell=as_shell,show_treelike=show_treelike,recompute=recompute)
             if show_treelike:
                 subtree_string = subtree_string.replace('\n\t','\n\t\t')
-                return f'{self.string}\n\t{subtree_string}\n'
+                x = f'{self.string}\n\t{subtree_string}\n'
             else:
-                return f'{self.string}.{subtree_string}'
+                x = f'{self.string}.{subtree_string}'
         elif self.node_type == 'composite':
-            child_trees = [c.subtree_string_(show_treelike) for c in self.children]
+            if as_shell:
+                child_trees = ['PLACEHOLDER' if c.node_type == 'const' else c.subtree_string_(show_treelike,as_shell,recompute=recompute) for c in self.children]
+            else:
+                child_trees = [c.subtree_string_(show_treelike,as_shell,recompute=recompute) for c in self.children]
             if show_treelike:
                 subtree_string = '\n\t'.join([c.replace('\n\t','\n\t\t') for c in child_trees])
-                return f'{self.string}\n\t{subtree_string}'
+                x = f'{self.string}\n\t{subtree_string}'
             else:
                 subtree_string = ' '.join(child_trees)
-                return f'{self.string}({subtree_string})'
+                x = f'{self.string}({subtree_string})'
         else:
-            return self.string
+            x = self.string
+
+        assert as_shell or 'PLACEHOLDER' not in x
+        if recompute:
+            self.set_subtree_string(as_shell,alpha_normalized=False,string=x)
+
+        return x
 
     def copy(self):
         copied_version = LogicalForm(self.subtree_string())
@@ -203,12 +243,13 @@ class LogicalForm:
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
             if (g.num_lambda_binders > 4) or (strip_string(g.subtree_string().replace(' AND','')) == ''): # don't consider only variables
                 continue
-            g_sub_var_num = self.new_var_num+1
+            #g_sub_var_num = self.new_var_num+1
+            g_sub_var_num = self.new_var_num
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
             entry_point.__init__(new_entry_point_in_f_as_str)
             if strip_string(f.subtree_string().replace(' AND','')) == '': # also exclude case where only substantive is 'AND'
                 continue
-            f.__init__(f'lambda ${g_sub_var_num}.' + f.subtree_string())
+            f.__init__(f'lambda ${g_sub_var_num}.' + f.subtree_string(recompute=True))
             if f.num_lambda_binders > 4:
                 continue
             concatted = concat_lfs(f,g)
@@ -239,6 +280,7 @@ class LogicalForm:
         for f1,g1 in f.possible_splits:
             if g1.sem_cat_is_set:
                 f.propagate_semantic_category_leftward(f1,g1)
+
 
     @property
     def sem_cat_is_set(self):
@@ -288,6 +330,8 @@ class ParseNode():
                     if re.match(fr'.*\|{g.semantic_category}',f.semantic_category):
                         self.add_splits(f,g,'fwd')
                         self.add_splits(f,g,'bckwd')
+                    else:
+                        breakpoint()
                 else:
                     self.add_splits(f,g,'fwd')
                     self.add_splits(f,g,'bckwd')
@@ -311,9 +355,6 @@ class ParseNode():
                 hits = re.findall(fr'[\\\|]\(?{re.escape(right_child.semantic_category)}\)?$',left_child.semantic_category)
             for hit in hits:
                 self.semantic_category_placeholder = left_child.semantic_category[:-len(hit)-1]
-            #if  (not left_child.is_leaf and len(left_child.possible_splits) == 0 or
-                 #not right_child.is_leaf and len(right_child.possible_splits) == 0):
-                #continue
             self.append_split(left_child,right_child,direction)
 
         if len(self.possible_splits) == 0:
