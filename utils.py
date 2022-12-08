@@ -28,8 +28,10 @@ def split_respecting_brackets(s,sep=' '):
     """Only make a split when there are no open brackets."""
     num_open_brackets = 0
     split_points = [-1]
+    if isinstance(sep,str):
+        sep = [sep]
     for i,c in enumerate(s):
-        if c == sep and num_open_brackets == 0:
+        if c in sep and num_open_brackets == 0:
             split_points.append(i)
         elif c == '(':
             num_open_brackets += 1
@@ -41,6 +43,13 @@ def split_respecting_brackets(s,sep=' '):
 
 def is_bracketed(s):
     return s.startswith('(') and s.endswith(')')
+
+def maybe_bracketted(s):
+    """Add brackets if not a leaf."""
+    if '|' in s or '\\' in s or '/' in s:
+        return '('+s+')'
+    else:
+        return s
 
 def all_sublists(x):
     if len(x) == 0:

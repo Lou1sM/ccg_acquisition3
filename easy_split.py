@@ -1,6 +1,6 @@
 import json
 from pprint import pprint
-from utils import split_respecting_brackets, is_bracketed, all_sublists, remove_possible_outer_brackets
+from utils import split_respecting_brackets, is_bracketed, all_sublists, remove_possible_outer_brackets, maybe_bracketted
 import argparse
 import re
 
@@ -19,7 +19,7 @@ class LogicalForm:
         self.stored_alpha_normalized_subtree_string = ''
         self.stored_alpha_normalized_shell_subtree_string = ''
         if parent == 'START':
-            self.semantic_category = 'S'
+            self.sem_cat = 'S'
             self.is_semantic_leaf = False
 
         if '.' in defining_string:
@@ -63,16 +63,16 @@ class LogicalForm:
             assert self.subtree_string() == defining_string
 
         if self.parent != 'START':
-            self.infer_semantic_category_shallow()
+            self.infer_sem_cat_shallow()
 
-    def infer_semantic_category_shallow(self):
+    def infer_sem_cat_shallow(self):
         """Just check if in base lexicon, no recursive split."""
         if lookup_base_lexicon(self.stripped_subtree_string) != 'XXX':
             self.is_semantic_leaf = True
-            self.semantic_category = lookup_base_lexicon(self.stripped_subtree_string)
+            self.sem_cat = lookup_base_lexicon(self.stripped_subtree_string)
         else:
             self.is_semantic_leaf = False
-            self.semantic_category = 'XXX'
+            self.sem_cat = 'XXX'
             #if self.num_lambda_binders == 2 and re.match(r'((lambda \$\d{1,2}\.?)+AND)',self.subtree_string()) is not None:
             #    assert self.stripped_subtree_string.startswith('AND')
             #    # check if a type-raised version
@@ -83,7 +83,7 @@ class LogicalForm:
             #            breakpoint()
             #            self.is_semantic_leaf = True
             #            untyperaised = lookup_base_lexicon(self.stripped_subtree_string[3:])
-            #            self.semantic_category = f'S|({untyperaised})' # always assume S for now
+            #            self.sem_cat = f'S|({untyperaised})' # always assume S for now
 
     @property
     def stripped_subtree_string(self):
@@ -185,12 +185,12 @@ class LogicalForm:
     def copy(self):
         copied_version = LogicalForm(self.subtree_string())
         assert copied_version == self
-        copied_version.semantic_category = self.semantic_category
+        copied_version.sem_cat = self.sem_cat
         return copied_version
 
     def __repr__(self):
         return (f'LogicalForm of type {self.node_type.upper()}: {self.subtree_string()}'
-                f'\n\tsemantic category: {self.semantic_category}')
+                f'\n\tsemantic category: {self.sem_cat}')
 
     def __eq__(self,other):
         if not isinstance(other,LogicalForm):
@@ -262,35 +262,35 @@ class LogicalForm:
             self.possible_splits.append((f,g))
             if g.sem_cat_is_set:
                 if f.sem_cat_is_set:
-                    hits = re.findall(fr'\(?{re.escape(g.semantic_category)}\)?$',f.semantic_category)
+                    hits = re.findall(fr'\(?{re.escape(g.sem_cat)}\)?$',f.sem_cat)
                     for hit in hits:
-                        self.semantic_category = f.semantic_category[:-len(hit)-1]
+                        self.sem_cat = f.sem_cat[:-len(hit)-1]
                 if self.sem_cat_is_set:
-                    self.propagate_semantic_category_leftward(f,g)
+                    self.propagate_sem_cat_leftward(f,g)
             assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
         return self.possible_splits
 
-    def propagate_semantic_category_leftward(self,f,g):
-        if '|' in g.semantic_category:
-            new_assigned_category = f'{self.semantic_category}|({g.semantic_category})'
+    def propagate_sem_cat_leftward(self,f,g):
+        if '|' in g.sem_cat:
+            new_assigned_category = f'{self.sem_cat}|({g.sem_cat})'
         else:
-            new_assigned_category = f'{self.semantic_category}|{g.semantic_category}'
-        assert f.semantic_category in [new_assigned_category,'XXX']
-        f.semantic_category = new_assigned_category
+            new_assigned_category = f'{self.sem_cat}|{g.sem_cat}'
+        assert f.sem_cat in [new_assigned_category,'XXX']
+        f.sem_cat = new_assigned_category
         for f1,g1 in f.possible_splits:
             if g1.sem_cat_is_set:
-                f.propagate_semantic_category_leftward(f1,g1)
+                f.propagate_sem_cat_leftward(f1,g1)
 
 
     @property
     def sem_cat_is_set(self):
-        return self.semantic_category != 'XXX'
+        return self.sem_cat != 'XXX'
 
 def concat_lfs(lf1,lf2):
     return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'
 
 class ParseNode():
-    def __init__(self,lf,words,node_type,parent=None,sibling=None):
+    def __init__(self,lf,words,node_type,parent=None,sibling=None,syn_cat=None):
         self.logical_form = lf
         self.words = words
         self.possible_splits = []
@@ -303,38 +303,30 @@ class ParseNode():
             f"you're failing to specify a parent for a non-root node"
         assert (sibling is None) or (node_type != 'ROOT'), \
             f"you're trying to specify a sibling for the root node"
-        self.semantic_category = self.logical_form.semantic_category
-        self.is_leaf = self.logical_form.is_semantic_leaf
-        if self.logical_form.stripped_subtree_string in NPS:
-            self.is_leaf = True
-            self.semantic_category_placeholder = 'NP'
-        elif self.logical_form.stripped_subtree_string in INTRANSITIVES:
-            self.is_leaf = True
-            self.semantic_category_placeholder = 'S|NP'
-        elif self.logical_form.stripped_subtree_string in TRANSITIVES:
-            self.is_leaf = True
-            self.semantic_category_placeholder = 'S|NP|NP'
-        elif len(self.words) == 1:
-            self.is_leaf = True
+        self.sem_cat = self.logical_form.sem_cat
+        if syn_cat is not None:
+            self.syn_cat = syn_cat
+        elif self.node_type == 'ROOT':
+            self.syn_cat = 'S'
+            assert self.sem_cat == 'S'
         else:
-            self.is_leaf = False
-            self.semantic_category_placeholder = 'XXX'
-
+            self.syn_cat = self.logical_form.sem_cat # no directionality then
+        self.is_leaf = self.logical_form.is_semantic_leaf or len(self.words) == 1
+        if not self.is_leaf:
+            #if '/' in self.syn_cat:
+                #breakpoint()
             if self.logical_form.possible_splits == []:
                 self.logical_form.infer_splits()
             for f,g in self.logical_form.possible_splits:
                 if not f.sem_cat_is_set:
                     print(f)
                     print(g)
-                if f.is_semantic_leaf and g.is_semantic_leaf:
-                    if re.match(fr'.*\|{g.semantic_category}',f.semantic_category):
-                        self.add_splits(f,g,'fwd')
-                        self.add_splits(f,g,'bckwd')
-                    else:
-                        breakpoint()
                 else:
-                    self.add_splits(f,g,'fwd')
-                    self.add_splits(f,g,'bckwd')
+                    assert re.match(fr'.*\|\(?{g.sem_cat}\)?$',f.sem_cat)
+                self.add_splits(f,g,'fwd')
+                self.add_splits(f,g,'bckwd')
+        else:
+            print(self.syn_cat)
 
     def add_splits(self,f,g,direction):
         for split_point in range(1,len(self.words)):
@@ -344,17 +336,15 @@ class ParseNode():
             # the 'left' child, even if bck application, left child is g in
             # that case
             if direction == 'fwd':
-                left_child = ParseNode(f,left_words,parent=self,node_type='left_fwd')
                 right_child = ParseNode(g,right_words,parent=self,node_type='right_fwd')
-                hits = re.findall(fr'[/\|]\(?{re.escape(right_child.semantic_category)}\)?$',left_child.semantic_category)
-                for hit in hits:
-                    self.semantic_category = left_child.semantic_category[:-len(hit)]
+                new_syn_cat = f'{self.syn_cat}/{maybe_bracketted(right_child.syn_cat)}'
+                assert f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)
+                left_child = ParseNode(f,left_words,parent=self,node_type='left_fwd',syn_cat=new_syn_cat)
             elif direction == 'bckwd':
-                right_child = ParseNode(f,right_words,parent=self,node_type='right_bckwd')
                 left_child = ParseNode(g,left_words,parent=self,node_type='right_fwd')
-                hits = re.findall(fr'[\\\|]\(?{re.escape(right_child.semantic_category)}\)?$',left_child.semantic_category)
-            for hit in hits:
-                self.semantic_category_placeholder = left_child.semantic_category[:-len(hit)-1]
+                new_syn_cat = f'{self.syn_cat}\\{maybe_bracketted(left_child.syn_cat)}'
+                assert f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)
+                right_child = ParseNode(f,right_words,parent=self,node_type='right_bckwd',syn_cat=new_syn_cat)
             self.append_split(left_child,right_child,direction)
 
         if len(self.possible_splits) == 0:
@@ -365,6 +355,17 @@ class ParseNode():
         assert left.sibling is not None
         assert right.sibling is not None
         self.possible_splits.append({'left':left,'right':right,'combinator':combinator})
+
+    def propagate_syn_cat(self,f,g):
+        if '|' in g.sem_cat:
+            new_assigned_category = f'{self.sem_cat}|({g.sem_cat})'
+        else:
+            new_assigned_category = f'{self.sem_cat}|{g.sem_cat}'
+        assert f.sem_cat in [new_assigned_category,'XXX']
+        f.sem_cat = new_assigned_category
+        for f1,g1 in f.possible_splits:
+            if g1.sem_cat_is_set:
+                f.propagate_sem_cat_leftward(f1,g1)
 
     @property
     def is_g(self):
@@ -377,12 +378,11 @@ class ParseNode():
         return (f"ParseNode\n"
                 f"\tWords: {' '.join(self.words)}\n"
                 f"\tLogical Form: {self.logical_form.subtree_string()}\n"
-                f"\tSyntactic Category: {self.semantic_category}\n")
+                f"\tSyntactic Category: {self.syn_cat}\n")
 
     def siblingify(self,other):
         self.sibling = other
         other.sibling = self
-
 
 def beta_normalize(m):
     m = remove_possible_outer_brackets(m)
@@ -429,6 +429,11 @@ def strip_string(ss):
     # allowed to have trailing bound variables
     return ss
 
+def is_congruent(syn_cat,sem_cat):
+    assert '\\' not in sem_cat and '/' not in sem_cat
+    sem_cat_splits = split_respecting_brackets(sem_cat,sep='|')
+    syn_cat_splits = split_respecting_brackets(syn_cat,sep=['\\','/','|'])
+    return sem_cat_splits == syn_cat_splits
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("--expname", type=str, default='tmp',
@@ -437,6 +442,8 @@ if __name__ == "__main__":
     ARGS.add_argument("--is_dump_verb_repo", action="store_true",
                           help="whether to dump the verb repository")
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
+    ARGS.add_argument("--show_splits", action="store_true")
+    ARGS.add_argument("--simple_example", action="store_true")
     ARGS = ARGS.parse_args()
 
     if ARGS.dset == 'easy-adam':
@@ -455,15 +462,16 @@ if __name__ == "__main__":
 
     for dpoint in d['data']:
         words, parse = dpoint['words'], dpoint['parse']
-        lf = LogicalForm(parse,'START')
-        if '.' in words:
-            breakpoint()
-        pn = ParseNode(lf,words,'ROOT')
-        #lf = LogicalForm('loc colorado virginia')
-        #pn = ParseNode(lf, ['colarado', 'is', 'in', 'virginia'],'ROOT')
+        if ARGS.simple_example:
+            lf = LogicalForm('loc colorado virginia')
+            pn = ParseNode(lf, ['colarado', 'is', 'in', 'virginia'],syn_cat='S',node_type='ROOT')
+        else:
+            lf = LogicalForm(parse,'START')
+            pn = ParseNode(lf,words,'ROOT')
         print(pn)
-        for ps in pn.possible_splits:
-            pprint(ps)
-            print('\n')
+        if ARGS.show_splits:
+            for ps in pn.possible_splits:
+                pprint(ps)
+                print('\n')
         breakpoint()
         break
