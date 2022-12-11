@@ -9,9 +9,10 @@ import re
 # is_semantic_leaf means we shouldn't consider breaking it further
 # e.g. lambda $0. state $0 is a semantic leaf but a leaf
 class LogicalForm:
-    def __init__(self,defining_string,base_lexicon,parent=None):
+    def __init__(self,defining_string,base_lexicon,splits_cache,parent=None):
         had_surrounding_brackets = False
         self.base_lexicon = base_lexicon
+        self.splits_cache = splits_cache
         self.var_descendents = []
         self.possible_splits = []
         self.parent = parent
@@ -30,7 +31,7 @@ class LogicalForm:
             self.is_leaf = False
             self.string = lambda_string
             self.node_type = 'lmbda'
-            self.children = [LogicalForm(remaining_string,self.base_lexicon,parent=self)]
+            self.children = [LogicalForm(remaining_string,self.base_lexicon,splits_cache=splits_cache,parent=self)]
 
             for d in self.descendents:
                 if d.node_type == 'unbound_var' and d.string == variable_index:
@@ -45,7 +46,7 @@ class LogicalForm:
                     had_surrounding_brackets = True
                     assert not is_bracketed(defining_string[1:-1])
                     arguments = split_respecting_brackets(defining_string[1:-1])
-                self.children = [LogicalForm(a,self.base_lexicon,parent=self) for a in arguments]
+                self.children = [LogicalForm(a,self.base_lexicon,splits_cache=splits_cache,parent=self) for a in arguments]
                 self.is_leaf = False
             else:
                 self.string = defining_string
@@ -73,18 +74,6 @@ class LogicalForm:
                 self.is_semantic_leaf = False
         if defining_string == "lambda $2.lambda $1.loc $1 $2":
             assert self.sem_cat == 'S|NP|NP'
-
-            #if self.num_lambda_binders == 2 and re.match(r'((lambda \$\d{1,2}\.?)+AND)',self.subtree_string()) is not None:
-            #    assert self.stripped_subtree_string.startswith('AND')
-            #    # check if a type-raised version
-            #    if lookup_self.base_lexicon(self.stripped_subtree_string[3:]) != 'XXX': # only thing apart from AND is in self.base_lexicon
-            #        inner_var = self.subtree_string().split('.')[-2].split(' ')[1]
-            #        terms_after_the_AND = re.sub(r'^(lambda \$\d{1,2}\.?)*AND ','',self.subtree_string())
-            #        if all([inner_var in x for x in split_respecting_brackets(terms_after_the_AND)]):
-            #            breakpoint()
-            #            self.is_semantic_leaf = True
-            #            untyperaised = lookup_self.base_lexicon(self.stripped_subtree_string[3:])
-            #            self.sem_cat = f'S|({untyperaised})' # always assume S for now
 
     @property
     def stripped_subtree_string(self):
@@ -184,7 +173,7 @@ class LogicalForm:
         return x
 
     def copy(self):
-        copied_version = LogicalForm(self.subtree_string(),self.base_lexicon)
+        copied_version = LogicalForm(self.subtree_string(),self.base_lexicon,self.splits_cache)
         assert copied_version == self
         copied_version.sem_cat = self.sem_cat
         return copied_version
@@ -217,11 +206,11 @@ class LogicalForm:
             desc.extend_var_descendents(var_num)
             desc.node_type = 'bound_var'
         lambda_prefix = '.'.join([f'lambda ${vn}' for vn in reversed(vars_abstracted)])
-        copied = LogicalForm(lambda_prefix+'.' + copied.subtree_string(),self.base_lexicon)
+        copied = LogicalForm(lambda_prefix+'.' + copied.subtree_string(),self.base_lexicon,self.splits_cache)
         return copied
 
     def lambda_abstract(self,var_num):
-        new = LogicalForm(f'lambda ${var_num}',self.base_lexicon,parent=self.parent)
+        new = LogicalForm(f'lambda ${var_num}',self.base_lexicon,self.splits_cache,parent=self.parent)
         new.node_type = 'lmbda'
         new.children = [self]
         new.stored_subtree_string =f'lambda ${var_num}.{self.subtree_string()}'
@@ -235,6 +224,8 @@ class LogicalForm:
             return []
         if self.num_lambda_binders > 4:
             return []
+        if self in self.splits_cache:
+            return self.splits_cache[self]
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
         for removee_idxs in all_sublists(possible_removee_idxs):
             if removee_idxs == []: continue
@@ -261,21 +252,15 @@ class LogicalForm:
             g_sub_var_num = self.new_var_num
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
             assert entry_point.subtree_string() in self.subtree_string()
-            #old_g = entry_point.subtree_string()
-            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon)
-            #new_g = entry_point.subtree_string()
-            #new_f_string = f.subtree_string().replace(old_g,new_g)
-            #new_f_string = f.subtree_string(recompute=True)
+            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.splits_cache)
             if len(to_present_as_args_to_g) > 3: # then f will end up with arity 4
                 continue
             if strip_string(f.subtree_string().replace(' AND','')) == '': # also exclude case where only substantive is 'AND'
                 continue
-            #f.__init__(f'lambda ${g_sub_var_num}.' + new_f_string,f.base_lexicon)
             f = f.lambda_abstract(g_sub_var_num)
             f.sem_cat = f.base_lexicon.get(f.stripped_subtree_string,'XXX')
             concatted = concat_lfs(f,g)
-            #if not beta_normalize(concatted) == self.subtree_string():
-                #breakpoint()
+            assert beta_normalize(concatted) == self.subtree_string()
             assert f != self
             assert g != self
             self.possible_splits.append((f,g))
@@ -289,6 +274,7 @@ class LogicalForm:
             assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
             f.infer_splits()
             g.infer_splits()
+        self.splits_cache[self] = self.possible_splits
         return self.possible_splits
 
     def propagate_sem_cat_leftward(self,f,g):
@@ -337,8 +323,8 @@ class ParseNode():
             if self.logical_form.possible_splits == []:
                 self.logical_form.infer_splits()
             for f,g in self.logical_form.possible_splits:
-                if f.sem_cat_is_set:
-                    assert re.match(fr'.*\|\(?{g.sem_cat}\)?$',f.sem_cat)
+                if g.sem_cat_is_set:
+                    #assert re.match(fr'.*\|\(?{g.sem_cat}\)?$',f.sem_cat)
                     self.add_splits(f,g,'fwd')
                     self.add_splits(f,g,'bck')
         #else:
@@ -391,10 +377,13 @@ class ParseNode():
         return self.node_type in ['right_fwd','left_fwd']
 
     def __repr__(self):
-        return (f"ParseNode\n"
+        base = (f"ParseNode\n"
                 f"\tWords: {' '.join(self.words)}\n"
                 f"\tLogical Form: {self.logical_form.subtree_string()}\n"
                 f"\tSyntactic Category: {self.syn_cat}\n")
+        if hasattr(self,'stored_prob'):
+            base += f'\tProb: {self.stored_prob}\n'
+        return base
 
     def siblingify(self,other):
         self.sibling = other
@@ -415,6 +404,7 @@ class ParseNode():
 
         total_prob = prob_as_leaf + prob_from_descendents
         cache[self] = total_prob
+        self.stored_prob = total_prob
         return total_prob
 
 def beta_normalize(m):
