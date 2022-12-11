@@ -30,8 +30,10 @@ class SimpleDirichletProcess(ABC):
         self.count += weight
 
     def show(self):
+        norm = sum(self.memory.values())
         scores = sorted(self.memory.items(), key=lambda x: x[1])
-        pprint(scores)
+        scores = [(k,v/norm) for k,v in scores]
+        pprint(scores[-25:])
 
 class CCGDirichletProcess(SimpleDirichletProcess):
     def base_distribution(self,x):
@@ -80,23 +82,27 @@ class LanguageAcquirer():
         self.shell_meaning_learner = Learner(1000,ShellMeaningDirichletProcess)
         self.meaning_learner = Learner(500,MeaningDirichletProcess)
         self.word_learner = Learner(1,WordSpanDirichletProcess)
+        self.lf_splits_cache = {}
 
     def train_one_step(self,words,logical_form_str):
-        lf = LogicalForm(logical_form_str,self.base_lexicon,parent='START')
+        start_time = time()
+        lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,parent='START')
         parse_root = ParseNode(lf,words,'ROOT')
-        cache = {}
+        prob_cache = {}
         root_prob = parse_root.prob(self.syntax_learner,
-                self.shell_meaning_learner,self.meaning_learner,self.word_learner,cache)
-        for node, prob in cache.items():
+                self.shell_meaning_learner,self.meaning_learner,self.word_learner,prob_cache)
+        for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 syntax_split = node.syn_cat + ' + ' + node.sibling.syn_cat
-                self.syntax_learner.observe(syntax_split,node.parent.syn_cat,weight=prob)
+                update_weight = node.stored_prob * node.sibling.stored_prob # prob data given split
+                self.syntax_learner.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
             shell_lf = node.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
             lf = node.logical_form.subtree_string(alpha_normalized=True)
             word_str = ' '.join(node.words)
             self.shell_meaning_learner.observe(shell_lf,node.syn_cat,weight=prob)
             self.meaning_learner.observe(lf,shell_lf,weight=prob)
             self.word_learner.observe(word_str,lf,weight=prob)
+        print(f'{time()-start_time:.4f}')
 
 
 if __name__ == "__main__":
@@ -104,7 +110,8 @@ if __name__ == "__main__":
     ARGS.add_argument("--expname", type=str, default='tmp',
                           help="the directory to write output files")
     ARGS.add_argument("--dset", type=str, choices=['easy-adam','geo'], default="geo")
-    ARGS.add_argument("--num_data_points", type=int, default=-1)
+    ARGS.add_argument("--num_dpoints", type=int, default=-1)
+    ARGS.add_argument("--db_at", type=int, default=-1)
     ARGS.add_argument("--is_dump_verb_repo", action="store_true",
                           help="whether to dump the verb repository")
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
@@ -121,18 +128,24 @@ if __name__ == "__main__":
     #base_lexicon = {w:cat for item,cat in zip([NPS,INTRANSITIVES],('NP','S|NP|NP')) for w in item}
 
     language_acquirer = LanguageAcquirer(base_lexicon)
-    ndps = len(d['data']) if ARGS.num_data_points == -1 else ARGS.num_data_points
+    ndps = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
     start_time = time()
-    for dpoint in d['data'][:ndps]:
+    for i,dpoint in enumerate(d['data'][:ndps]):
         if ARGS.simple_example:
             lf_str = 'loc colorado virginia'
             words = ['colarado', 'is', 'in', 'virginia']
         else:
             words, lf_str = dpoint['words'], dpoint['parse']
+        if words[-1] == '?':
+            words = words[:-1]
         print(words,lf_str)
-        if len(words) > 10:
+        if i == ARGS.db_at:
+            breakpoint()
+        if len(words) > 6:
             print(f"excluding because too long: {' '.join(words)}")
             continue
         language_acquirer.train_one_step(words,lf_str)
     language_acquirer.syntax_learner.distributions['S'].show()
+    language_acquirer.word_learner.distributions['city'].show()
     print(f'{time()-start_time:.4f}')
+    breakpoint()
