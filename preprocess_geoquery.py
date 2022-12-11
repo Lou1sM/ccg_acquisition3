@@ -13,9 +13,14 @@ np_list = []
 
 def process_line(g_line):
     assert g_line.startswith('parse(')
+    g_line = re.sub(r'\'(\w+) (\w+)\'',r'\1_\2',g_line) # replace spaces with _ in e.g. new york
     g_line = g_line.lstrip('parse(').rstrip('.\n')[:-1]
+    g_line = g_line.replace(',_','')
+    if ',_' in g_line:
+        breakpoint()
     words_str,_,parse_str = g_line[:-1].partition(', answer(A,')
     words = list(words_str[1:-1].split(','))
+    #if words_str == '[san,antonio,is,in,what,state,?]':
     if words[-1] == "'.'":
         print(words)
         words = words[:-1]
@@ -29,21 +34,22 @@ def process_line(g_line):
     for vn_old,vn_new in var_name_conversion_dict.items():
         parse_str = re.sub(vn_old,vn_new,parse_str)
     # replace 'const' predicate with constants as names
-    consts = re.findall(r'const\(\$\d,\w+id\(\'?[a-z ,]+\'?[,_]*\)\)',parse_str)
+    consts = re.findall(r'const\(\$\d,\w+id\(\'?[a-z _,]+\'?[,_]*\)\)',parse_str)
     for c in consts:
         parse_str = re.sub(re.escape(','+c),'',parse_str)
         parse_str = re.sub(re.escape(c+','),'',parse_str)
         assert c[6:8] in var_name_conversion_dict.values()
         var_str_to_match = fr'\${c[7]}'
         name_being_given = c.split('id(')[1][:-2]
+        if name_being_given.endswith(',_'):
+            name_being_given = name_being_given[:-2]
         np_list.append(name_being_given)
         parse_str = re.sub(var_str_to_match,name_being_given,parse_str)
     parse_str = 'lambda $0.' + parse_str
-    if 'const' in parse_str:
-        print(parse_str)
     if parse_str.startswith('('):
         breakpoint()
 
+    assert 'cityid' not in parse_str
     return words, parse_str
 
 def convert_to_no_comma_form(parse):
@@ -63,15 +69,20 @@ def convert_to_no_comma_form(parse):
         end_of_predicate = first_chunk.find('(')
         pred = first_chunk[:end_of_predicate]
         arg_splits = split_respecting_brackets(first_chunk[end_of_predicate+1:-1],sep=',')
-        recursed = ' '.join([convert_to_no_comma_form(x) for x in arg_splits])
+        recursed_list = [convert_to_no_comma_form(x) for x in arg_splits]
+        recursed = ' '.join(['('+x+')' if x.startswith('AND') else x for x in recursed_list])
         converted = f'{pred} {recursed}'
     if rest.startswith(','): rest = rest[1:]
     converted_rest = convert_to_no_comma_form(rest)
     if len(converted_rest) > 0:
-        converted = f'{converted} ({converted_rest})'
+        if converted.startswith('AND'):
+            converted = f'({converted}) ({converted_rest})'
+            print(converted)
+        else:
+            converted = f'{converted} ({converted_rest})'
     assert ' )' not in converted
     assert ',' not in converted
-    print(f'{parse} --> {converted}')
+    #print(f'{parse} --> {converted}')
     if end_of_lambda == -1:
         return converted
     else:
@@ -81,15 +92,14 @@ def convert_to_no_comma_form(parse):
 dpoints = []
 for gl in geoquery_data:
     words, parse = process_line(gl)
-    print(f'\n{parse}\n')
+    #print(f'\n{parse}\n')
+    #if words == ['how', 'many', 'capitals', 'does', 'rhode', 'island', 'have','?']:
+        #breakpoint()
     decommaified = convert_to_no_comma_form(parse)
-    print(parse,'\t',decommaified)
+    #print(parse,'\t',decommaified)
     dpoints.append({'words':words,'parse':decommaified,'parse_with_commas':parse})
 
 np_list = list(set(np_list))
-print(np_list)
-print(intransitives)
-print(transitives)
 processed_dset = {'np_list':np_list, 'intransitive_verbs':list(intransitives),
                     'transitive_verbs': list(transitives), 'data':dpoints}
 with open('data/preprocessed_geoqueries.json','w') as f:
