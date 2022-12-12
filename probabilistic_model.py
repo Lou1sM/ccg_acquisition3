@@ -1,4 +1,5 @@
 import numpy as np
+from utils import normalize_dict
 from time import time
 from pprint import pprint
 import argparse
@@ -30,9 +31,8 @@ class SimpleDirichletProcess(ABC):
         self.count += weight
 
     def show(self):
-        norm = sum(self.memory.values())
         scores = sorted(self.memory.items(), key=lambda x: x[1])
-        scores = [(k,v/norm) for k,v in scores]
+        scores = normalize_dict(scores)
         pprint(scores[-25:])
 
 class CCGDirichletProcess(SimpleDirichletProcess):
@@ -62,7 +62,7 @@ class Learner():
         self.distributions = {}
         self.dp_type = dp_type # type of Dirichlet process
 
-    def prob(self,y,x):
+    def prob(self,y,x): # prob of y given x
         if x in self.distributions:
             distribution = self.distributions[x]
         else:
@@ -74,6 +74,12 @@ class Learner():
             self.distributions[x] = self.dp_type(self.alpha)
         self.distributions[x].observe(y,weight)
 
+    def inverse_distribution(self,y): # conditional on y
+        inverse_distribution = {x_bar:d.prob(y) for x_bar,d in self.distributions.items()}
+        seen_before = any([y in d.memory for d in self.distributions.values()])
+        assert seen_before, f'learner hasn\'t seen word \'{y}\' before'
+        return normalize_dict(inverse_distribution)
+
 
 class LanguageAcquirer():
     def __init__(self,base_lexicon):
@@ -83,6 +89,15 @@ class LanguageAcquirer():
         self.meaning_learner = Learner(500,MeaningDirichletProcess)
         self.word_learner = Learner(1,WordSpanDirichletProcess)
         self.lf_splits_cache = {}
+
+    def show_word(self,word):
+        distr = self.word_learner.inverse_distribution(word)
+        probs = sorted(distr.items(), key=lambda x:x[1])[-15:]
+        print(f'\nLearned Meaning for \'{word}\'')
+        print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs]))
+
+    def show_splits(self,syn_cat):
+        return self.syntax_learner.distributions(syn_cat)
 
     def train_one_step(self,words,logical_form_str):
         start_time = time()
@@ -112,6 +127,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--dset", type=str, choices=['easy-adam','geo'], default="geo")
     ARGS.add_argument("--num_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
+    ARGS.add_argument("--max_sent_len", type=int, default=6)
     ARGS.add_argument("--is_dump_verb_repo", action="store_true",
                           help="whether to dump the verb repository")
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
@@ -125,7 +141,6 @@ if __name__ == "__main__":
     TRANSITIVES = d['transitive_verbs']
     INTRANSITIVES = d['intransitive_verbs']
     base_lexicon = {w:cat for item,cat in zip([NPS,INTRANSITIVES,TRANSITIVES],('NP','S|NP','S|NP|NP')) for w in item}
-    #base_lexicon = {w:cat for item,cat in zip([NPS,INTRANSITIVES],('NP','S|NP|NP')) for w in item}
 
     language_acquirer = LanguageAcquirer(base_lexicon)
     ndps = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
@@ -141,11 +156,12 @@ if __name__ == "__main__":
         print(words,lf_str)
         if i == ARGS.db_at:
             breakpoint()
-        if len(words) > 6:
+        if len(words) > ARGS.max_sent_len:
             print(f"excluding because too long: {' '.join(words)}")
             continue
         language_acquirer.train_one_step(words,lf_str)
     language_acquirer.syntax_learner.distributions['S'].show()
-    language_acquirer.word_learner.distributions['city'].show()
-    print(f'{time()-start_time:.4f}')
+    language_acquirer.show_word('virginia')
+    language_acquirer.show_word('cities')
+    print(f'Total run time: {time()-start_time:.3f}s')
     breakpoint()

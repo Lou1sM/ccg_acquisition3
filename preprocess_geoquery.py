@@ -5,7 +5,6 @@ import json
 with open('geoqueries880') as f:
     geoquery_data = f.readlines()
 
-#var_name_conversion_dict = {'A':'x','B':'y','C':'z','D':'u','E':'v','F':'s','G':'t'}
 var_name_conversion_dict = {k:f'${i}' for i,k in enumerate('ABCDEFG')}
 intransitives = set([x[0] for x in re.findall(r'(\w+)(?=(\([A-G]\)))',''.join(geoquery_data))])
 transitives = set([x[0] for x in re.findall(r'(\w+)(?=(\([A-G],[A-G]\)))',''.join(geoquery_data))])
@@ -14,13 +13,13 @@ np_list = []
 def process_line(g_line):
     assert g_line.startswith('parse(')
     g_line = re.sub(r'\'(\w+) (\w+)\'',r'\1_\2',g_line) # replace spaces with _ in e.g. new york
+    g_line = re.sub(r'\'(\w+) (\w+) (\w+)\'',r'\1_\2_\3',g_line) # replace spaces with _ in e.g. salt lake city
     g_line = g_line.lstrip('parse(').rstrip('.\n')[:-1]
     g_line = g_line.replace(',_','')
-    if ',_' in g_line:
+    if 'salt lake city' in g_line:
         breakpoint()
     words_str,_,parse_str = g_line[:-1].partition(', answer(A,')
     words = list(words_str[1:-1].split(','))
-    #if words_str == '[san,antonio,is,in,what,state,?]':
     if words[-1] == "'.'":
         print(words)
         words = words[:-1]
@@ -43,6 +42,7 @@ def process_line(g_line):
         name_being_given = c.split('id(')[1][:-2]
         if name_being_given.endswith(',_'):
             name_being_given = name_being_given[:-2]
+        name_being_given = name_being_given.split(',')[0]
         np_list.append(name_being_given)
         parse_str = re.sub(var_str_to_match,name_being_given,parse_str)
     parse_str = 'lambda $0.' + parse_str
@@ -70,7 +70,7 @@ def convert_to_no_comma_form(parse):
         pred = first_chunk[:end_of_predicate]
         arg_splits = split_respecting_brackets(first_chunk[end_of_predicate+1:-1],sep=',')
         recursed_list = [convert_to_no_comma_form(x) for x in arg_splits]
-        recursed = ' '.join(['('+x+')' if x.startswith('AND') else x for x in recursed_list])
+        recursed = ' '.join(['('+x+')' if len(x.split())>1 and i > 0 else x for i,x in enumerate(recursed_list)])
         converted = f'{pred} {recursed}'
     if rest.startswith(','): rest = rest[1:]
     converted_rest = convert_to_no_comma_form(rest)

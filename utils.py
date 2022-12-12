@@ -67,3 +67,13 @@ def remove_possible_outer_brackets(s):
         else:
             break
     return s
+
+def normalize_dict(d):
+    if isinstance(d,list):
+        assert all([isinstance(item,tuple) for item in d])
+        norm = sum([item[1] for item in d])
+        return [(item[0],item[1]/norm) for item in d]
+    else:
+        assert isinstance(d,dict)
+        norm = sum(d.values())
+        return {k:v/norm for k,v in d.items()}

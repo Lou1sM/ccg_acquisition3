@@ -214,9 +214,9 @@ class LogicalForm:
         new.node_type = 'lmbda'
         new.children = [self]
         new.stored_subtree_string =f'lambda ${var_num}.{self.subtree_string()}'
-        new.stored_alpha_normalized_subtree_string =f'lambda ${var_num}. {self.subtree_string(alpha_normalized=True)}'
-        new.stored_shell_subtree_string =f'lambda ${var_num}. {self.subtree_string(as_shell=True)}'
-        new.stored_alpha_normalized_shell_subtree_string =f'lambda ${var_num}. {self.subtree_string(alpha_normalized=True,as_shell=True)}'
+        new.stored_alpha_normalized_subtree_string =f'lambda ${var_num}.{self.subtree_string(alpha_normalized=True)}'
+        new.stored_shell_subtree_string =f'lambda ${var_num}.{self.subtree_string(as_shell=True)}'
+        new.stored_alpha_normalized_shell_subtree_string =f'lambda ${var_num}.{self.subtree_string(alpha_normalized=True,as_shell=True)}'
         return new
 
     def infer_splits(self):
