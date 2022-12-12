@@ -89,8 +89,9 @@ class LanguageAcquirer():
         self.meaning_learner = Learner(500,MeaningDirichletProcess)
         self.word_learner = Learner(1,WordSpanDirichletProcess)
         self.lf_splits_cache = {}
+        self.lf_shell_splits_cache = {}
 
-    def show_word(self,word):
+    def show_word(self,word): # prob of meaning given word assuming flat prior over meanings
         distr = self.word_learner.inverse_distribution(word)
         probs = sorted(distr.items(), key=lambda x:x[1])[-15:]
         print(f'\nLearned Meaning for \'{word}\'')
@@ -101,7 +102,7 @@ class LanguageAcquirer():
 
     def train_one_step(self,words,logical_form_str):
         start_time = time()
-        lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,parent='START')
+        lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,self.lf_shell_splits_cache,parent='START')
         parse_root = ParseNode(lf,words,'ROOT')
         prob_cache = {}
         root_prob = parse_root.prob(self.syntax_learner,

@@ -102,5 +102,6 @@ for gl in geoquery_data:
 np_list = list(set(np_list))
 processed_dset = {'np_list':np_list, 'intransitive_verbs':list(intransitives),
                     'transitive_verbs': list(transitives), 'data':dpoints}
+
 with open('data/preprocessed_geoqueries.json','w') as f:
     json.dump(processed_dset,f)
