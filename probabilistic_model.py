@@ -36,59 +36,101 @@ class SimpleDirichletProcess(ABC):
         scores = normalize_dict(scores)
         pprint(scores[-25:])
 
-class CCGDirichletProcess(SimpleDirichletProcess):
+class BaseDirichletProcessLearner(ABC):
+    def __init__(self,alpha):
+        self.alpha = alpha
+        self.memory = pd.DataFrame([],columns=['count'])
+        self.base_distribution_cache = pd.Series([],dtype=float)
+        self.x_vocab = []
+        self.y_vocab = []
+
+    def count(self,x):
+        return self.memory.loc[x,'count']
+
+    def base_distribution_(self,x):
+        raise NotImplementedError
+
+    def prob(self,y,x): # prob of y given x
+        base_prob = self.base_distribution(y)
+        if x not in self.memory.index:
+            return base_prob
+        mem_count = self.memory.loc[x].get('count',0)
+        mem_count_y = self.memory.loc[x].get(y,0)
+        if mem_count_y!=mem_count_y:
+            return base_prob # it's nan, which means 0
+        p = (mem_count_y + self.alpha*base_prob)/(mem_count+self.alpha)
+        if p!=p:
+            breakpoint()
+        return p
+
+    def observe(self,y,x,weight):
+        #if isinstance(self,CCGDirichletProcess):
+            #breakpoint()
+        if x not in self.x_vocab: self.x_vocab.append(x)
+        if y not in self.y_vocab: self.y_vocab.append(y)
+        if x in self.memory.index and y in self.memory.columns and self.memory.loc[x].notna().loc[y]:
+            self.memory.loc[x,y] += weight
+            self.memory.loc[x,'count'] += weight
+        else:
+            self.memory.loc[x,y] = weight
+            if self.memory.loc[x,'count']!=self.memory.loc[x,'count']:
+                self.memory.loc[x,'count'] = weight
+            else:
+                self.memory.loc[x,'count'] += weight
+        assert (self.memory.sum(axis=1) - 2*self.memory['count']).max() < 1e-10
+
+    def inverse_distribution(self,y): # conditional on y
+        seen_before = y in self.memory.columns
+        assert seen_before, f'learner hasn\'t seen word \'{y}\' before'
+        inverse_distribution = {x:self.prob(y,x)*self.count(x) for x,d in self.memory.index}
+        return normalize_dict(inverse_distribution)
+
     def base_distribution(self,x):
+        if x in self.base_distribution_cache.index:
+            return self.base_distribution_cache.loc[x]
+        base_prob = self.base_distribution_(x)
+        self.base_distribution_cache[x] = base_prob
+        return base_prob
+
+    def prob_mat(self):
+        return (self.memory.drop('count') + self.base_distribution_cache*self.alpha)/(self.memory['count']+self.alpha)
+
+    def inverse_prob_mat(self):
+        unnormed_probs = self.memory.drop('count',axis=1) + self.base_distribution_cache*self.alpha
+        normed_probs = unnormed_probs/unnormed_probs.sum(axis=0)
+        return normed_probs.T
+
+class CCGDirichletProcess(BaseDirichletProcessLearner):
+    def base_distribution_(self,x):
         num_slashes = len(re.findall(r'\\/\|',x))
         return 0.2**(num_slashes+1)
 
-class ShellMeaningDirichletProcess(SimpleDirichletProcess):
-    def base_distribution(self,x):
+class ShellMeaningDirichletProcess(BaseDirichletProcessLearner):
+    def base_distribution_(self,x):
         num_vars = len(set(re.findall(r'\$\d',x)))
         num_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
         return np.e**(2*num_vars + num_constants)
 
-class MeaningDirichletProcess(SimpleDirichletProcess):
-    def base_distribution(self,x):
+class MeaningDirichletProcess(BaseDirichletProcessLearner):
+    def base_distribution_(self,x):
         return 1 # unnormalized uniform, hope this works, may end up unfairly rewarding depth
 
-class WordSpanDirichletProcess(SimpleDirichletProcess):
-    def base_distribution(self,x):
-        #return 1/500**len(x)
+class WordSpanDirichletProcess(BaseDirichletProcessLearner):
+    def base_distribution_(self,x):
         assert len(x) > 0
         return 1/27 * 28**(-len(x)+1)
 
-class Learner():
-    def __init__(self,alpha,dp_type):
-        self.alpha = alpha
-        self.distributions = {}
-        self.dp_type = dp_type # type of Dirichlet process
-
-    def prob(self,y,x): # prob of y given x
-        if x in self.distributions:
-            distribution = self.distributions[x]
-        else:
-            distribution = self.dp_type(self.alpha)
-        return distribution.prob(y)
-
-    def observe(self,y,x,weight):
-        if x not in self.distributions:
-            self.distributions[x] = self.dp_type(self.alpha)
-        self.distributions[x].observe(y,weight)
-
-    def inverse_distribution(self,y): # conditional on y
-        inverse_distribution = {x_bar:d.prob(y)*d.count for x_bar,d in self.distributions.items()}
-        seen_before = any([y in d.memory for d in self.distributions.values()])
-        assert seen_before, f'learner hasn\'t seen word \'{y}\' before'
-        return normalize_dict(inverse_distribution)
-
-
 class LanguageAcquirer():
-    def __init__(self,base_lexicon):
+    def __init__(self,base_lexicon,syntax_alpha,shell_meaning_alpha,meaning_alpha,word_alpha):
         self.base_lexicon = base_lexicon
-        self.syntax_learner = Learner(1,CCGDirichletProcess)
-        self.shell_meaning_learner = Learner(1000,ShellMeaningDirichletProcess)
-        self.meaning_learner = Learner(500,MeaningDirichletProcess)
-        self.word_learner = Learner(1,WordSpanDirichletProcess)
+        self.syntax_alpha = syntax_alpha
+        self.shell_meaning_alpha = shell_meaning_alpha
+        self.meaning_alpha = meaning_alpha
+        self.word_alpha = word_alpha
+        self.syntax_learner = CCGDirichletProcess(syntax_alpha)
+        self.shell_meaning_learner = ShellMeaningDirichletProcess(shell_meaning_alpha)
+        self.meaning_learner = MeaningDirichletProcess(meaning_alpha)
+        self.word_learner = WordSpanDirichletProcess(word_alpha)
         self.lf_splits_cache = {}
 
     @property
@@ -115,9 +157,9 @@ class LanguageAcquirer():
         print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs]))
 
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
-        self.word_to_sem_probs = pd.DataFrame([self.word_learner.inverse_distribution(w) for w in self.vocab],index=self.vocab)
-        self.sem_to_sem_shell_probs = pd.DataFrame([self.meaning_learner.inverse_distribution(m) for m in self.lf_vocab],index=self.lf_vocab)
-        self.sem_shell_to_syn_probs = pd.DataFrame([self.shell_meaning_learner.inverse_distribution(m) for m in self.shell_lf_vocab],index=self.shell_lf_vocab)
+        self.word_to_sem_probs = self.word_learner.inverse_prob_mat()
+        self.sem_to_sem_shell_probs = self.meaning_learner.inverse_prob_mat()
+        self.sem_shell_to_syn_probs = self.shell_meaning_learner.inverse_prob_mat()
         self.word_to_syn_probs = self.word_to_sem_probs.dot(self.sem_to_sem_shell_probs).dot(self.sem_shell_to_syn_probs)
 
     def show_word(self,word):
@@ -127,9 +169,12 @@ class LanguageAcquirer():
             print(self.word_to_syn_probs.loc[word].sort_values()[-10:].view())
 
     def show_splits(self,syn_cat):
-        unnormed_counts = self.syntax_learner.distributions[syn_cat].memory
-        probs = normalize_dict(unnormed_counts)
-        probs = {k:probs[k] for k in sorted(probs,key=lambda x:probs[x])}
+        if syn_cat not in self.syntax_learner.memory.index:
+            print(f'learner hasn\'t seen word \'{syn_cat}\' before')
+        probs = self.syntax_learner.memory.loc[syn_cat]/self.syntax_learner.count(syn_cat)
+        #unnormed_counts = self.syntax_learner.memory[syn_cat].memory
+        #probs = normalize_dict(unnormed_counts)
+        #probs = {k:probs[k] for k in sorted(probs,key=lambda x:probs[x])}
         print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]))
 
     def train_one_step(self,words,logical_form_str):
@@ -176,7 +221,7 @@ if __name__ == "__main__":
     INTRANSITIVES = d['intransitive_verbs']
     base_lexicon = {w:cat for item,cat in zip([NPS,INTRANSITIVES,TRANSITIVES],('NP','S|NP','S|NP|NP')) for w in item}
 
-    language_acquirer = LanguageAcquirer(base_lexicon)
+    language_acquirer = LanguageAcquirer(base_lexicon,1,1,1,1)
     ndps = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
     start_time = time()
     for epoch_num in range(ARGS.num_epochs):
