@@ -10,32 +10,6 @@ from easy_split import LogicalForm, ParseNode
 import json
 
 
-class SimpleDirichletProcess(ABC):
-    def __init__(self,alpha):
-        self.alpha = alpha
-        self.memory = {}
-        self.count = 0
-
-    def base_distribution(self,x):
-        raise NotImplementedError
-
-    def prob(self,x):
-        mx = self.memory.get(x,0)
-        base = self.base_distribution(x)
-        return (mx+self.alpha*base)/(self.count+self.alpha)
-
-    def observe(self,x,weight):
-        if x in self.memory:
-            self.memory[x] += weight
-        else:
-            self.memory[x] = weight
-        self.count += weight
-
-    def show(self):
-        scores = sorted(self.memory.items(), key=lambda x: x[1])
-        scores = normalize_dict(scores)
-        pprint(scores[-25:])
-
 class BaseDirichletProcessLearner(ABC):
     def __init__(self,alpha):
         self.alpha = alpha
@@ -64,37 +38,37 @@ class BaseDirichletProcessLearner(ABC):
         assert 2*self.memory[x]['count'] == sum(self.memory[x].values())
 
     def inverse_distribution(self,y): # conditional on y
-        #inverse_distribution = {x_bar:d.prob(y)*d.count for x_bar,d in self.distributions.items()}
         seen_before = any([y in d for d in self.memory.values()])
         assert seen_before, f'learner hasn\'t seen word \'{y}\' before'
         inverse_distribution = {x:m.get(y,0) for x,m in self.memory.items()}
         return normalize_dict(inverse_distribution)
 
-    def base_distribution(self,x):
-        if x in self.base_distribution_cache:
-            return self.base_distribution_cache[x]
-        prob = self.base_distribution_(x)
-        self.base_distribution_cache[x] = prob
+    def base_distribution(self,y):
+        if y in self.base_distribution_cache:
+            return self.base_distribution_cache[y]
+        prob = self.base_distribution_(y)
+        self.base_distribution_cache[y] = prob
         return prob
 
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
-    def base_distribution(self,x):
+    def base_distribution_(self,x):
         num_slashes = len(re.findall(r'\\/\|',x))
         return 0.2**(num_slashes+1)
 
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
-    def base_distribution(self,x):
+    def base_distribution_(self,x):
         num_vars = len(set(re.findall(r'\$\d',x)))
         num_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
-        return np.e**(2*num_vars + num_constants)
+        return np.e**(-2*num_vars - num_constants)
 
 class MeaningDirichletProcessLearner(BaseDirichletProcessLearner):
-    def base_distribution(self,x):
-        return 1 # unnormalized uniform, hope this works, may end up unfairly rewarding depth
+    def base_distribution_(self,x):
+        num_vars = len(set(re.findall(r'\$\d',x)))
+        num_constants = float('PLACEHOLDER' in x)
+        return np.e**(-2*num_vars - num_constants)
 
 class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution(self,x):
-        #return 1/500**len(x)
         assert len(x) > 0
         return 1/27 * 28**(-len(x)+1)
 
@@ -105,7 +79,9 @@ class LanguageAcquirer():
         self.shell_meaning_learner = ShellMeaningDirichletProcessLearner(1000)
         self.meaning_learner = MeaningDirichletProcessLearner(500)
         self.word_learner = WordSpanDirichletProcessLearner(1)
+        self.lf_cache = {}
         self.lf_splits_cache = {}
+        self.parse_node_cache = {}
 
     @property
     def lf_vocab(self):
@@ -133,8 +109,11 @@ class LanguageAcquirer():
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
         start_time = time()
         self.word_to_sem_probs = pd.DataFrame([self.word_learner.inverse_distribution(w) for w in self.vocab],index=self.vocab)
+        self.word_to_sem_probs *= pd.Series(self.meaning_learner.base_distribution_cache)
         self.sem_to_sem_shell_probs = pd.DataFrame([self.meaning_learner.inverse_distribution(m) for m in self.lf_vocab],index=self.lf_vocab)
+        self.sem_to_sem_shell_probs *= pd.Series(self.shell_meaning_learner.base_distribution_cache)
         self.sem_shell_to_syn_probs = pd.DataFrame([self.shell_meaning_learner.inverse_distribution(m) for m in self.shell_lf_vocab],index=self.shell_lf_vocab)
+        self.sem_shell_to_syn_probs *= pd.Series({x:self.syntax_learner.base_distribution(x) for x in self.sem_shell_to_syn_probs.columns})
         self.word_to_syn_probs = self.word_to_sem_probs.dot(self.sem_to_sem_shell_probs).dot(self.sem_shell_to_syn_probs)
         print(f"inverse_prob_time: {time()-start_time:.3f}")
 
@@ -150,9 +129,16 @@ class LanguageAcquirer():
         print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]))
 
     def train_one_step(self,words,logical_form_str):
-        start_time = time()
-        lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,parent='START')
-        parse_root = ParseNode(lf,words,'ROOT')
+        if logical_form_str in self.lf_cache:
+            lf = self.lf_cache[logical_form_str]
+        else:
+            lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,parent='START')
+            self.lf_cache[logical_form_str] = lf
+        if ' '.join([logical_form_str]+words) in self.parse_node_cache:
+            parse_root = self.parse_node_cache[' '.join([logical_form_str]+words)]
+        else:
+            parse_root = ParseNode(lf,words,'ROOT')
+            self.parse_node_cache[' '.join([logical_form_str]+words)] = parse_root
         prob_cache = {}
         root_prob = parse_root.prob(self.syntax_learner,
                 self.shell_meaning_learner,self.meaning_learner,self.word_learner,prob_cache)
@@ -167,7 +153,6 @@ class LanguageAcquirer():
             self.shell_meaning_learner.observe(shell_lf,node.syn_cat,weight=prob)
             self.meaning_learner.observe(lf,shell_lf,weight=prob)
             self.word_learner.observe(word_str,lf,weight=prob)
-        print(f'{time()-start_time:.4f}')
 
 
 if __name__ == "__main__":
@@ -197,6 +182,7 @@ if __name__ == "__main__":
     ndps = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
     start_time = time()
     for epoch_num in range(ARGS.num_epochs):
+        print(f"Epoch: {epoch_num}")
         for i,dpoint in enumerate(d['data'][:ndps]):
             if ARGS.simple_example:
                 lf_str = 'loc colorado virginia'
@@ -208,7 +194,6 @@ if __name__ == "__main__":
             if i == ARGS.db_at:
                 breakpoint()
             if len(words) > ARGS.max_sent_len:
-                print(f"excluding because too long: {' '.join(words)}")
                 continue
             language_acquirer.train_one_step(words,lf_str)
     language_acquirer.show_splits('S')
