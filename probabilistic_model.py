@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from utils import normalize_dict
 from time import time
 from pprint import pprint
@@ -42,8 +43,8 @@ class CCGDirichletProcess(SimpleDirichletProcess):
 
 class ShellMeaningDirichletProcess(SimpleDirichletProcess):
     def base_distribution(self,x):
-        num_vars = len(x.var_descendents)
-        num_constants = len([z for z in x.descendents if z.node_type in ('bound_var','unbound_var')])
+        num_vars = len(set(re.findall(r'\$\d',x)))
+        num_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
         return np.e**(2*num_vars + num_constants)
 
 class MeaningDirichletProcess(SimpleDirichletProcess):
@@ -75,7 +76,7 @@ class Learner():
         self.distributions[x].observe(y,weight)
 
     def inverse_distribution(self,y): # conditional on y
-        inverse_distribution = {x_bar:d.prob(y) for x_bar,d in self.distributions.items()}
+        inverse_distribution = {x_bar:d.prob(y)*d.count for x_bar,d in self.distributions.items()}
         seen_before = any([y in d.memory for d in self.distributions.values()])
         assert seen_before, f'learner hasn\'t seen word \'{y}\' before'
         return normalize_dict(inverse_distribution)
@@ -89,20 +90,51 @@ class LanguageAcquirer():
         self.meaning_learner = Learner(500,MeaningDirichletProcess)
         self.word_learner = Learner(1,WordSpanDirichletProcess)
         self.lf_splits_cache = {}
-        self.lf_shell_splits_cache = {}
 
-    def show_word(self,word): # prob of meaning given word assuming flat prior over meanings
+    @property
+    def lf_vocab(self):
+        return self.word_learner.distributions.keys()
+
+    @property
+    def shell_lf_vocab(self):
+        return self.meaning_learner.distributions.keys()
+
+    @property
+    def mwe_vocab(self):
+        return set([w for x in self.word_learner.distributions.values() for w in x.memory.keys()])
+
+    @property
+    def vocab(self):
+        return list(set([w for x in self.word_learner.distributions.values()
+                        for w in x.memory.keys() if ' ' not in w]))
+
+    def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
         distr = self.word_learner.inverse_distribution(word)
         probs = sorted(distr.items(), key=lambda x:x[1])[-15:]
         print(f'\nLearned Meaning for \'{word}\'')
         print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs]))
 
+    def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
+        self.word_to_sem_probs = pd.DataFrame([self.word_learner.inverse_distribution(w) for w in self.vocab],index=self.vocab)
+        self.sem_to_sem_shell_probs = pd.DataFrame([self.meaning_learner.inverse_distribution(m) for m in self.lf_vocab],index=self.lf_vocab)
+        self.sem_shell_to_syn_probs = pd.DataFrame([self.shell_meaning_learner.inverse_distribution(m) for m in self.shell_lf_vocab],index=self.shell_lf_vocab)
+        self.word_to_syn_probs = self.word_to_sem_probs.dot(self.sem_to_sem_shell_probs).dot(self.sem_shell_to_syn_probs)
+
+    def show_word(self,word):
+        with pd.option_context('display.float_format', '${:,.2f}'.format):
+            breakpoint()
+            print(self.word_to_sem_probs.loc[word].sort_values()[-10:].view())
+            print(self.word_to_syn_probs.loc[word].sort_values()[-10:].view())
+
     def show_splits(self,syn_cat):
-        return self.syntax_learner.distributions(syn_cat)
+        unnormed_counts = self.syntax_learner.distributions[syn_cat].memory
+        probs = normalize_dict(unnormed_counts)
+        probs = {k:probs[k] for k in sorted(probs,key=lambda x:probs[x])}
+        print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]))
 
     def train_one_step(self,words,logical_form_str):
         start_time = time()
-        lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,self.lf_shell_splits_cache,parent='START')
+        lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,parent='START')
         parse_root = ParseNode(lf,words,'ROOT')
         prob_cache = {}
         root_prob = parse_root.prob(self.syntax_learner,
@@ -129,6 +161,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--num_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
     ARGS.add_argument("--max_sent_len", type=int, default=6)
+    ARGS.add_argument("--num_epochs", type=int, default=1)
     ARGS.add_argument("--is_dump_verb_repo", action="store_true",
                           help="whether to dump the verb repository")
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
@@ -146,23 +179,23 @@ if __name__ == "__main__":
     language_acquirer = LanguageAcquirer(base_lexicon)
     ndps = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
     start_time = time()
-    for i,dpoint in enumerate(d['data'][:ndps]):
-        if ARGS.simple_example:
-            lf_str = 'loc colorado virginia'
-            words = ['colarado', 'is', 'in', 'virginia']
-        else:
-            words, lf_str = dpoint['words'], dpoint['parse']
-        if words[-1] == '?':
-            words = words[:-1]
-        print(words,lf_str)
-        if i == ARGS.db_at:
-            breakpoint()
-        if len(words) > ARGS.max_sent_len:
-            print(f"excluding because too long: {' '.join(words)}")
-            continue
-        language_acquirer.train_one_step(words,lf_str)
-    language_acquirer.syntax_learner.distributions['S'].show()
+    for epoch_num in range(ARGS.num_epochs):
+        for i,dpoint in enumerate(d['data'][:ndps]):
+            if ARGS.simple_example:
+                lf_str = 'loc colorado virginia'
+                words = ['colarado', 'is', 'in', 'virginia']
+            else:
+                words, lf_str = dpoint['words'], dpoint['parse']
+            if words[-1] == '?':
+                words = words[:-1]
+            if i == ARGS.db_at:
+                breakpoint()
+            if len(words) > ARGS.max_sent_len:
+                print(f"excluding because too long: {' '.join(words)}")
+                continue
+            language_acquirer.train_one_step(words,lf_str)
+    language_acquirer.show_splits('S')
+    language_acquirer.compute_inverse_probs()
     language_acquirer.show_word('virginia')
     language_acquirer.show_word('cities')
     print(f'Total run time: {time()-start_time:.3f}s')
-    breakpoint()

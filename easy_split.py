@@ -10,11 +10,10 @@ import re
 # is_semantic_leaf means we shouldn't consider breaking it further
 # e.g. lambda $0. state $0 is a semantic leaf but a leaf
 class LogicalForm:
-    def __init__(self,defining_string,base_lexicon,splits_cache,shell_splits_cache,parent=None):
+    def __init__(self,defining_string,base_lexicon,splits_cache,parent=None):
         had_surrounding_brackets = False
         self.base_lexicon = base_lexicon
         self.splits_cache = splits_cache
-        self.shell_splits_cache = shell_splits_cache
         self.var_descendents = []
         self.possible_splits = []
         self.parent = parent
@@ -74,14 +73,12 @@ class LogicalForm:
             else:
                 self.sem_cat = 'XXX'
                 self.is_semantic_leaf = False
-        if defining_string == "lambda $2.lambda $1.loc $1 $2":
-            assert self.sem_cat == 'S|NP|NP'
 
     def spawn_child(self,defining_string):
-        return LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,shell_splits_cache=self.shell_splits_cache,parent=self)
+        return LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,parent=self)
 
     def spawn_self_like(self,defining_string):
-        new = LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,shell_splits_cache=self.shell_splits_cache,parent=self.parent)
+        new = LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,parent=self.parent)
         new.sem_cat = self.sem_cat
         return new
 
@@ -227,6 +224,7 @@ class LogicalForm:
         new.stored_alpha_normalized_subtree_string =f'lambda ${var_num}.{self.subtree_string(alpha_normalized=True)}'
         new.stored_shell_subtree_string =f'lambda ${var_num}.{self.subtree_string(as_shell=True)}'
         new.stored_alpha_normalized_shell_subtree_string =f'lambda ${var_num}.{self.subtree_string(alpha_normalized=True,as_shell=True)}'
+        new.var_descendents = list(set(self.var_descendents + [var_num]))
         return new
 
     def infer_splits(self):
@@ -236,16 +234,6 @@ class LogicalForm:
             return []
         if self in self.splits_cache:
             return self.splits_cache[self]
-        #if self.subtree_string(as_shell=True,alpha_normalized=True) in self.shell_splits_cache:
-        #    existing_split_head,existing_splits = self.shell_splits_cache[self.subtree_string(alpha_normalized=True,as_shell=True)]
-        #    if existing_splits == []:
-        #        self.possible_splits = []
-        #    else:
-        #        translation = translate_by_unify(existing_split_head,self.subtree_string())
-        #        translate(next(iter(existing_splits))[0].subtree_string(),translation)
-        #        self.possible_splits = [(f.spawn_self_like(translate(f.subtree_string(),translation)),g.spawn_self_like(translate(g.subtree_string(),translation))) for f,g in existing_splits]
-        #    self.splits_cache[self] = self.possible_splits
-        #    return self.possible_splits
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
         for removee_idxs in all_sublists(possible_removee_idxs):
             if removee_idxs == []: continue
@@ -271,7 +259,7 @@ class LogicalForm:
             g_sub_var_num = self.new_var_num
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
             assert entry_point.subtree_string() in self.subtree_string()
-            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.splits_cache,entry_point.shell_splits_cache)
+            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.splits_cache)
             if len(to_present_as_args_to_g) > 3: # then f will end up with arity 4
                 continue
             if strip_string(f.subtree_string().replace(' AND','')) == '': # also exclude case where only substantive is 'AND'
@@ -294,8 +282,6 @@ class LogicalForm:
             f.infer_splits()
             g.infer_splits()
         self.splits_cache[self] = self.possible_splits
-        x = (self.subtree_string(),self.possible_splits)
-        self.shell_splits_cache[self.subtree_string(as_shell=True,alpha_normalized=True)] = x
         return self.possible_splits
 
     def propagate_sem_cat_leftward(self,f,g):
@@ -415,7 +401,7 @@ class ParseNode():
         shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
         lf = self.logical_form.subtree_string(alpha_normalized=True)
         word_str = ' '.join(self.words)
-        prob_as_leaf = shell_meaning_learner.prob(self.logical_form,self.sem_cat) * meaning_learner.prob(lf,shell_lf) * word_learner.prob(word_str,lf) # This is where I'm omitting the conditionality that Omri used
+        prob_as_leaf = shell_meaning_learner.prob(shell_lf,self.sem_cat) * meaning_learner.prob(lf,shell_lf) * word_learner.prob(word_str,lf) # This is where I'm omitting the conditionality that Omri used
         prob_from_descendents = 0
         for ps in self.possible_splits:
             syntax_split = ps['left'].syn_cat + ' + ' + ps['right'].syn_cat
