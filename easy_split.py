@@ -1,14 +1,14 @@
 import json
-from utils import translate, translate_by_unify
+import numpy as np
 from pprint import pprint
 from utils import split_respecting_brackets, is_bracketed, all_sublists, remove_possible_outer_brackets, maybe_bracketted
 import argparse
 import re
 
 
-# is_leaf means its atomic in lambda calculus
+# is_leaf means it's atomic in lambda calculus
 # is_semantic_leaf means we shouldn't consider breaking it further
-# e.g. lambda $0. state $0 is a semantic leaf but a leaf
+# e.g. lambda $0. state $0 is a semantic leaf but not a leaf
 class LogicalForm:
     def __init__(self,defining_string,base_lexicon,splits_cache,parent=None):
         had_surrounding_brackets = False
@@ -22,7 +22,7 @@ class LogicalForm:
         self.stored_alpha_normalized_subtree_string = ''
         self.stored_alpha_normalized_shell_subtree_string = ''
         if parent == 'START':
-            self.sem_cat = 'S'
+            self.sem_cat = 'S|NP'
             self.is_semantic_leaf = False
 
         if '.' in defining_string:
@@ -170,6 +170,8 @@ class LogicalForm:
             else:
                 subtree_string = ' '.join(child_trees)
                 x = f'{self.string}({subtree_string})'
+        elif self.node_type == 'const' and as_shell:
+            return 'PLACEHOLDER'
         else:
             x = self.string
 
@@ -299,9 +301,6 @@ class LogicalForm:
     def sem_cat_is_set(self):
         return self.sem_cat != 'XXX'
 
-def concat_lfs(lf1,lf2):
-    return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'
-
 class ParseNode():
     def __init__(self,lf,words,node_type,parent=None,sibling=None,syn_cat=None):
         self.logical_form = lf
@@ -320,8 +319,8 @@ class ParseNode():
         if syn_cat is not None:
             self.syn_cat = syn_cat
         elif self.node_type == 'ROOT':
-            self.syn_cat = 'S'
-            assert self.sem_cat == 'S'
+            self.syn_cat = 'S|NP'
+            assert self.sem_cat == 'S|NP'
         else:
             self.syn_cat = self.logical_form.sem_cat # no directionality then
         self.is_leaf = self.logical_form.is_semantic_leaf or len(self.words) == 1
@@ -395,23 +394,40 @@ class ParseNode():
         self.sibling = other
         other.sibling = self
 
-    def prob(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache):
+    def probs(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob):
+        self.split_prob = split_prob
         if self in cache:
             return cache[self]
-        shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
-        lf = self.logical_form.subtree_string(alpha_normalized=True)
-        word_str = ' '.join(self.words)
-        prob_as_leaf = shell_meaning_learner.prob(shell_lf,self.sem_cat) * meaning_learner.prob(lf,shell_lf) * word_learner.prob(word_str,lf) # This is where I'm omitting the conditionality that Omri used
         prob_from_descendents = 0
         for ps in self.possible_splits:
             syntax_split = ps['left'].syn_cat + ' + ' + ps['right'].syn_cat
             split_prob = syntax_learner.prob(syntax_split,self.syn_cat)
-            prob_from_descendents += ps['right'].prob(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache)*ps['left'].prob(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache)*split_prob
+            left_subtree_prob = ps['left'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob)
+            right_subtree_prob = ps['right'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob)
+            prob_from_descendents += right_subtree_prob*left_subtree_prob*split_prob
 
-        total_prob = prob_as_leaf + prob_from_descendents
-        cache[self] = total_prob
-        self.stored_prob = total_prob
-        return total_prob
+        subtree_prob = self.prob_as_leaf(shell_meaning_learner,meaning_learner,word_learner) + prob_from_descendents
+        cache[self] = subtree_prob
+        self.subtree_prob = subtree_prob
+        return subtree_prob
+
+    def propagate_down_prob(self,passed_down_prob):
+        self.down_prob = passed_down_prob*self.split_prob
+        for ps in self.possible_splits:
+            ps['left'].propagate_down_prob(self.down_prob*ps['right'].subtree_prob)
+            ps['right'].propagate_down_prob(self.down_prob*ps['left'].subtree_prob)
+        if self.possible_splits != []:
+            if not self.down_prob > max([z.down_prob for ps in self.possible_splits for z in (ps['right'],ps['left'])]):
+                breakpoint()
+
+    def prob_as_leaf(self,shell_meaning_learner,meaning_learner,word_learner):
+        shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
+        if 'city' in shell_lf:
+            breakpoint()
+        lf = self.logical_form.subtree_string(alpha_normalized=True)
+        word_str = ' '.join(self.words)
+        self.stored_prob_as_leaf = shell_meaning_learner.prob(shell_lf,self.sem_cat) * meaning_learner.prob(lf,shell_lf) * word_learner.prob(word_str,lf) # will use stored value in train_one_step()
+        return self.stored_prob_as_leaf
 
 def beta_normalize(m):
     m = remove_possible_outer_brackets(m)
@@ -453,6 +469,11 @@ def is_congruent(syn_cat,sem_cat):
     sem_cat_splits = split_respecting_brackets(sem_cat,sep='|')
     syn_cat_splits = split_respecting_brackets(syn_cat,sep=['\\','/','|'])
     return sem_cat_splits == syn_cat_splits
+
+def concat_lfs(lf1,lf2):
+    return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'
+
+
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("--expname", type=str, default='tmp',
