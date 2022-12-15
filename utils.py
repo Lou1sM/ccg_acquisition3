@@ -9,7 +9,9 @@ def outermost_first_bracketed_chunk(s):
     but here we don't need a separator, just split as soon as brackets are
     closed, e.g. f(x,y)g(z) --> f(x,y)
     """
-
+    if '(' not in s:
+        assert ')' not in s
+        return s
     num_open_brackets = 0
     has_been_bracketed = False
     for i,c in enumerate(s):
@@ -65,8 +67,7 @@ def remove_possible_outer_brackets(s):
         elif outermost_first_bracketed_chunk(s)[0] == s:
             s = s[1:-1]
         else:
-            break
-    return s
+            return s
 
 def normalize_dict(d):
     if isinstance(d,list):
@@ -109,7 +110,7 @@ def translate(s,trans_dict):
             if var not in trans_dict:
                 trans_dict[var] = f'${int(var[1:])+new_var_num_diff}'
     trans_dict1 = {k:v[0]+'£'+''.join(v[1:]) for k,v in trans_dict.items()}
-    trans_dict2 = {k[0]+'£'+''.join(k[1:]):k  for k in trans_dict.values()}
+    trans_dict2 = {k[0]+'£'+''.join(k[1:]):k for k in trans_dict.values()}
     for old,new in trans_dict1.items():
         s = s.replace(old,new)
     for old,new in trans_dict2.items():
