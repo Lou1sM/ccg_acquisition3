@@ -1,0 +1,73 @@
+Epoch 0 completed, time taken: 12.296s
+Epoch 1 completed, time taken: 3.565s
+Epoch 2 completed, time taken: 3.597s
+Epoch 3 completed, time taken: 3.577s
+Epoch 4 completed, time taken: 3.562s
+Epoch 5 completed, time taken: 3.597s
+Epoch 6 completed, time taken: 3.561s
+Epoch 7 completed, time taken: 3.588s
+Epoch 8 completed, time taken: 3.606s
+Epoch 9 completed, time taken: 3.574s
+Epoch 10 completed, time taken: 3.567s
+Epoch 11 completed, time taken: 3.567s
+Epoch 12 completed, time taken: 3.565s
+Epoch 13 completed, time taken: 3.569s
+Epoch 14 completed, time taken: 3.577s
+Time to compute inverse probs: 5.645s
+lambda $2.lambda $1.lambda $0.AND ($2 $0) (loc $0 $1)            $0.00
+lambda $2.lambda $1.lambda $0.AND (city $0) ($2 $0 $1)           $0.00
+lambda $3.lambda $2.lambda $1.lambda $0.AND ($1 $0) ($2 $0 $3)   $0.00
+lambda $0.loc $0 virginia                                        $0.00
+lambda $1.lambda $0.AND (city $0) (loc $0 $1)                    $0.00
+lambda $1.lambda $0.AND (city $0) ($1 $0 virginia)               $0.00
+lambda $1.lambda $0.AND ($1 $0) (loc $0 virginia)                $0.00
+loc                                                              $0.00
+city                                                             $0.00
+virginia                                                         $0.99
+Name: virginia, dtype: float64
+S\(S|NP|NP)/NP   $0.00
+S|NP/NP          $0.00
+S/(S|NP|NP)      $0.00
+S/(S|NP)         $0.00
+S\(S|NP)         $0.00
+S\(S|NP|NP)      $0.00
+S/NP             $0.00
+S|NP|NP          $0.02
+S|NP             $0.03
+NP               $0.15
+Name: virginia, dtype: float64
+lambda $3.lambda $2.lambda $1.lambda $0.AND ($1 $0) ($2 $0 $3)   $0.00
+lambda $2.lambda $1.lambda $0.AND ($2 $0) ($1 $0 virginia)       $0.00
+lambda $2.lambda $1.lambda $0.AND ($1 $0) ($2 $0 virginia)       $0.00
+lambda $2.lambda $1.lambda $0.AND (city $0) ($2 $0 $1)           $0.00
+lambda $2.lambda $1.lambda $0.AND ($2 $0) (loc $0 $1)            $0.00
+lambda $2.lambda $1.lambda $0.AND ($1 $0) (loc $0 $2)            $0.00
+lambda $2.lambda $1.lambda $0.AND (city $0) ($1 $0 $2)           $0.00
+virginia                                                         $0.00
+loc                                                              $0.06
+city                                                             $0.94
+Name: cities, dtype: float64
+S|NP\(S|NP|NP)   $0.00
+S/NP\(S|NP|NP)   $0.00
+S|NP/(S|NP|NP)   $0.00
+S/NP/(S|NP)      $0.00
+S\(S|NP)/NP      $0.00
+S|NP/NP          $0.00
+S\(S|NP|NP)/NP   $0.00
+S|NP|NP          $0.02
+S|NP             $0.03
+NP               $0.15
+Name: cities, dtype: float64
+Accuracy at meaning of state names: 97.6%
+Accuracy at syn-cat of state names: 98.8%
+what river flows through maryland: not seen during training
+what rivers are in texas: seen during training
+what is the population of florida: not seen during training
+how many people missouri: not seen during training
+what rivers run through which states: not seen during training
+how many rivers run through colorado: not seen during training
+what states border located in pennsylvania: not seen during training
+which states border river: not seen during training
+major kansas texas live in chicago: not seen during training
+what is the area of oregon: not seen during training
+Total run time: 68.086s

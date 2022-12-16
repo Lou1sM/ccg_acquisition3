@@ -1,307 +1,475 @@
-# this is a parser for a single sentence
-from tools import generate_wordset
-from tools import inf
-from cat import SynCat, Cat
-from build_inside_outside_chart import ChartEntry
-from sample_most_probable_parse import sample
-from tools import log_sum
+import json
+import numpy as np
+from pprint import pprint
+from utils import split_respecting_brackets, is_bracketed, all_sublists, remove_possible_outer_brackets, maybe_bracketted
+import argparse
+import re
 
-# Will DEFINITELY need to prune this chart
 
-# Cocke-Younger-Kasami algorithm
-def cky(chart1, sentence, minscores, rule_set, beamsize):
-    verbose = False
-    chartsize = 0
-    returnchart = {}
-    for i in range(1, len(sentence)+1):
-        returnchart[i] = {}
-        for k in range(1, i+1):
-            for c in chart1[i-k][i]:
-                returnchart[k][c] = chart1[i-k][i][c]
-                chartsize += 1
-    for i in range(2, len(sentence)+1): ## length of span
-        for j in range(len(sentence)-i+1): ## start of span
-            for k in range(1, i): ## partition of span
-                for lck in chart1[j][j+k]:
-                    lc = chart1[j][j+k][lck]
-                    for rck in chart1[j+k][j+i]:
-                        rc = chart1[j+k][j+i][rck]
-                        lcat = lc.ccgCat
-                        rcat = rc.ccgCat
-                        if verbose:
-                            print("trying to combine ", lcat.to_string(), " with ", rcat.to_string())
-                            print("leftscore = ", lc.max_score)
-                            print("rightscore = ", rc.max_score)
-                            print("fwdapp")
-                        newcat = lcat.copy().apply(rcat.copy(), "fwd")
-                        if newcat:
-                            if (newcat.syn_string(), newcat.sem_string(), j, j+i) in returnchart[i]:
-                                ce = returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)]
-                            else:
-                                ce = ChartEntry(newcat, j, j+i, sentence)
-                                # just according to inside score, but haven't been
-                                # accumulating
+# is_leaf means it's atomic in lambda calculus
+# is_semantic_leaf means we shouldn't consider breaking it further
+# e.g. lambda $0. state $0 is a semantic leaf but not a leaf
+class LogicalForm:
+    def __init__(self,defining_string,base_lexicon,splits_cache,parent=None,sem_cat=None):
+        had_surrounding_brackets = False
+        self.base_lexicon = base_lexicon
+        self.splits_cache = splits_cache
+        self.var_descendents = []
+        self.possible_splits = []
+        self.parent = parent
+        self.stored_subtree_string = ''
+        self.stored_shell_subtree_string = ''
+        self.stored_alpha_normalized_subtree_string = ''
+        self.stored_alpha_normalized_shell_subtree_string = ''
+        if parent == 'START':
+            assert sem_cat is not None
+            self.sem_cat = sem_cat
 
-                            target = lcat.syn.to_string()+'#####'+rcat.syn.to_string()
-                            rule_set.check_rule(ce.syn_key, lcat.syn, rcat.syn, "fwd", 0)
-                            rule_score = rule_set.return_map_log_prob(ce.syn_key, target)
-                            new_inside_score = rule_score+lc.inside_score+rc.inside_score
-                            new_max_score = rule_score+lc.max_score+rc.max_score
-                            ce.inside_score = log_sum(ce.inside_score, new_inside_score)
-                            if new_max_score > ce.max_score:
-                                ce.max_score = new_max_score
-                            if verbose:
-                                print("got newcat ", newcat.to_string(), " from ", lcat.to_string(), " ", rcat.to_string(), " maxscore is ", new_max_score)
-                                print("rule_score = ", rule_score)
+        if '.' in defining_string:
+            lambda_string, _, remaining_string = defining_string.partition('.')
+            assert bool(re.match(r'lambda \$\d',lambda_string))
+            variable_index = lambda_string[-2:]
+            self.is_leaf = False
+            self.string = lambda_string
+            self.node_type = 'lmbda'
+            self.children = [self.spawn_child(remaining_string)]
 
-                            lc.add_parent(ce, 'l')
-                            rc.add_parent(ce, 'r')
-                            ce.add_child(((lc.syn_key, lc.sem_key, j, j+k), (rc.syn_key, rc.sem_key, j+k, j+i)))
-
-                            chart1[j][j+i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
-                            returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
-                            if len(chart1[j][j+i]) > beamsize:
-                                removemin(chart1, j, j+i, minscores)
-                            continue
-
-                        if verbose: print("backapp")
-                        newcat = rcat.copy().apply(lcat.copy(), "back")
-                        if newcat:
-                            if (newcat.syn_string(), newcat.sem_string(), j, j+i) in returnchart[i]:
-                                ce = returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)]
-                            else:
-                                ce = ChartEntry(newcat, j, j+i, sentence)
-
-                            target = lcat.syn.to_string()+'#####'+rcat.syn.to_string()
-                            rule_set.check_rule(ce.syn_key, lcat.syn, rcat.syn, "back", 0)
-                            rule_score = rule_set.return_map_log_prob(ce.syn_key, target)
-                            new_inside_score = rule_score+lc.inside_score+rc.inside_score
-                            new_max_score = rule_score+lc.max_score+rc.max_score
-                            ce.inside_score = log_sum(ce.inside_score, new_inside_score)
-                            if new_max_score > ce.max_score:
-                                ce.max_score = new_max_score
-
-                            if verbose:
-                                print("got newcat ", newcat.to_string(), " from ", lcat.to_string(), " ", rcat.to_string(), " maxscore is ", new_max_score)
-                                print("rule_score = ", rule_score)
-
-                            lc.add_parent(ce, 'l')
-                            rc.add_parent(ce, 'r')
-                            ce.add_child(((lc.syn_key, lc.sem_key, j, j+k), (rc.syn_key, rc.sem_key, j+k, j+i)))
-
-                            chart1[j][j+i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
-                            returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
-                            if len(chart1[j][j+i]) > beamsize:
-                                removemin(chart1, j, j+i, minscores)
-                            continue
-
-                        if verbose: print("fwdcomp")
-                        newcat = lcat.copy().compose(rcat.copy(), "fwd")
-                        if newcat:
-                            if (newcat.syn_string(), newcat.sem_string(), j, j+i) in returnchart[i]:
-                                ce = returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)]
-                            else:
-                                ce = ChartEntry(newcat, j, j+i, sentence)
-
-                            target = lcat.syn.to_string()+'#####'+rcat.syn.to_string()
-                            rule_set.check_rule(ce.syn_key, lcat.syn, rcat.syn, "fwd", 1)
-
-                            rule_score = rule_set.return_map_log_prob(ce.syn_key, target)
-                            new_inside_score = rule_score+lc.inside_score+rc.inside_score
-                            new_max_score = rule_score+lc.max_score+rc.max_score
-                            ce.inside_score = log_sum(ce.inside_score, new_inside_score)
-                            if new_max_score > ce.max_score:
-                                ce.max_score = new_max_score
-
-                            if verbose:
-                                print("got newcat ", newcat.to_string(), " from ", lcat.to_string(), " ", rcat.to_string(), " maxscore is ", new_max_score)
-                                print("rule_score = ", rule_score)
-
-                            lc.add_parent(ce, 'l')
-                            rc.add_parent(ce, 'r')
-                            ce.add_child(((lc.syn_key, lc.sem_key, j, j+k), (rc.syn_key, rc.sem_key, j+k, j+i)))
-
-                            chart1[j][j+i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
-                            returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
-                            chartsize += 1
-                            if len(chart1[j][j+i]) > beamsize:
-                                removemin(chart1, j, j+i, minscores)
-                            continue
-
-                        if verbose: print("backcomp")
-                        newcat = rcat.copy().compose(lcat.copy(), "back")
-                        if newcat:
-
-                            if (newcat.syn_string(), newcat.sem_string(), j, j+i) in returnchart[i]:
-                                ce = returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)]
-                            else:
-                                ce = ChartEntry(newcat, j, j+i, sentence)
-
-                            target = lcat.syn.to_string()+'#####'+rcat.syn.to_string()
-                            rule_set.check_rule(ce.syn_key, lcat.syn, rcat.syn, "fwd", 1)
-                            rule_score = rule_set.return_map_log_prob(ce.syn_key, target)
-                            new_inside_score = rule_score+lc.inside_score+rc.inside_score
-                            new_max_score = rule_score+lc.max_score+rc.max_score
-                            ce.inside_score = log_sum(ce.inside_score, new_inside_score)
-                            if new_max_score > ce.max_score:
-                                ce.max_score = new_max_score
-
-                            if verbose:
-                                print("got newcat ", newcat.to_string(), " from ", lcat.to_string(), " ", rcat.to_string(), " maxscore is ", new_max_score)
-                                print("rule_score = ", rule_score)
-
-                            lc.add_parent(ce, 'l')
-                            rc.add_parent(ce, 'r')
-                            ce.add_child(((lc.syn_key, lc.sem_key, j, j+k), (rc.syn_key, rc.sem_key, j+k, j+i)))
-
-                            chart1[j][j+i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
-                            returnchart[i][(newcat.syn_string(), newcat.sem_string(), j, j+i)] = ce
-                            if len(chart1[j][j+i]) > beamsize:
-                                removemin(chart1, j, j+i, minscores)
-                            continue
-
-                        if verbose: print("combination DID NOT WORK")
-    if chart1[0][len(chart1)]!={}:
-        print("PARSED:: ", sentence, chart1[0][len(chart1)])
-    if verbose:
-        print("\n\ninside scores ")
-        for level in returnchart:
-            for item in returnchart[level]:
-                print(item)
-                entry = returnchart[level][item]
-                print(entry.to_string(), "  ", entry.inside_score)
-        print("\n\n")
-    return returnchart
-
-def removemin(chart1, start, end, minscores):
-    minscore = inf
-    secondmin = inf
-    minc = None
-    for c in chart1[start][end]:
-        ce = chart1[start][end][c]
-        if ce.inside_score <= minscore:
-            minc = c
-            secondmin = minscore
-            minscore = ce.inside_score
-
-    del chart1[start][end][minc]
-    minscores[start][end]=secondmin
-
-def get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count, test_out_parses):
-    guesslex = True
-    beamsize = 100//(len(sentence)+1)
-    verbose = False
-    print("PARSING:", sentence) # really should prune lexicon (and rules??)
-    # this parser should build up the chart in a far
-    # more efficient way than the previous one.
-    # we almost certainly can integrate the inside/outside chart
-    # Build one chart up from bottom
-    # Walk back down and sample
-    wordset = generate_wordset(sentence, len(sentence))
-    chart1 = {}
-    minscores = {}
-    for i in range(0, len(sentence)):
-        sc = {}
-        ms = {}
-        for j in range(i+1, len(sentence)+1):
-            sc[j]={}
-            ms[j] = -inf #Louis: changed from '[]'
-        chart1[i] = sc
-        minscores[i] = ms
-    if verbose: print("wordset is ", wordset)
-    for level in wordset:
-        if verbose: print("level is ", level)
-        for word in wordset[level]:
-            # this is all kinda bollox
-            # make a better span set (i,j,cat etc)
-            start = 0
-            for w in word:
-                if w.count(" ")!=len(sentence)-level:
-                    continue
-                end = start+w.count(" ")+1
-                if verbose: print("start is ", start, " end is ", end, " for ", w)
-                if end-start>1 and lexicon.mwe is False: continue
-                poss_lex = lexicon.get_lex_items(w, guesslex, sem_store, beamsize)
-                print(*[pi.to_string() for pi in poss_lex], file=test_out_parses, sep='\n', end='')
-                if verbose: print(w, ' has ', len(poss_lex), ' realisations')
-                if len(poss_lex) > 0:
-                    for pl in poss_lex:
-                        if verbose: print("pl is ", pl)
-                        l = pl
-                        if verbose: print(l.to_string())
-                        syncat = SynCat.read_cat(l.syn)
-                        if verbose: print("syn is ", l.syn, " syncat is ", syncat.to_string())
-                        sem = sem_store.get(l.sem_key) # exp.make_exp_with_args(l.sem_key,{})[0]
-                        if verbose: print("sem is ", sem.to_string(True))
-                        c = Cat(syncat, sem)
-                        ce = ChartEntry(c, start, end, sentence)
-                        if hasattr(l, 'is_shell_item') and l.is_shell_item:
-                            # if it's a shell, there is the probability of it generating a new LF and the probability
-                            # of a new LF
-                            ce.word_score = \
-                                lexicon.get_map_word_given_shell(ce.word_target, ce.syn_key, ce.sem_key, sentence_count, sem_store)
-                            # all the probability goes into word_score
-                            ce.sem_score = 0.0
-                        else:
-                            ce.word_score = \
-                                lexicon.get_map_log_word_prob(ce.word_target, ce.syn_key, ce.sem_key, sentence_count)
-                            ce.sem_score = lexicon.get_map_log_sem_prob(ce.syn_key, ce.sem_key, sem_store)
-
-                        if verbose:
-                            print("sem score for ", ce.syn_key, " -> ", ce.sem_key, " = ", ce.sem_score)
-                            print(ce.syn_key+" -> "+ce.sem_key+" = "+str(ce.sem_score))
-                        rule_score = rule_set.return_map_log_prob(ce.syn_key, ce.syn_key+'_LEX')
-                        if verbose: print(ce.syn_key+"_LEX"+" = "+str(rule_score))
-                        ce.inside_score = ce.word_score+ce.sem_score+rule_score
-                        ce.max_score = ce.word_score+ce.sem_score+rule_score
-                        if len(chart1[start][end])<beamsize or minscores[start][end]<ce.inside_score:
-                            chart1[start][end][(l.syn, l.sem_key, start, end)] = ce
-                            if verbose: print("added ", ce.to_string(), " to ", start, end)
-                            if len(chart1[start][end]) > beamsize:
-                                removemin(chart1, start, end, minscores)
-                        elif verbose: print("not adding ", ce.to_string())
-                start += w.count(" ")+1
-    returnchart = cky(chart1, sentence, minscores, rule_set, beamsize)
-    return returnchart, poss_lex
-
-def parse(sentence,sem_store,rule_set,lexicon,sentence_count,test_out_parses,target_top_cat=None):
-    verbose = False
-    returnchart, poss_lex = get_parse_chart(sentence, sem_store, rule_set, lexicon, sentence_count, test_out_parses)
-    if returnchart is None:
-        return (None, None, None)
-    if verbose:
-        print("\n\n\n\n\nDOING NUMBERS FOR CHART :::", returnchart, "\n\n\n\n ")
-    topparses = []
-    for entry in returnchart[len(returnchart)]:
-        top = returnchart[len(returnchart)][entry]
-        topcat = top.syn_key
-        if target_top_cat and topcat != target_top_cat:
-            continue
-        top.inside_score = top.inside_score
-        usestartrule = True
-        if usestartrule:
-            rule_set.check_start_rule(top.ccgCat.syn)
-            top.outside_score = rule_set.return_map_log_prob("START", topcat)
+            for d in self.descendents:
+                if d.node_type == 'unbound_var' and d.string == variable_index:
+                    d.binder = self
+                    d.node_type = 'bound_var'
         else:
-            top.outside_score = 0.0
-        if verbose: print("top is ", top)
-        topparses.append((top.inside_score+top.outside_score, top))
+            if ' ' in defining_string:
+                self.string = ''
+                self.node_type = 'composite'
+                arguments = split_respecting_brackets(defining_string)
+                if len(arguments) == 1 and is_bracketed(defining_string):
+                    had_surrounding_brackets = True
+                    assert not is_bracketed(defining_string[1:-1])
+                    arguments = split_respecting_brackets(defining_string[1:-1])
+                self.children = [self.spawn_child(a) for a in arguments]
+                self.is_leaf = False
+            else:
+                self.string = defining_string
+                self.children = []
+                self.is_leaf = True
+                if self.string.startswith('$'):
+                    self.node_type = 'unbound_var'
+                    self.extend_var_descendents(int(self.string[1:]))
+                elif self.string == 'AND':
+                    self.node_type = 'connective'
+                else:
+                    self.node_type = 'const'
+        if had_surrounding_brackets:
+            assert self.subtree_string() == defining_string[1:-1]
+        else:
+            assert self.subtree_string() == defining_string
 
-    if len(topparses)==0:
-        return (None, None, None)
+        self.is_semantic_leaf = self.is_leaf # is_leaf is sufficient for is_semantic_leaf
+        if self.parent != 'START':
+            ss = strip_string(defining_string)
+            if ss in self.base_lexicon:
+                self.sem_cat = self.base_lexicon[ss]
+                self.is_semantic_leaf = True # but not necessary
+            else:
+                self.sem_cat = 'XXX'
 
-    topparses = sorted(topparses, key=lambda x: x[0])
-    topnode = topparses[-1][1]
-    top_parse = sample(topnode, returnchart, rule_set)
-    if verbose:
-        for t in reversed(topparses):
-            print("parse : ", t[0], sample(t[1], returnchart, rule_set), " maxscore = ", t[1].max_score)
-        print(f'\ntop parse: {top_parse}\n{topnode.inside_score}\n')
+    def spawn_child(self,defining_string):
+        return LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,parent=self)
 
-    print("\n\n", file=test_out_parses)
-    for t in reversed(topparses):
-        print("parse : ", t[0], sample(t[1], returnchart, rule_set),
-            " maxscore = ", t[1].max_score, file=test_out_parses)
-    print(f'\ntop parse: {top_parse}\n{topnode.inside_score}\n', file=test_out_parses)
+    def spawn_self_like(self,defining_string):
+        new = LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,parent=self.parent,sem_cat=self.sem_cat)
+        new.sem_cat = self.sem_cat
+        return new
 
-    return (topnode.ccgCat.sem, top_parse, topnode.ccgCat)
+    @property
+    def stripped_subtree_string(self):
+        ss = re.sub(r'lambda \$\d{1,2}\.','',self.subtree_string())
+        ss = re.sub(r'( \$\d)+$','',ss).replace('()','')
+        # allowed to have trailing bound variables
+        return strip_string(self.subtree_string())
+        return ss
+
+    @property
+    def descendents(self):
+        return [self] + [x for item in self.children for x in item.descendents]
+
+    @property
+    def leaf_descendents(self):
+        if self.is_leaf:
+            return [self]
+        return [x for item in self.children for x in item.leaf_descendents]
+
+    @property
+    def new_var_num(self):
+        return 0 if self.var_descendents == [] else max(self.var_descendents)+1
+
+    @property
+    def num_lambda_binders(self):
+        maybe_lambda_list = self.subtree_string().split('.')
+        assert all([x.startswith('lambda') for x in maybe_lambda_list[:-1]])
+        return len(maybe_lambda_list)-1
+
+    def extend_var_descendents(self,var_num):
+        if var_num not in self.var_descendents:
+            self.var_descendents.append(var_num)
+        if self.parent is not None and self.parent != 'START':
+            self.parent.extend_var_descendents(var_num)
+
+    def set_subtree_string(self,as_shell,alpha_normalized,string):
+        if as_shell and alpha_normalized:
+            self.stored_alpha_normalized_shell_subtree_string = string
+        elif as_shell and not alpha_normalized:
+            self.stored_shell_subtree_string = string
+        elif not as_shell and alpha_normalized:
+            assert 'PLACEHOLDER' not in string
+            self.stored_alpha_normalized_subtree_string = string
+        else:
+            assert 'PLACEHOLDER' not in string
+            self.stored_subtree_string = string
+
+    def get_stored_subtree_string(self,as_shell,alpha_normalized):
+        if as_shell and alpha_normalized:
+            return self.stored_alpha_normalized_shell_subtree_string
+        elif as_shell and not alpha_normalized:
+            return self.stored_shell_subtree_string
+        elif not as_shell and alpha_normalized:
+            return self.stored_alpha_normalized_subtree_string
+        else:
+            return self.stored_subtree_string
+
+    def subtree_string(self,alpha_normalized=False,as_shell=False,recompute=False,show_treelike=False):
+        x = self.get_stored_subtree_string(as_shell,alpha_normalized)
+        if x == '' or recompute:
+            x = self.subtree_string_(show_treelike=show_treelike,as_shell=as_shell,recompute=recompute)
+            assert is_bracketed(x) or ' ' not in x or self.node_type == 'lmbda'
+            if is_bracketed(x):
+                x = x[1:-1]
+            if alpha_normalized:
+                trans_list = sorted(self.var_descendents)
+                for v_new, v_old in enumerate(trans_list):
+                    x = re.sub(fr'\${v_old}',f'${v_new}',x)
+        return x
+
+    def subtree_string_(self,show_treelike,as_shell,recompute):
+        if self.node_type == 'lmbda':
+            subtree_string = self.children[0].subtree_string(as_shell=as_shell,show_treelike=show_treelike,recompute=recompute)
+            if show_treelike:
+                subtree_string = subtree_string.replace('\n\t','\n\t\t')
+                x = f'{self.string}\n\t{subtree_string}\n'
+            else:
+                x = f'{self.string}.{subtree_string}'
+        elif self.node_type == 'composite':
+            if as_shell:
+                child_trees = ['PLACEHOLDER' if c.node_type == 'const' else c.subtree_string_(show_treelike,as_shell,recompute=recompute) for c in self.children]
+            else:
+                child_trees = [c.subtree_string_(show_treelike,as_shell,recompute=recompute) for c in self.children]
+            if show_treelike:
+                subtree_string = '\n\t'.join([c.replace('\n\t','\n\t\t') for c in child_trees])
+                x = f'{self.string}\n\t{subtree_string}'
+            else:
+                subtree_string = ' '.join(child_trees)
+                x = f'{self.string}({subtree_string})'
+        elif self.node_type == 'const' and as_shell:
+            return 'PLACEHOLDER'
+        else:
+            x = self.string
+
+        assert as_shell or 'PLACEHOLDER' not in x
+        if recompute:
+            self.set_subtree_string(as_shell,alpha_normalized=False,string=x)
+
+        return x
+
+    def copy(self):
+        copied_version = self.spawn_self_like(self.subtree_string())
+        assert copied_version == self
+        copied_version.sem_cat = self.sem_cat
+        return copied_version
+
+    def __repr__(self):
+        return (f'LogicalForm of type {self.node_type.upper()}: {self.subtree_string()}'
+                f'\n\tsemantic category: {self.sem_cat}')
+
+    def __hash__(self):
+        return hash(self.subtree_string(alpha_normalized=True))
+
+    def __eq__(self,other):
+        if not isinstance(other,LogicalForm):
+            return False
+        return other.subtree_string() == self.subtree_string()
+
+    def turn_nodes_to_vars(self,nodes):
+        copied = self.copy()
+        if len(nodes) == 0:
+            return copied
+        to_remove = [d for d in copied.descendents if d in nodes]
+        # node may be 'in' another list if there is another node in that list
+        # that has the same defining string as node, but we want the reference,
+        # i.e. node itself, rather than its copy in the list
+        vars_abstracted = []
+        for desc in to_remove:
+            var_num = copied.new_var_num
+            desc.string = f'${var_num}'
+            vars_abstracted.append(var_num)
+            desc.extend_var_descendents(var_num)
+            desc.node_type = 'bound_var'
+        lambda_prefix = '.'.join([f'lambda ${vn}' for vn in reversed(vars_abstracted)])
+        copied = self.spawn_self_like(lambda_prefix+'.' + copied.subtree_string())
+        return copied
+
+    def lambda_abstract(self,var_num):
+        new = self.spawn_self_like(f'lambda ${var_num}')
+        new.node_type = 'lmbda'
+        new.children = [self]
+        new.stored_subtree_string =f'lambda ${var_num}.{self.subtree_string()}'
+        new.stored_alpha_normalized_subtree_string =f'lambda ${var_num}.{self.subtree_string(alpha_normalized=True)}'
+        new.stored_shell_subtree_string =f'lambda ${var_num}.{self.subtree_string(as_shell=True)}'
+        new.stored_alpha_normalized_shell_subtree_string =f'lambda ${var_num}.{self.subtree_string(alpha_normalized=True,as_shell=True)}'
+        new.var_descendents = list(set(self.var_descendents + [var_num]))
+        return new
+
+    def infer_splits(self):
+        if self.is_semantic_leaf:
+            return []
+        if self.num_lambda_binders > 4:
+            return []
+        if self in self.splits_cache:
+            return self.splits_cache[self]
+        possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
+        for removee_idxs in all_sublists(possible_removee_idxs):
+            if removee_idxs == []: continue
+            f = self.copy()
+            to_remove = [f.descendents[i] for i in removee_idxs]
+            leftmost = f.descendents[min(removee_idxs)]
+            entry_point = leftmost # where to substitute g into f
+            changed = True
+            while changed:
+                if entry_point.parent is None:
+                    break
+                changed = False
+                for tr in to_remove:
+                    if tr not in entry_point.descendents:
+                        changed = True
+                        entry_point = entry_point.parent
+                        break
+            g = entry_point.copy()
+            to_present_as_args_to_g = [d for d in entry_point.leaf_descendents if d not in to_remove]
+            g = g.turn_nodes_to_vars(to_present_as_args_to_g)
+            if (g.num_lambda_binders > 4) or (strip_string(g.subtree_string().replace(' AND','')) == ''): # don't consider only variables
+                continue
+            g_sub_var_num = self.new_var_num
+            new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
+            assert entry_point.subtree_string() in self.subtree_string()
+            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.splits_cache)
+            if len(to_present_as_args_to_g) > 3: # then f will end up with arity 4
+                continue
+            if strip_string(f.subtree_string().replace(' AND','')) == '': # also exclude case where only substantive is 'AND'
+                continue
+            f = f.lambda_abstract(g_sub_var_num)
+            f.sem_cat = f.base_lexicon.get(f.stripped_subtree_string,'XXX')
+            concatted = concat_lfs(f,g)
+            assert beta_normalize(concatted) == self.subtree_string()
+            assert f != self
+            assert g != self
+            self.possible_splits.append((f,g))
+            if g.sem_cat_is_set:
+                if f.sem_cat_is_set:
+                    hits = re.findall(fr'\(?{re.escape(g.sem_cat)}\)?$',f.sem_cat)
+                    for hit in hits:
+                        self.sem_cat = f.sem_cat[:-len(hit)-1]
+                if self.sem_cat_is_set:
+                    self.propagate_sem_cat_leftward(f,g)
+            assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
+            f.infer_splits()
+            g.infer_splits()
+        self.splits_cache[self] = self.possible_splits
+        return self.possible_splits
+
+    def propagate_sem_cat_leftward(self,f,g):
+        if '|' in g.sem_cat:
+            new_assigned_category = f'{self.sem_cat}|({g.sem_cat})'
+        else:
+            new_assigned_category = f'{self.sem_cat}|{g.sem_cat}'
+        assert f.sem_cat in [new_assigned_category,'XXX']
+        f.sem_cat = new_assigned_category
+        for f1,g1 in f.possible_splits:
+            if g1.sem_cat_is_set:
+                f.propagate_sem_cat_leftward(f1,g1)
+
+    @property
+    def sem_cat_is_set(self):
+        return self.sem_cat != 'XXX'
+
+class ParseNode():
+    def __init__(self,lf,words,node_type,parent=None,sibling=None,syn_cat=None):
+        self.logical_form = lf
+        self.words = words
+        self.possible_splits = []
+        self.parent = parent
+        self.node_type = node_type
+        self.sibling = sibling
+        assert (parent is None) or (node_type != 'ROOT'), \
+            f"you're trying to specify a parent for the root node"
+        assert (parent is not None) or (node_type == 'ROOT'), \
+            f"you're failing to specify a parent for a non-root node"
+        assert (sibling is None) or (node_type != 'ROOT'), \
+            f"you're trying to specify a sibling for the root node"
+        self.sem_cat = self.logical_form.sem_cat
+        if syn_cat is not None:
+            self.syn_cat = syn_cat
+        else:
+            self.syn_cat = self.logical_form.sem_cat # no directionality then
+        self.is_leaf = self.logical_form.is_semantic_leaf or len(self.words) == 1
+        if not self.is_leaf:
+            if self.logical_form.possible_splits == []:
+                self.logical_form.infer_splits()
+            for f,g in self.logical_form.possible_splits:
+                if g.sem_cat_is_set:
+                    self.add_splits(f,g,'fwd')
+                    self.add_splits(f,g,'bck')
+        #else:
+            #print(self.syn_cat)
+
+    def add_splits(self,f,g,direction):
+        for split_point in range(1,len(self.words)):
+            left_words = self.words[:split_point]
+            right_words = self.words[split_point:]
+            # CONVENTION: child with the words on the left of sentence is
+            # the 'left' child, even if bck application, left child is g in
+            # that case
+            if direction == 'fwd':
+                right_child = ParseNode(g,right_words,parent=self,node_type='right_fwd')
+                new_syn_cat = f'{self.syn_cat}/{maybe_bracketted(right_child.syn_cat)}'
+                if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
+                    #print(self.sem_cat,f.sem_cat,g.sem_cat)
+                    pass
+                left_child = ParseNode(f,left_words,parent=self,node_type='left_fwd',syn_cat=new_syn_cat)
+            elif direction == 'bck':
+                left_child = ParseNode(g,left_words,parent=self,node_type='left_bck')
+                new_syn_cat = f'{self.syn_cat}\\{maybe_bracketted(left_child.syn_cat)}'
+                if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
+                    #print(self.sem_cat,f.sem_cat,g.sem_cat)
+                    pass
+
+                right_child = ParseNode(f,right_words,parent=self,node_type='right_bck',syn_cat=new_syn_cat)
+            self.append_split(left_child,right_child,direction)
+
+        if len(self.possible_splits) == 0:
+            self.is_leaf = True
+
+    def append_split(self,left,right,combinator):
+        left.siblingify(right)
+        assert left.sibling is not None
+        assert right.sibling is not None
+        self.possible_splits.append({'left':left,'right':right,'combinator':combinator})
+
+    def propagate_syn_cat(self,f,g):
+        if '|' in g.sem_cat:
+            new_assigned_category = f'{self.sem_cat}|({g.sem_cat})'
+        else:
+            new_assigned_category = f'{self.sem_cat}|{g.sem_cat}'
+        assert f.sem_cat in [new_assigned_category,'XXX']
+        f.sem_cat = new_assigned_category
+        for f1,g1 in f.possible_splits:
+            if g1.sem_cat_is_set:
+                f.propagate_sem_cat_leftward(f1,g1)
+
+    @property
+    def is_g(self):
+        return self.node_type in ['right_fwd','left_bck']
+
+    def is_fwd(self):
+        return self.node_type in ['right_fwd','left_fwd']
+
+    def __repr__(self):
+        base = (f"ParseNode\n"
+                f"\tWords: {' '.join(self.words)}\n"
+                f"\tLogical Form: {self.logical_form.subtree_string()}\n"
+                f"\tSyntactic Category: {self.syn_cat}\n")
+        if hasattr(self,'stored_prob'):
+            base += f'\tProb: {self.stored_prob}\n'
+        return base
+
+    def siblingify(self,other):
+        self.sibling = other
+        other.sibling = self
+
+    def probs(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob):
+        self.split_prob = split_prob
+        if self in cache:
+            return cache[self]
+        prob_from_descendents = 0
+        for ps in self.possible_splits:
+            syntax_split = ps['left'].syn_cat + ' + ' + ps['right'].syn_cat
+            split_prob = syntax_learner.prob(syntax_split,self.syn_cat)
+            left_subtree_prob = ps['left'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob)
+            right_subtree_prob = ps['right'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob)
+            prob_from_descendents += right_subtree_prob*left_subtree_prob*split_prob
+
+        subtree_prob = self.prob_as_leaf(shell_meaning_learner,meaning_learner,word_learner) + prob_from_descendents
+        cache[self] = subtree_prob
+        self.subtree_prob = subtree_prob
+        return subtree_prob
+
+    def propagate_down_prob(self,passed_down_prob):
+        self.down_prob = passed_down_prob*self.split_prob
+        for ps in self.possible_splits:
+            ps['left'].propagate_down_prob(self.down_prob*ps['right'].subtree_prob)
+            ps['right'].propagate_down_prob(self.down_prob*ps['left'].subtree_prob)
+        if self.possible_splits != []:
+            if not self.down_prob > max([z.down_prob for ps in self.possible_splits for z in (ps['right'],ps['left'])]):
+                breakpoint()
+
+    def prob_as_leaf(self,shell_meaning_learner,meaning_learner,word_learner):
+        shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
+        if 'city' in shell_lf:
+            breakpoint()
+        lf = self.logical_form.subtree_string(alpha_normalized=True)
+        word_str = ' '.join(self.words)
+        self.stored_prob_as_leaf = shell_meaning_learner.prob(shell_lf,self.sem_cat) * meaning_learner.prob(lf,shell_lf) * word_learner.prob(word_str,lf) # will use stored value in train_one_step()
+        return self.stored_prob_as_leaf
+
+def beta_normalize(m):
+    m = remove_possible_outer_brackets(m)
+    if m.startswith('lambda'):
+        lambda_binder = re.match(r'lambda \$\d+\.',m).group(0)
+        body = m[len(lambda_binder):]
+        return lambda_binder + beta_normalize(body)
+    if re.match(r'^[\w\$]*$',m):
+        return m
+    splits = split_respecting_brackets(m)
+    if len(splits) == 1:
+        return m
+    left_ = remove_possible_outer_brackets(' '.join(splits[:-1]))
+    left = beta_normalize(left_)
+    assert 'lambda (' not in left
+    right_ = splits[-1]
+    right = beta_normalize(right_)
+    if not re.match(r'^[\w\$]*$',right):
+        right = '('+right+')'
+
+    if left.startswith('lambda'):
+        lambda_binder,_,rest = left.partition('.')
+        assert re.match(r'lambda \$\d{1,2}',lambda_binder)
+        var_name = lambda_binder[7:]
+        assert re.match(r'\$\d',var_name)
+        combined = re.sub(re.escape(var_name),right,rest)
+        return beta_normalize(combined)
+    else:
+        return ' '.join([left,right])
+
+def strip_string(ss):
+    ss = re.sub(r'lambda \$\d+\.','',ss)
+    ss = re.sub(r'( ?\$\d+)+$','',ss.replace('(','').replace(')',''))
+    # allowed to have trailing bound variables
+    return ss
+
+def is_congruent(syn_cat,sem_cat):
+    assert '\\' not in sem_cat and '/' not in sem_cat
+    sem_cat_splits = split_respecting_brackets(sem_cat,sep='|')
+    syn_cat_splits = split_respecting_brackets(syn_cat,sep=['\\','/','|'])
+    return sem_cat_splits == syn_cat_splits
+
+def concat_lfs(lf1,lf2):
+    return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'

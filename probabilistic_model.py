@@ -5,7 +5,7 @@ from time import time
 import argparse
 from abc import ABC
 import re
-from easy_split import LogicalForm, ParseNode
+from parser import LogicalForm, ParseNode
 import json
 
 
@@ -213,6 +213,7 @@ class LanguageAcquirer():
             else:
                 breakpoint()
 
+
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("--expname", type=str, default='tmp',
@@ -224,7 +225,6 @@ if __name__ == "__main__":
     ARGS.add_argument("--num_epochs", type=int, default=1)
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
-    ARGS.add_argument("--simple_example", action="store_true")
     ARGS.add_argument("--root_sem_cat", type=str, default='S')
     ARGS = ARGS.parse_args()
 
@@ -242,18 +242,13 @@ if __name__ == "__main__":
     for epoch_num in range(ARGS.num_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(d['data'][:NDPS]):
-            if ARGS.simple_example:
-                lf_str = 'loc colorado virginia'
-                words = ['colarado', 'is', 'in', 'virginia']
-            else:
-                words, lf_str = dpoint['words'], dpoint['parse']
+            words, lf_str = dpoint['words'], dpoint['parse']
             if words[-1] == '?':
                 words = words[:-1]
             if i == ARGS.db_at:
                 breakpoint()
-            if len(words) > ARGS.max_sent_len:
-                continue
-            language_acquirer.train_one_step(words,lf_str)
+            if len(words) <= ARGS.max_sent_len:
+                language_acquirer.train_one_step(words,lf_str)
         print(f"Epoch {epoch_num} completed, time taken: {time()-epoch_start_time:.3f}s")
     language_acquirer.show_splits(ARGS.root_sem_cat,f)
     inverse_probs_start_time = time()
