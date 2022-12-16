@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
-from utils import normalize_dict, split_respecting_brackets
+from utils import normalize_dict, split_respecting_brackets, file_print
 from time import time
-from pprint import pprint
 import argparse
 from abc import ABC
 import re
@@ -122,22 +121,28 @@ class LanguageAcquirer():
         self.word_to_syn_probs = self.word_to_sem_probs.dot(self.sem_to_sem_shell_probs).dot(self.sem_shell_to_syn_probs)
         print(f"inverse_prob_time: {time()-start_time:.3f}")
 
-    def show_word(self,word):
-        with pd.option_context('display.float_format', '${:,.2f}'.format):
-            print(self.word_to_sem_probs.loc[word].sort_values()[-10:].view())
-            print(self.word_to_syn_probs.loc[word].sort_values()[-10:].view())
+    def show_word(self,word,f):
+        #with pd.option_context('display.float_format', '{:,.2f}'.format):
+        meanings = self.word_to_sem_probs.loc[word].sort_values()[-10:]
+        file_print(f'\nLearned meanings for \'{word}\'',f)
+        file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in meanings.items() if prob > 1e-4]),f)
 
-    def show_splits(self,syn_cat):
+        syn_cats = self.word_to_syn_probs.loc[word].sort_values()[-10:]
+        file_print(f'\nLearned syntactic categories for \'{word}\'',f)
+        file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in syn_cats.items() if prob > 1e-4]),f)
+
+    def show_splits(self,syn_cat,f):
+        file_print(f'\nLearned splits for category {syn_cat}',f)
         counts = self.syntax_learner.memory[syn_cat]
         norm = counts['count']
         probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='count'}
-        print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]))
+        file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
 
     def get_lf(self,logical_form_str):
         if logical_form_str in self.lf_cache:
             return self.lf_cache[logical_form_str]
         else:
-            lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,parent='START')
+            lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,parent='START',sem_cat=ARGS.root_sem_cat)
             self.lf_cache[logical_form_str] = lf
             return lf
 
@@ -175,7 +180,7 @@ class LanguageAcquirer():
         for w in nps:
             w_spaces = w.replace('_',' ')
             if w_spaces not in self.word_to_sem_probs.index:
-                print(f'\'{w_spaces}\' not here')
+                #print(f'\'{w_spaces}\' not here')
                 if w_spaces not in ['virginia','kansas','montgomery']:
                     assert not any([w_spaces in ' '.join(x['words']) and len([z for z in x['words'] if z != '?']) <= ARGS.max_sent_len for x in d['data'][:NDPS]])
                 continue
@@ -186,8 +191,9 @@ class LanguageAcquirer():
             if syn_pred=='NP':
                 syn_corrects += 1
             attempts += 1
-        print(f'Accuracy at meaning of state names: {100*meaning_corrects/attempts:.1f}%')
-        print(f'Accuracy at syn-cat of state names: {100*syn_corrects/attempts:.1f}%')
+        meaning_acc = 100*meaning_corrects/attempts
+        syn_acc = 100*syn_corrects/attempts
+        return meaning_acc, syn_acc
 
     def generate_words(self,syn_cat):
         split = self.syntax_learner.conditional_sample(syn_cat)
@@ -216,11 +222,10 @@ if __name__ == "__main__":
     ARGS.add_argument("--db_at", type=int, default=-1)
     ARGS.add_argument("--max_sent_len", type=int, default=6)
     ARGS.add_argument("--num_epochs", type=int, default=1)
-    ARGS.add_argument("--is_dump_verb_repo", action="store_true",
-                          help="whether to dump the verb repository")
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
     ARGS.add_argument("--simple_example", action="store_true")
+    ARGS.add_argument("--root_sem_cat", type=str, default='S')
     ARGS = ARGS.parse_args()
 
     with open('data/preprocessed_geoqueries.json') as f: d=json.load(f)
@@ -232,9 +237,10 @@ if __name__ == "__main__":
 
     language_acquirer = LanguageAcquirer(base_lexicon)
     NDPS = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
+    f = open(f'experiments/{ARGS.num_epochs}-{ARGS.max_sent_len}.txt','w')
     start_time = time()
     for epoch_num in range(ARGS.num_epochs):
-        print(f"Epoch: {epoch_num}")
+        epoch_start_time = time()
         for i,dpoint in enumerate(d['data'][:NDPS]):
             if ARGS.simple_example:
                 lf_str = 'loc colorado virginia'
@@ -248,18 +254,23 @@ if __name__ == "__main__":
             if len(words) > ARGS.max_sent_len:
                 continue
             language_acquirer.train_one_step(words,lf_str)
-    language_acquirer.show_splits('S|NP')
+        print(f"Epoch {epoch_num} completed, time taken: {time()-epoch_start_time:.3f}s")
+    language_acquirer.show_splits(ARGS.root_sem_cat,f)
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
-    print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
-    language_acquirer.show_word('virginia')
-    language_acquirer.show_word('cities')
-    language_acquirer.test_NPs()
+    file_print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s',f)
+    language_acquirer.show_word('virginia',f)
+    language_acquirer.show_word('cities',f)
+    meaning_acc ,syn_acc = language_acquirer.test_NPs()
+    file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
+    file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
+    file_print(f'\nSamples for type {ARGS.root_sem_cat}:',f)
     for _ in range(10):
-        generated =language_acquirer.generate_words('S|NP')
-        if any([x['words']==generated.spilt() for x in d['data']]):
-            print(f'{generated}: seen during training')
+        generated =language_acquirer.generate_words(ARGS.root_sem_cat)
+        if any([x['words'][:-1]==generated.split() for x in d['data']]):
+            file_print(f'{generated}: seen during training',f)
         else:
-            print(f'{generated}: not seen during training')
-    print(f'Total run time: {time()-start_time:.3f}s')
+            file_print(f'{generated}: not seen during training',f)
+    file_print(f'Total run time: {time()-start_time:.3f}s',f)
+    f.close()
     breakpoint()

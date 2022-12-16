@@ -10,7 +10,7 @@ import re
 # is_semantic_leaf means we shouldn't consider breaking it further
 # e.g. lambda $0. state $0 is a semantic leaf but not a leaf
 class LogicalForm:
-    def __init__(self,defining_string,base_lexicon,splits_cache,parent=None):
+    def __init__(self,defining_string,base_lexicon,splits_cache,parent=None,sem_cat=None):
         had_surrounding_brackets = False
         self.base_lexicon = base_lexicon
         self.splits_cache = splits_cache
@@ -22,8 +22,8 @@ class LogicalForm:
         self.stored_alpha_normalized_subtree_string = ''
         self.stored_alpha_normalized_shell_subtree_string = ''
         if parent == 'START':
-            self.sem_cat = 'S|NP'
-            self.is_semantic_leaf = False
+            assert sem_cat is not None
+            self.sem_cat = sem_cat
 
         if '.' in defining_string:
             lambda_string, _, remaining_string = defining_string.partition('.')
@@ -65,20 +65,20 @@ class LogicalForm:
         else:
             assert self.subtree_string() == defining_string
 
+        self.is_semantic_leaf = self.is_leaf # is_leaf is sufficient for is_semantic_leaf
         if self.parent != 'START':
             ss = strip_string(defining_string)
             if ss in self.base_lexicon:
                 self.sem_cat = self.base_lexicon[ss]
-                self.is_semantic_leaf = True
+                self.is_semantic_leaf = True # but not necessary
             else:
                 self.sem_cat = 'XXX'
-                self.is_semantic_leaf = False
 
     def spawn_child(self,defining_string):
         return LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,parent=self)
 
     def spawn_self_like(self,defining_string):
-        new = LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,parent=self.parent)
+        new = LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,parent=self.parent,sem_cat=self.sem_cat)
         new.sem_cat = self.sem_cat
         return new
 
@@ -318,9 +318,6 @@ class ParseNode():
         self.sem_cat = self.logical_form.sem_cat
         if syn_cat is not None:
             self.syn_cat = syn_cat
-        elif self.node_type == 'ROOT':
-            self.syn_cat = 'S|NP'
-            assert self.sem_cat == 'S|NP'
         else:
             self.syn_cat = self.logical_form.sem_cat # no directionality then
         self.is_leaf = self.logical_form.is_semantic_leaf or len(self.words) == 1
@@ -329,7 +326,6 @@ class ParseNode():
                 self.logical_form.infer_splits()
             for f,g in self.logical_form.possible_splits:
                 if g.sem_cat_is_set:
-                    #assert re.match(fr'.*\|\(?{g.sem_cat}\)?$',f.sem_cat)
                     self.add_splits(f,g,'fwd')
                     self.add_splits(f,g,'bck')
         #else:
@@ -345,12 +341,17 @@ class ParseNode():
             if direction == 'fwd':
                 right_child = ParseNode(g,right_words,parent=self,node_type='right_fwd')
                 new_syn_cat = f'{self.syn_cat}/{maybe_bracketted(right_child.syn_cat)}'
-                assert f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)
+                if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
+                    #print(self.sem_cat,f.sem_cat,g.sem_cat)
+                    pass
                 left_child = ParseNode(f,left_words,parent=self,node_type='left_fwd',syn_cat=new_syn_cat)
             elif direction == 'bck':
                 left_child = ParseNode(g,left_words,parent=self,node_type='left_bck')
                 new_syn_cat = f'{self.syn_cat}\\{maybe_bracketted(left_child.syn_cat)}'
-                assert f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)
+                if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
+                    #print(self.sem_cat,f.sem_cat,g.sem_cat)
+                    pass
+
                 right_child = ParseNode(f,right_words,parent=self,node_type='right_bck',syn_cat=new_syn_cat)
             self.append_split(left_child,right_child,direction)
 

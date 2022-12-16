@@ -121,3 +121,7 @@ def simple_translate(s,trans_dict):
     for old,new in trans_dict.items():
         s = s.replace(old,new)
     return s
+
+def file_print(s,f):
+    print(s)
+    print(s,file=f)
