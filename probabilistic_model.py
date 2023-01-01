@@ -83,9 +83,9 @@ class LanguageAcquirer():
         self.shell_meaning_learner = ShellMeaningDirichletProcessLearner(1000)
         self.meaning_learner = MeaningDirichletProcessLearner(500)
         self.word_learner = WordSpanDirichletProcessLearner(1)
-        self.lf_cache = {}
-        self.lf_splits_cache = {}
-        self.parse_node_cache = {}
+        self.lf_cache = {} # maps lf_strings to LogicalForm objects
+        self.lf_splits_cache = {} # maps LogicalForm objects to lists of (left-child,right-child)
+        self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
 
     @property
     def lf_vocab(self):
@@ -111,7 +111,6 @@ class LanguageAcquirer():
         print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs]))
 
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
-        start_time = time()
         self.word_to_sem_probs = pd.DataFrame([self.word_learner.inverse_distribution(w) for w in self.mwe_vocab],index=self.mwe_vocab)
         self.word_to_sem_probs *= pd.Series(self.meaning_learner.base_distribution_cache)
         self.sem_to_sem_shell_probs = pd.DataFrame([self.meaning_learner.inverse_distribution(m) for m in self.lf_vocab],index=self.lf_vocab)
@@ -119,10 +118,8 @@ class LanguageAcquirer():
         self.sem_shell_to_syn_probs = pd.DataFrame([self.shell_meaning_learner.inverse_distribution(m) for m in self.shell_lf_vocab],index=self.shell_lf_vocab)
         self.sem_shell_to_syn_probs *= pd.Series({x:self.syntax_learner.base_distribution(x) for x in self.sem_shell_to_syn_probs.columns})
         self.word_to_syn_probs = self.word_to_sem_probs.dot(self.sem_to_sem_shell_probs).dot(self.sem_shell_to_syn_probs)
-        print(f"inverse_prob_time: {time()-start_time:.3f}")
 
     def show_word(self,word,f):
-        #with pd.option_context('display.float_format', '{:,.2f}'.format):
         meanings = self.word_to_sem_probs.loc[word].sort_values()[-10:]
         file_print(f'\nLearned meanings for \'{word}\'',f)
         file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in meanings.items() if prob > 1e-4]),f)
@@ -132,7 +129,7 @@ class LanguageAcquirer():
         file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in syn_cats.items() if prob > 1e-4]),f)
 
     def show_splits(self,syn_cat,f):
-        file_print(f'\nLearned splits for category {syn_cat}',f)
+        file_print(f'Learned splits for category {syn_cat}',f)
         counts = self.syntax_learner.memory[syn_cat]
         norm = counts['count']
         probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='count'}
@@ -237,7 +234,7 @@ if __name__ == "__main__":
 
     language_acquirer = LanguageAcquirer(base_lexicon)
     NDPS = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
-    f = open(f'experiments/{ARGS.num_epochs}-{ARGS.max_sent_len}.txt','w')
+    f = open(f'experiments/{ARGS.num_epochs}_{ARGS.max_sent_len}_root-{ARGS.root_sem_cat}.txt','w')
     start_time = time()
     for epoch_num in range(ARGS.num_epochs):
         epoch_start_time = time()
@@ -253,7 +250,7 @@ if __name__ == "__main__":
     language_acquirer.show_splits(ARGS.root_sem_cat,f)
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
-    file_print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s',f)
+    print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
     language_acquirer.show_word('virginia',f)
     language_acquirer.show_word('cities',f)
     meaning_acc ,syn_acc = language_acquirer.test_NPs()
