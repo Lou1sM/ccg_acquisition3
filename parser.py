@@ -9,6 +9,11 @@ import re
 # is_leaf means it's atomic in lambda calculus
 # is_semantic_leaf means we shouldn't consider breaking it further
 # e.g. lambda $0. state $0 is a semantic leaf but not a leaf
+
+# split_prob is the prob, according to the syntax_learner, of the split that
+# gave birth to it; down_prob is the prob of the branch this node is on, equal
+# to split_prob*parent.down_prob; subtree_prob is the prob of the word span of this node
+# given its lf, under all possible splits;
 class LogicalForm:
     def __init__(self,defining_string,base_lexicon,splits_cache,parent=None,sem_cat=None):
         had_surrounding_brackets = False
@@ -264,7 +269,7 @@ class LogicalForm:
             entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.splits_cache)
             if len(to_present_as_args_to_g) > 3: # then f will end up with arity 4
                 continue
-            if strip_string(f.subtree_string().replace(' AND','')) == '': # also exclude case where only substantive is 'AND'
+            if strip_string(f.subtree_string().replace(' AND','')) == '': # exclude just 'AND's
                 continue
             f = f.lambda_abstract(g_sub_var_num)
             f.sem_cat = f.base_lexicon.get(f.stripped_subtree_string,'XXX')
@@ -395,19 +400,19 @@ class ParseNode():
         self.sibling = other
         other.sibling = self
 
-    def probs(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob):
+    def probs(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map):
         self.split_prob = split_prob
         if self in cache:
             return cache[self]
-        prob_from_descendents = 0
+        all_probs = [self.prob_as_leaf(shell_meaning_learner,meaning_learner,word_learner)]
         for ps in self.possible_splits:
             syntax_split = ps['left'].syn_cat + ' + ' + ps['right'].syn_cat
             split_prob = syntax_learner.prob(syntax_split,self.syn_cat)
-            left_subtree_prob = ps['left'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob)
-            right_subtree_prob = ps['right'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob)
-            prob_from_descendents += right_subtree_prob*left_subtree_prob*split_prob
+            left_subtree_prob = ps['left'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map)
+            right_subtree_prob = ps['right'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map)
+            all_probs.append(right_subtree_prob*left_subtree_prob*split_prob)
 
-        subtree_prob = self.prob_as_leaf(shell_meaning_learner,meaning_learner,word_learner) + prob_from_descendents
+        subtree_prob = max(all_probs) if is_map else sum(all_probs)
         cache[self] = subtree_prob
         self.subtree_prob = subtree_prob
         return subtree_prob
@@ -415,6 +420,7 @@ class ParseNode():
     def propagate_down_prob(self,passed_down_prob):
         self.down_prob = passed_down_prob*self.split_prob
         for ps in self.possible_splits:
+            # this is how to get cousins probs
             ps['left'].propagate_down_prob(self.down_prob*ps['right'].subtree_prob)
             ps['right'].propagate_down_prob(self.down_prob*ps['left'].subtree_prob)
         if self.possible_splits != []:

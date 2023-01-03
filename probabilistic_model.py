@@ -1,4 +1,6 @@
 import numpy as np
+from dl_utils.misc import set_experiment_dir
+from os.path import join
 import pandas as pd
 from utils import normalize_dict, split_respecting_brackets, file_print
 from time import time
@@ -17,6 +19,10 @@ class BaseDirichletProcessLearner(ABC):
 
     def base_distribution_(self,x):
         raise NotImplementedError
+
+    def set_from_dict(self,dict_to_set_from):
+        self.memory = dict_to_set_from['memory']
+        self.base_distribution_cache = dict_to_set_from['base_distribution_cache']
 
     def prob(self,y,x):
         base_prob = self.base_distribution(y)
@@ -104,6 +110,39 @@ class LanguageAcquirer():
         return list(set([w for x in self.word_learner.memory.values()
                         for w in x.keys() if ' ' not in w]))
 
+    def load_from(self,fpath):
+        distributions_fpath = join(fpath,'distributions.json')
+        with open(distributions_fpath) as f:
+            to_load = json.load(f)
+        self.syntax_learner.set_from_dict(to_load['syntax'])
+        self.shell_meaning_learner.set_from_dict(to_load['shell_meaning'])
+        self.meaning_learner.set_from_dict(to_load['meaning'])
+        self.word_learner.set_from_dict(to_load['word'])
+
+        self.word_to_sem_probs = pd.read_pickle(join(fpath,'word_to_sem_probs.pkl'))
+        self.sem_to_sem_shell_probs = pd.read_pickle(join(fpath,'sem_to_sem_shell_probs.pkl'))
+        self.sem_shell_to_syn_probs = pd.read_pickle(join(fpath,'sem_shell_to_syn_probs.pkl'))
+        self.word_to_syn_probs = pd.read_pickle(join(fpath,'word_to_syn_probs.pkl'))
+
+    def save_to(self,fpath):
+        to_dump = {'syntax': {'memory':self.syntax_learner.memory,
+                   'base_distribution_cache':self.syntax_learner.base_distribution_cache},
+                  'shell_meaning': {'memory':self.shell_meaning_learner.memory,
+                   'base_distribution_cache':self.shell_meaning_learner.base_distribution_cache},
+                  'meaning': {'memory':self.meaning_learner.memory,
+                   'base_distribution_cache':self.meaning_learner.base_distribution_cache},
+                  'word': {'memory':self.word_learner.memory,
+                   'base_distribution_cache':self.word_learner.base_distribution_cache}}
+
+        distributions_fpath = join(fpath,'distributions.json')
+        with open(distributions_fpath,'w') as f:
+            json.dump(to_dump,f)
+
+        self.word_to_sem_probs.to_pickle(join(fpath,'word_to_sem_probs.pkl'))
+        self.sem_to_sem_shell_probs.to_pickle(join(fpath,'sem_to_sem_shell.pkl'))
+        self.sem_shell_to_syn_probs.to_pickle(join(fpath,'sem_shell_to_syn_probs.pkl'))
+        self.word_to_syn_probs.to_pickle(join(fpath,'word_to_syn_probs.pkl'))
+
     def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
         distr = self.word_learner.inverse_distribution(word)
         probs = sorted(distr.items(), key=lambda x:x[1])[-15:]
@@ -113,13 +152,20 @@ class LanguageAcquirer():
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
         self.word_to_sem_probs = pd.DataFrame([self.word_learner.inverse_distribution(w) for w in self.mwe_vocab],index=self.mwe_vocab)
         self.word_to_sem_probs *= pd.Series(self.meaning_learner.base_distribution_cache)
+        self.word_to_sem_probs = self.word_to_sem_probs.astype(pd.SparseDtype('float',0))
+
         self.sem_to_sem_shell_probs = pd.DataFrame([self.meaning_learner.inverse_distribution(m) for m in self.lf_vocab],index=self.lf_vocab)
         self.sem_to_sem_shell_probs *= pd.Series(self.shell_meaning_learner.base_distribution_cache)
+        self.sem_to_sem_shell_probs = self.sem_to_sem_shell_probs.astype(pd.SparseDtype('float',0))
+
         self.sem_shell_to_syn_probs = pd.DataFrame([self.shell_meaning_learner.inverse_distribution(m) for m in self.shell_lf_vocab],index=self.shell_lf_vocab)
         self.sem_shell_to_syn_probs *= pd.Series({x:self.syntax_learner.base_distribution(x) for x in self.sem_shell_to_syn_probs.columns})
-        self.word_to_syn_probs = self.word_to_sem_probs.dot(self.sem_to_sem_shell_probs).dot(self.sem_shell_to_syn_probs)
+        self.sem_shell_to_syn_probs = self.sem_shell_to_syn_probs.astype(pd.SparseDtype('float',0))
 
-    def show_word(self,word,f):
+        self.word_to_syn_probs = self.word_to_sem_probs.dot(self.sem_to_sem_shell_probs).dot(self.sem_shell_to_syn_probs)
+        self.word_to_syn_probs = self.word_to_syn_probs.astype(pd.SparseDtype('float',0))
+
+    def show_word(self,word,f=None):
         meanings = self.word_to_sem_probs.loc[word].sort_values()[-10:]
         file_print(f'\nLearned meanings for \'{word}\'',f)
         file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in meanings.items() if prob > 1e-4]),f)
@@ -135,24 +181,19 @@ class LanguageAcquirer():
         probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='count'}
         file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
 
-    def get_lf(self,logical_form_str):
-        if logical_form_str in self.lf_cache:
-            return self.lf_cache[logical_form_str]
+    def get_lf(self,lf_str):
+        if lf_str in self.lf_cache:
+            return self.lf_cache[lf_str]
         else:
-            lf = LogicalForm(logical_form_str,self.base_lexicon,self.lf_splits_cache,parent='START',sem_cat=ARGS.root_sem_cat)
-            self.lf_cache[logical_form_str] = lf
+            lf = LogicalForm(lf_str,self.base_lexicon,self.lf_splits_cache,parent='START',sem_cat=ARGS.root_sem_cat)
+            self.lf_cache[lf_str] = lf
             return lf
 
-    def train_one_step(self,words,logical_form_str):
-        lf = self.get_lf(logical_form_str)
-        if ' '.join([logical_form_str]+words) in self.parse_node_cache:
-            parse_root = self.parse_node_cache[' '.join([logical_form_str]+words)]
-        else:
-            parse_root = ParseNode(lf,words,'ROOT')
-            self.parse_node_cache[' '.join([logical_form_str]+words)] = parse_root
+    def train_one_step(self,lf_str,words):
+        parse_root = self.make_parse_node(lf_str,words)
         prob_cache = {}
         root_prob = parse_root.probs(self.syntax_learner,self.shell_meaning_learner,
-                        self.meaning_learner,self.word_learner,prob_cache,split_prob=1)
+                       self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=False)
         parse_root.propagate_down_prob(1)
         for node, prob in prob_cache.items():
             self.syntax_learner.observe('leaf',node.syn_cat,weight=node.stored_prob_as_leaf)
@@ -177,9 +218,9 @@ class LanguageAcquirer():
         for w in nps:
             w_spaces = w.replace('_',' ')
             if w_spaces not in self.word_to_sem_probs.index:
-                #print(f'\'{w_spaces}\' not here')
                 if w_spaces not in ['virginia','kansas','montgomery']:
-                    assert not any([w_spaces in ' '.join(x['words']) and len([z for z in x['words'] if z != '?']) <= ARGS.max_sent_len for x in d['data'][:NDPS]])
+                    if not not any([w_spaces in ' '.join(x['words']) and len([z for z in x['words'] if z != '?']) <= ARGS.max_sent_len for x in d['data'][:NDPS]]):
+                        print(f'\'{w_spaces}\' not here')
                 continue
             meaning_pred = self.word_to_sem_probs.loc[w_spaces].idxmax()
             syn_pred = self.word_to_syn_probs.loc[w_spaces].idxmax()
@@ -210,11 +251,42 @@ class LanguageAcquirer():
             else:
                 breakpoint()
 
+    def make_parse_node(self,lf_str,words):
+        lf = self.get_lf(lf_str)
+        if ' '.join([lf_str]+words) in self.parse_node_cache:
+            parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
+        else:
+            parse_root = ParseNode(lf,words,'ROOT')
+            self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
+        return parse_root
+
+    def MAP_analysis(self,lf_str,words):
+        parse_root = self.make_parse_node(lf_str,words)
+        prob_cache = {}
+        root_prob = parse_root.probs(self.syntax_learner,self.shell_meaning_learner,
+                       self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=True)
+
+        frontier = [parse_root]
+        layers = []
+        while True:
+            if all([x.is_leaf for x in frontier]):
+                break
+            layers.append(frontier)
+            new_frontier = []
+            for node in frontier:
+                if node.is_leaf:
+                    new_frontier.append(node)
+                elif len(node.possible_splits) > 0:
+                    x = max(node.possible_splits, key=lambda x: x['left'].subtree_prob*x['right'].subtree_prob)
+                    new_frontier += [x['left'],x['right']]
+            frontier = new_frontier
+        for layer in reversed(layers):
+            print(layer)
 
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
-    ARGS.add_argument("--expname", type=str, default='tmp',
-                          help="the directory to write output files")
+    ARGS.add_argument("--expname", type=str)
+    ARGS.add_argument("--reload_from", type=str)
     ARGS.add_argument("--dset", type=str, choices=['easy-adam','geo'], default="geo")
     ARGS.add_argument("--num_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
@@ -222,9 +294,15 @@ if __name__ == "__main__":
     ARGS.add_argument("--num_epochs", type=int, default=1)
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
+    ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--root_sem_cat", type=str, default='S')
     ARGS = ARGS.parse_args()
 
+    if ARGS.expname is None:
+        expname = f'{ARGS.num_epochs}_{ARGS.max_sent_len}_root-{ARGS.root_sem_cat}'
+    else:
+        expname = ARGS.expname
+    set_experiment_dir(f'experiments/{expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
     with open('data/preprocessed_geoqueries.json') as f: d=json.load(f)
 
     NPS = d['np_list']
@@ -233,8 +311,10 @@ if __name__ == "__main__":
     base_lexicon = {w:cat for item,cat in zip([NPS,INTRANSITIVES,TRANSITIVES],('NP','S|NP','S|NP|NP')) for w in item}
 
     language_acquirer = LanguageAcquirer(base_lexicon)
+    if ARGS.reload_from is not None:
+        language_acquirer.load_from(f'experiments/{ARGS.reload_from}')
     NDPS = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
-    f = open(f'experiments/{ARGS.num_epochs}_{ARGS.max_sent_len}_root-{ARGS.root_sem_cat}.txt','w')
+    f = open(f'experiments/{expname}/results.txt','w')
     start_time = time()
     for epoch_num in range(ARGS.num_epochs):
         epoch_start_time = time()
@@ -245,7 +325,7 @@ if __name__ == "__main__":
             if i == ARGS.db_at:
                 breakpoint()
             if len(words) <= ARGS.max_sent_len:
-                language_acquirer.train_one_step(words,lf_str)
+                language_acquirer.train_one_step(lf_str,words)
         print(f"Epoch {epoch_num} completed, time taken: {time()-epoch_start_time:.3f}s")
     language_acquirer.show_splits(ARGS.root_sem_cat,f)
     inverse_probs_start_time = time()
@@ -258,11 +338,13 @@ if __name__ == "__main__":
     file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
     file_print(f'\nSamples for type {ARGS.root_sem_cat}:',f)
     for _ in range(10):
-        generated =language_acquirer.generate_words(ARGS.root_sem_cat)
+        generated = language_acquirer.generate_words(ARGS.root_sem_cat)
         if any([x['words'][:-1]==generated.split() for x in d['data']]):
             file_print(f'{generated}: seen during training',f)
         else:
             file_print(f'{generated}: not seen during training',f)
     file_print(f'Total run time: {time()-start_time:.3f}s',f)
     f.close()
+    language_acquirer.save_to(f'experiments/{expname}')
     breakpoint()
+    language_acquirer.MAP_analysis(d['data'][0]['parse'],d['data'][0]['words'])
