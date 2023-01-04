@@ -68,19 +68,19 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
         num_vars = len(set(re.findall(r'\$\d',x)))
-        num_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
+        num_constants = float('PLACEHOLDER' in x)
         return np.e**(-2*num_vars - num_constants)
 
 class MeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
         num_vars = len(set(re.findall(r'\$\d',x)))
-        num_constants = float('PLACEHOLDER' in x)
+        num_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
         return np.e**(-2*num_vars - num_constants)
 
 class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution(self,x):
         assert len(x) > 0
-        return 1/27 * 28**(-len(x)+1)
+        return 28**(-len(x)+1)
 
 class LanguageAcquirer():
     def __init__(self,base_lexicon):
@@ -196,12 +196,14 @@ class LanguageAcquirer():
                        self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=False)
         parse_root.propagate_down_prob(1)
         for node, prob in prob_cache.items():
-            self.syntax_learner.observe('leaf',node.syn_cat,weight=node.stored_prob_as_leaf)
             if node.parent is not None and not node.is_g:
-                syntax_split = node.syn_cat + ' + ' + node.sibling.syn_cat
+                if node.is_fwd:
+                    syntax_split = node.syn_cat + ' + ' + node.sibling.syn_cat
+                else:
+                    syntax_split = node.sibling.syn_cat + ' + ' + node.syn_cat
                 update_weight = node.subtree_prob * node.down_prob / root_prob # for conditional
                 self.syntax_learner.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
-            leaf_prob = node.down_prob*node.stored_prob_as_leaf*self.syntax_learner.prob('leaf',node.syn_cat)/root_prob
+            leaf_prob = node.down_prob*node.stored_prob_as_leaf/root_prob
             shell_lf = node.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
             lf = node.logical_form.subtree_string(alpha_normalized=True)
             word_str = ' '.join(node.words)
@@ -241,15 +243,7 @@ class LanguageAcquirer():
             return self.word_learner.conditional_sample(lf)
         else:
             f,g = split.split(' + ')
-            f_components = split_respecting_brackets(f,sep=['\\','/'])
-            assert len(f_components) >= 2
-            split_direction = f[len(f_components[0])]
-            if split_direction == '/':
-                return f'{self.generate_words(f)} {self.generate_words(g)}'
-            elif split_direction == '\\':
-                return f'{self.generate_words(g)} {self.generate_words(f)}'
-            else:
-                breakpoint()
+            return f'{self.generate_words(f)} {self.generate_words(g)}'
 
     def make_parse_node(self,lf_str,words):
         lf = self.get_lf(lf_str)
@@ -269,9 +263,9 @@ class LanguageAcquirer():
         frontier = [parse_root]
         layers = []
         while True:
+            layers.append(frontier)
             if all([x.is_leaf for x in frontier]):
                 break
-            layers.append(frontier)
             new_frontier = []
             for node in frontier:
                 if node.is_leaf:
@@ -295,6 +289,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
+    ARGS.add_argument("--use_simple_dset", action="store_true")
     ARGS.add_argument("--root_sem_cat", type=str, default='S')
     ARGS = ARGS.parse_args()
 
@@ -303,7 +298,8 @@ if __name__ == "__main__":
     else:
         expname = ARGS.expname
     set_experiment_dir(f'experiments/{expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
-    with open('data/preprocessed_geoqueries.json') as f: d=json.load(f)
+    data_fname = 'simple_dset.json' if ARGS.use_simple_dset else 'preprocessed_geoqueries.json'
+    with open(join('data',data_fname)) as f: d=json.load(f)
 
     NPS = d['np_list']
     TRANSITIVES = d['transitive_verbs']
@@ -331,8 +327,6 @@ if __name__ == "__main__":
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
-    language_acquirer.show_word('virginia',f)
-    language_acquirer.show_word('cities',f)
     meaning_acc ,syn_acc = language_acquirer.test_NPs()
     file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
@@ -347,4 +341,4 @@ if __name__ == "__main__":
     f.close()
     language_acquirer.save_to(f'experiments/{expname}')
     breakpoint()
-    language_acquirer.MAP_analysis(d['data'][0]['parse'],d['data'][0]['words'])
+    language_acquirer.MAP_analysis(d['data'][1]['parse'],d['data'][1]['words'])

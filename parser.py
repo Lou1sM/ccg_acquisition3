@@ -384,6 +384,7 @@ class ParseNode():
     def is_g(self):
         return self.node_type in ['right_fwd','left_bck']
 
+    @property
     def is_fwd(self):
         return self.node_type in ['right_fwd','left_fwd']
 
@@ -404,13 +405,13 @@ class ParseNode():
         self.split_prob = split_prob
         if self in cache:
             return cache[self]
-        all_probs = [self.prob_as_leaf(shell_meaning_learner,meaning_learner,word_learner)]
+        all_probs = [self.prob_as_leaf(syntax_learner,shell_meaning_learner,meaning_learner,word_learner)]
         for ps in self.possible_splits:
             syntax_split = ps['left'].syn_cat + ' + ' + ps['right'].syn_cat
             split_prob = syntax_learner.prob(syntax_split,self.syn_cat)
             left_subtree_prob = ps['left'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map)
             right_subtree_prob = ps['right'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map)
-            all_probs.append(right_subtree_prob*left_subtree_prob*split_prob)
+            all_probs.append(left_subtree_prob*right_subtree_prob*split_prob)
 
         subtree_prob = max(all_probs) if is_map else sum(all_probs)
         cache[self] = subtree_prob
@@ -427,13 +428,17 @@ class ParseNode():
             if not self.down_prob > max([z.down_prob for ps in self.possible_splits for z in (ps['right'],ps['left'])]):
                 breakpoint()
 
-    def prob_as_leaf(self,shell_meaning_learner,meaning_learner,word_learner):
+    def prob_as_leaf(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner):
         shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
         if 'city' in shell_lf:
             breakpoint()
         lf = self.logical_form.subtree_string(alpha_normalized=True)
         word_str = ' '.join(self.words)
-        self.stored_prob_as_leaf = shell_meaning_learner.prob(shell_lf,self.sem_cat) * meaning_learner.prob(lf,shell_lf) * word_learner.prob(word_str,lf) # will use stored value in train_one_step()
+        self.stored_prob_as_leaf = syntax_learner.prob('leaf',self.syn_cat) * \
+                                   shell_meaning_learner.prob(shell_lf,self.sem_cat) * \
+                                   meaning_learner.prob(lf,shell_lf) * \
+                                   word_learner.prob(word_str,lf)
+                            # will use stored value in train_one_step()
         return self.stored_prob_as_leaf
 
 def beta_normalize(m):
