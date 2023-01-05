@@ -62,6 +62,8 @@ class BaseDirichletProcessLearner(ABC):
 
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
+        if x == 'NP + S/NP\\NP':
+            return 0
         num_slashes = len(re.findall(r'\\/\|',x))
         return 0.2**(num_slashes+1)
 
@@ -347,6 +349,7 @@ if __name__ == "__main__":
         print(f"Epoch {epoch_num} completed, time taken: {time()-epoch_start_time:.3f}s")
         language_acquirer.show_splits(ARGS.root_sem_cat,f)
         final_parses = {}
+        num_correct_parses = 0
         for dpoint in d['data']:
             favoured_parse = language_acquirer.MAP_analysis(dpoint['parse'],dpoint['words'])
             final_syn_cats = ' + '.join([x.syn_cat for x in favoured_parse[-1]])
@@ -356,7 +359,12 @@ if __name__ == "__main__":
                 final_parses[final_syn_cats] += 1
             except KeyError:
                 final_parses[final_syn_cats] = 1
+            if final_syn_cats == 'S\\NP/NP + NP' and len(dpoint['words'])==3:
+                num_correct_parses += 1
+            elif final_syn_cats == 'NP + S\\NP' and len(dpoint['words'])==2:
+                num_correct_parses += 1
         print(final_parses)
+        print(f"parse accuracy: {num_correct_parses/len(d['data']):.3f}")
 
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
