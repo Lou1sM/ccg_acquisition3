@@ -208,7 +208,7 @@ class LanguageAcquirer():
             lf = node.logical_form.subtree_string(alpha_normalized=True)
             word_str = ' '.join(node.words)
             self.syntax_learner.observe('leaf',node.syn_cat,weight=leaf_prob)
-            self.shell_meaning_learner.observe(shell_lf,node.syn_cat,weight=leaf_prob)
+            self.shell_meaning_learner.observe(shell_lf,node.sem_cat,weight=leaf_prob)
             self.meaning_learner.observe(lf,shell_lf,weight=leaf_prob)
             self.word_learner.observe(word_str,lf,weight=leaf_prob)
 
@@ -237,8 +237,9 @@ class LanguageAcquirer():
 
     def generate_words(self,syn_cat):
         split = self.syntax_learner.conditional_sample(syn_cat)
+        sem_cat = re.sub(r'[\\/]','|',syn_cat)
         if split=='leaf':
-            shell_lf = self.shell_meaning_learner.conditional_sample(syn_cat)
+            shell_lf = self.shell_meaning_learner.conditional_sample(sem_cat)
             lf = self.meaning_learner.conditional_sample(shell_lf)
             return self.word_learner.conditional_sample(lf)
         else:
@@ -263,25 +264,43 @@ class LanguageAcquirer():
         frontier = [parse_root]
         layers = []
         while True:
-            layers.append(frontier)
+            if frontier != []:
+                layers.append(frontier)
             if all([x.is_leaf for x in frontier]):
                 break
             new_frontier = []
             for node in frontier:
-                if node.is_leaf:
-                    new_frontier.append(node)
-                elif len(node.possible_splits) > 0:
-                    x = max(node.possible_splits, key=lambda x: x['left'].subtree_prob*x['right'].subtree_prob)
-                    new_frontier += [x['left'],x['right']]
+                if len(node.possible_splits) > 0:
+                    assert all([x['left'].split_prob == x['right'].split_prob for x in node.possible_splits])
+                    y = max(node.possible_splits, key=lambda x: x['left'].subtree_prob*x['right'].subtree_prob*x['left'].split_prob)
+                    if y['left'].subtree_prob*y['right'].subtree_prob*y['left'].split_prob > node.stored_prob_as_leaf:
+                        new_frontier += [y['left'],y['right']]
             frontier = new_frontier
-        for layer in reversed(layers):
-            print(layer)
+        return layers
+
+    def prob_of_split(self,x,is_map): # slow, just use for pdb
+        if x['left'].is_fwd:
+            f = x['left'].syn_cat
+            g = x['right'].syn_cat
+        else:
+            f = x['right'].syn_cat
+            g = x['left'].syn_cat
+        if '\\' in g or '/' in g:
+            parent_syn_cat = f[:-len(g)+3] # brackets
+        else:
+            parent_syn_cat = f[:-len(g)+1]
+        split_prob = self.syntax_learner.prob(g + ' + ' + f,parent_syn_cat)
+        prob_cache = {}
+        left_prob = x['left'].probs(self.syntax_learner,self.shell_meaning_learner,
+                    self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=is_map)
+        right_prob = x['right'].probs(self.syntax_learner,self.shell_meaning_learner,
+                    self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=is_map)
+        return split_prob*left_prob*right_prob
 
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("--expname", type=str)
     ARGS.add_argument("--reload_from", type=str)
-    ARGS.add_argument("--dset", type=str, choices=['easy-adam','geo'], default="geo")
     ARGS.add_argument("--num_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
     ARGS.add_argument("--max_sent_len", type=int, default=6)
@@ -289,7 +308,8 @@ if __name__ == "__main__":
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
-    ARGS.add_argument("--use_simple_dset", action="store_true")
+    ARGS.add_argument("--shuffle", action="store_true")
+    ARGS.add_argument("-d", "--dset", type=str, default='simple1000')
     ARGS.add_argument("--root_sem_cat", type=str, default='S')
     ARGS = ARGS.parse_args()
 
@@ -298,10 +318,9 @@ if __name__ == "__main__":
     else:
         expname = ARGS.expname
     set_experiment_dir(f'experiments/{expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
-    data_fname = 'simple_dset.json' if ARGS.use_simple_dset else 'preprocessed_geoqueries.json'
-    with open(join('data',data_fname)) as f: d=json.load(f)
+    with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
 
-    NPS = d['np_list']
+    NPS = d['np_list'] + [str(x) for x in range(1,11)] # because of the numbers in simple dsets
     TRANSITIVES = d['transitive_verbs']
     INTRANSITIVES = d['intransitive_verbs']
     base_lexicon = {w:cat for item,cat in zip([NPS,INTRANSITIVES,TRANSITIVES],('NP','S|NP','S|NP|NP')) for w in item}
@@ -309,12 +328,15 @@ if __name__ == "__main__":
     language_acquirer = LanguageAcquirer(base_lexicon)
     if ARGS.reload_from is not None:
         language_acquirer.load_from(f'experiments/{ARGS.reload_from}')
+    if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
     f = open(f'experiments/{expname}/results.txt','w')
     start_time = time()
     for epoch_num in range(ARGS.num_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(d['data'][:NDPS]):
+            if i < 10 and epoch_num > 0:
+                continue
             words, lf_str = dpoint['words'], dpoint['parse']
             if words[-1] == '?':
                 words = words[:-1]
@@ -323,7 +345,19 @@ if __name__ == "__main__":
             if len(words) <= ARGS.max_sent_len:
                 language_acquirer.train_one_step(lf_str,words)
         print(f"Epoch {epoch_num} completed, time taken: {time()-epoch_start_time:.3f}s")
-    language_acquirer.show_splits(ARGS.root_sem_cat,f)
+        language_acquirer.show_splits(ARGS.root_sem_cat,f)
+        final_parses = {}
+        for dpoint in d['data']:
+            favoured_parse = language_acquirer.MAP_analysis(dpoint['parse'],dpoint['words'])
+            final_syn_cats = ' + '.join([x.syn_cat for x in favoured_parse[-1]])
+            if final_syn_cats == 'NP':
+                breakpoint()
+            try:
+                final_parses[final_syn_cats] += 1
+            except KeyError:
+                final_parses[final_syn_cats] = 1
+        print(final_parses)
+
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
@@ -340,5 +374,3 @@ if __name__ == "__main__":
     file_print(f'Total run time: {time()-start_time:.3f}s',f)
     f.close()
     language_acquirer.save_to(f'experiments/{expname}')
-    breakpoint()
-    language_acquirer.MAP_analysis(d['data'][1]['parse'],d['data'][1]['words'])

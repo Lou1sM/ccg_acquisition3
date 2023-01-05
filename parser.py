@@ -235,12 +235,12 @@ class LogicalForm:
         return new
 
     def infer_splits(self):
-        if self.is_semantic_leaf:
-            return []
-        if self.num_lambda_binders > 4:
-            return []
+        if self.is_semantic_leaf or self.num_lambda_binders > 4:
+            self.possible_splits = []
+            return self.possible_splits
         if self in self.splits_cache:
-            return self.splits_cache[self]
+            self.possible_splits = self.splits_cache[self]
+            return  self.possible_splits
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
         for removee_idxs in all_sublists(possible_removee_idxs):
             if removee_idxs == []: continue
