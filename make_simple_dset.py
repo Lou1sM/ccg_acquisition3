@@ -20,13 +20,15 @@ def make_random_dpoint():
     verb_str,requires_num = transitives[verb]
     if requires_num:
         obj_str = np.random.choice(nums)
-        obj = nums.index(obj_str)
+        obj = nums.index(obj_str)+1 # because of zero-indexing
     else:
         obj = obj_str = np.random.choice(nps)
     return {'words': ' '.join([subj ,verb_str ,obj_str]).split(), 'parse':f'{verb} {subj} {obj}'}
 
-dpoints = [make_random_dpoint() for _ in range(1000)]
+num_dpoints = 1000
+
+dpoints = [make_random_dpoint() for _ in range(num_dpoints)]
 processed_dset = {'np_list':nps, 'intransitive_verbs':list(intransitives),
                     'transitive_verbs': list(transitives), 'data':dpoints}
-with open('data/simple_dset.json','w') as f:
+with open(f'data/simple{num_dpoints}.json','w') as f:
     json.dump(processed_dset,f)
