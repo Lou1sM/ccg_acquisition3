@@ -1,5 +1,11 @@
 import json
 import numpy as np
+import argparse
+
+ARGS = argparse.ArgumentParser()
+ARGS.add_argument("--num_dpoints", type=int, default=1000)
+ARGS.add_argument("--spaces", action="store_true")
+ARGS = ARGS.parse_args()
 
 with open('data/preprocessed_geoqueries.json') as f:
     d = json.load(f)
@@ -9,6 +15,10 @@ nps = d['np_list']
 transitives = {'longer': ('is_longer_than', False), 'lower': ('is_lower_than', False), 'low_point': ('is_a_low_point_of', False), 'area': ('has_area', True), 'capital': ('is_the_captial_of', False), 'next_to': ('is_next_to', False), 'len': ('has_length', True), 'population': ('has_population', True), 'size': ('has_size', True), 'traverse': ('traverses', False), 'higher': ('is_higher_than', False), 'high_point': ('is_a_high_point_of', False), 'density': ('has_density', True), 'elevation': ('has_elevation', True), 'loc': ('is_in', False)}
 
 intransitives = {'state': 'is_a_state', 'capital': 'is_a_capital', 'place': 'is_a_place', 'lake': 'is_a_lake', 'mountain': 'is_a_mountain', 'city': 'is_a_city', 'river': 'is_a_river'}
+
+if ARGS.spaces:
+    transitives = {k:(v.replace('_',' '),b) for k,(v,b) in transitives.items()}
+    intransitives = {k:v.replace('_',' ') for k,v in intransitives.items()}
 
 nums = ['one','two','three','four','five','six','seven','eight','nine','ten']
 
@@ -25,10 +35,9 @@ def make_random_dpoint():
         obj = obj_str = np.random.choice(nps)
     return {'words': ' '.join([subj ,verb_str ,obj_str]).split(), 'parse':f'{verb} {subj} {obj}'}
 
-num_dpoints = 1000
-
-dpoints = [make_random_dpoint() for _ in range(num_dpoints)]
+dpoints = [make_random_dpoint() for _ in range(ARGS.num_dpoints)]
 processed_dset = {'np_list':nps, 'intransitive_verbs':list(intransitives),
                     'transitive_verbs': list(transitives), 'data':dpoints}
-with open(f'data/simple{num_dpoints}.json','w') as f:
+fpath = f'data/simple_spaces{ARGS.num_dpoints}.json' if ARGS.spaces else f'data/simple{ARGS.num_dpoints}.json'
+with open(fpath,'w') as f:
     json.dump(processed_dset,f)

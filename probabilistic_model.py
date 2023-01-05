@@ -359,9 +359,9 @@ if __name__ == "__main__":
                 final_parses[final_syn_cats] += 1
             except KeyError:
                 final_parses[final_syn_cats] = 1
-            if final_syn_cats == 'S\\NP/NP + NP' and len(dpoint['words'])==3:
+            if final_syn_cats == 'S\\NP/NP + NP' and len(dpoint['parse'].split())==3:
                 num_correct_parses += 1
-            elif final_syn_cats == 'NP + S\\NP' and len(dpoint['words'])==2:
+            elif final_syn_cats == 'NP + S\\NP' and len(dpoint['parse'].split())==2:
                 num_correct_parses += 1
         print(final_parses)
         print(f"parse accuracy: {num_correct_parses/len(d['data']):.3f}")
