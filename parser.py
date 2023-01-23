@@ -1,8 +1,5 @@
-import json
-import numpy as np
 from pprint import pprint
 from utils import split_respecting_brackets, is_bracketed, all_sublists, remove_possible_outer_brackets, maybe_bracketted
-import argparse
 import re
 
 
@@ -78,6 +75,80 @@ class LogicalForm:
                 self.is_semantic_leaf = True # but not necessary
             else:
                 self.sem_cat = 'XXX'
+
+    def infer_splits(self):
+        if self.is_semantic_leaf or self.num_lambda_binders > 4:
+            self.possible_splits = []
+            return self.possible_splits
+        if self in self.splits_cache:
+            self.possible_splits = self.splits_cache[self]
+            return  self.possible_splits
+        possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
+        # splits from application
+        for removee_idxs in all_sublists(possible_removee_idxs):
+            if removee_idxs == []: continue
+            f = self.copy()
+            to_remove = [f.descendents[i] for i in removee_idxs]
+            leftmost = f.descendents[min(removee_idxs)]
+            entry_point = leftmost # where to substitute g into f
+            changed = True
+            # find the lowest entry point that has all to_removes as
+            # descendents
+            while changed:
+                if entry_point.parent is None:
+                    break
+                changed = False
+                for tr in to_remove:
+                    if tr not in entry_point.descendents:
+                        changed = True
+                        entry_point = entry_point.parent
+                        break
+            g = entry_point.copy()
+            to_present_as_args_to_g = [d for d in entry_point.leaf_descendents if d not in to_remove]
+            g = g.turn_nodes_to_vars(to_present_as_args_to_g)
+            if (g.num_lambda_binders > 4) or (strip_string(g.subtree_string().replace(' AND','')) == ''): # don't consider only variables
+                continue
+            g_sub_var_num = self.new_var_num
+            new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
+            assert entry_point.subtree_string() in self.subtree_string()
+            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.splits_cache)
+            #if not (0 < len(to_present_as_args_to_g) < 3): # then f will end up with arity 4
+            if len(to_present_as_args_to_g) >= 3: # then f will end up with arity 4
+                continue
+            if strip_string(f.subtree_string().replace(' AND','')) == '': # exclude just 'AND's
+                continue
+            f = f.lambda_abstract(g_sub_var_num)
+            f.sem_cat = f.base_lexicon.get(f.stripped_subtree_string,'XXX')
+            concatted = concat_lfs(f,g)
+            assert beta_normalize(concatted) == self.subtree_string()
+            assert f != self
+            assert g != self
+            self.possible_splits.append((f,g))
+            if g.sem_cat_is_set:
+                if f.sem_cat_is_set:
+                    hits = re.findall(fr'\(?{re.escape(g.sem_cat)}\)?$',f.sem_cat)
+                    for hit in hits:
+                        self.sem_cat = f.sem_cat[:-len(hit)-1]
+                if self.sem_cat_is_set:
+                    self.propagate_sem_cat_leftward(f,g)
+            assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
+            f.infer_splits()
+            g.infer_splits()
+        if '|' in self.sem_cat:
+            assert self.subtree_string().startswith('lambda')
+        self.splits_cache[self] = self.possible_splits
+        return self.possible_splits
+
+    def propagate_sem_cat_leftward(self,f,g):
+        if '|' in g.sem_cat:
+            new_assigned_category = f'{self.sem_cat}|({g.sem_cat})'
+        else:
+            new_assigned_category = f'{self.sem_cat}|{g.sem_cat}'
+        assert f.sem_cat in [new_assigned_category,'XXX']
+        f.sem_cat = new_assigned_category
+        for f1,g1 in f.possible_splits:
+            if g1.sem_cat_is_set:
+                f.propagate_sem_cat_leftward(f1,g1)
 
     def spawn_child(self,defining_string):
         return LogicalForm(defining_string,base_lexicon=self.base_lexicon,splits_cache=self.splits_cache,parent=self)
@@ -234,74 +305,6 @@ class LogicalForm:
         new.var_descendents = list(set(self.var_descendents + [var_num]))
         return new
 
-    def infer_splits(self):
-        if self.is_semantic_leaf or self.num_lambda_binders > 4:
-            self.possible_splits = []
-            return self.possible_splits
-        if self in self.splits_cache:
-            self.possible_splits = self.splits_cache[self]
-            return  self.possible_splits
-        possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
-        for removee_idxs in all_sublists(possible_removee_idxs):
-            if removee_idxs == []: continue
-            f = self.copy()
-            to_remove = [f.descendents[i] for i in removee_idxs]
-            leftmost = f.descendents[min(removee_idxs)]
-            entry_point = leftmost # where to substitute g into f
-            changed = True
-            while changed:
-                if entry_point.parent is None:
-                    break
-                changed = False
-                for tr in to_remove:
-                    if tr not in entry_point.descendents:
-                        changed = True
-                        entry_point = entry_point.parent
-                        break
-            g = entry_point.copy()
-            to_present_as_args_to_g = [d for d in entry_point.leaf_descendents if d not in to_remove]
-            g = g.turn_nodes_to_vars(to_present_as_args_to_g)
-            if (g.num_lambda_binders > 4) or (strip_string(g.subtree_string().replace(' AND','')) == ''): # don't consider only variables
-                continue
-            g_sub_var_num = self.new_var_num
-            new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
-            assert entry_point.subtree_string() in self.subtree_string()
-            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.splits_cache)
-            if len(to_present_as_args_to_g) > 3: # then f will end up with arity 4
-                continue
-            if strip_string(f.subtree_string().replace(' AND','')) == '': # exclude just 'AND's
-                continue
-            f = f.lambda_abstract(g_sub_var_num)
-            f.sem_cat = f.base_lexicon.get(f.stripped_subtree_string,'XXX')
-            concatted = concat_lfs(f,g)
-            assert beta_normalize(concatted) == self.subtree_string()
-            assert f != self
-            assert g != self
-            self.possible_splits.append((f,g))
-            if g.sem_cat_is_set:
-                if f.sem_cat_is_set:
-                    hits = re.findall(fr'\(?{re.escape(g.sem_cat)}\)?$',f.sem_cat)
-                    for hit in hits:
-                        self.sem_cat = f.sem_cat[:-len(hit)-1]
-                if self.sem_cat_is_set:
-                    self.propagate_sem_cat_leftward(f,g)
-            assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
-            f.infer_splits()
-            g.infer_splits()
-        self.splits_cache[self] = self.possible_splits
-        return self.possible_splits
-
-    def propagate_sem_cat_leftward(self,f,g):
-        if '|' in g.sem_cat:
-            new_assigned_category = f'{self.sem_cat}|({g.sem_cat})'
-        else:
-            new_assigned_category = f'{self.sem_cat}|{g.sem_cat}'
-        assert f.sem_cat in [new_assigned_category,'XXX']
-        f.sem_cat = new_assigned_category
-        for f1,g1 in f.possible_splits:
-            if g1.sem_cat_is_set:
-                f.propagate_sem_cat_leftward(f1,g1)
-
     @property
     def sem_cat_is_set(self):
         return self.sem_cat != 'XXX'
@@ -333,8 +336,6 @@ class ParseNode():
                 if g.sem_cat_is_set:
                     self.add_splits(f,g,'fwd')
                     self.add_splits(f,g,'bck')
-        #else:
-            #print(self.syn_cat)
 
     def add_splits(self,f,g,direction):
         for split_point in range(1,len(self.words)):
@@ -347,15 +348,17 @@ class ParseNode():
                 right_child = ParseNode(g,right_words,parent=self,node_type='right_fwd')
                 new_syn_cat = f'{self.syn_cat}/{maybe_bracketted(right_child.syn_cat)}'
                 if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
-                    #print(self.sem_cat,f.sem_cat,g.sem_cat)
                     pass
+                if new_syn_cat == 'S/NP\\NP':
+                    breakpoint()
                 left_child = ParseNode(f,left_words,parent=self,node_type='left_fwd',syn_cat=new_syn_cat)
             elif direction == 'bck':
                 left_child = ParseNode(g,left_words,parent=self,node_type='left_bck')
                 new_syn_cat = f'{self.syn_cat}\\{maybe_bracketted(left_child.syn_cat)}'
                 if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
-                    #print(self.sem_cat,f.sem_cat,g.sem_cat)
                     pass
+                if new_syn_cat == 'S/NP\\NP':
+                    continue
 
                 right_child = ParseNode(f,right_words,parent=self,node_type='right_bck',syn_cat=new_syn_cat)
             self.append_split(left_child,right_child,direction)
@@ -368,17 +371,6 @@ class ParseNode():
         assert left.sibling is not None
         assert right.sibling is not None
         self.possible_splits.append({'left':left,'right':right,'combinator':combinator})
-
-    def propagate_syn_cat(self,f,g):
-        if '|' in g.sem_cat:
-            new_assigned_category = f'{self.sem_cat}|({g.sem_cat})'
-        else:
-            new_assigned_category = f'{self.sem_cat}|{g.sem_cat}'
-        assert f.sem_cat in [new_assigned_category,'XXX']
-        f.sem_cat = new_assigned_category
-        for f1,g1 in f.possible_splits:
-            if g1.sem_cat_is_set:
-                f.propagate_sem_cat_leftward(f1,g1)
 
     @property
     def is_g(self):

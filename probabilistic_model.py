@@ -2,7 +2,7 @@ import numpy as np
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import normalize_dict, split_respecting_brackets, file_print
+from utils import normalize_dict, split_respecting_brackets, file_print, get_combination
 from time import time
 import argparse
 from abc import ABC
@@ -63,6 +63,7 @@ class BaseDirichletProcessLearner(ABC):
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
         if x == 'NP + S/NP\\NP':
+            breakpoint()
             return 0
         num_slashes = len(re.findall(r'\\/\|',x))
         return 0.2**(num_slashes+1)
@@ -104,8 +105,11 @@ class LanguageAcquirer():
         return self.meaning_learner.memory.keys()
 
     @property
+    def splits_vocab(self):
+        return list(set([w for x in self.syntax_learner.memory.values() for w in x.keys() if w!='count']))
+    @property
     def mwe_vocab(self):
-        return list(set([w for x in self.word_learner.memory.values() for w in x.keys()]))
+        return list(set([w for x in self.word_learner.memory.values() for w in x.keys() if w!='count']))
 
     @property
     def vocab(self):
@@ -166,6 +170,7 @@ class LanguageAcquirer():
 
         self.word_to_syn_probs = self.word_to_sem_probs.dot(self.sem_to_sem_shell_probs).dot(self.sem_shell_to_syn_probs)
         self.word_to_syn_probs = self.word_to_syn_probs.astype(pd.SparseDtype('float',0))
+        self.combinator_probs =pd.DataFrame([self.syntax_learner.inverse_distribution(m) for m in self.splits_vocab],index=self.splits_vocab)
 
     def show_word(self,word,f=None):
         meanings = self.word_to_sem_probs.loc[word].sort_values()[-10:]
@@ -280,6 +285,49 @@ class LanguageAcquirer():
             frontier = new_frontier
         return layers
 
+    def possible_next_frontiers(self,syn_cats):
+        possible_frontiers = []
+        for i in range(len(syn_cats)-1):
+            maybe_left, maybe_right = syn_cats[i], syn_cats[i+1]
+            combination = get_combination(maybe_left,maybe_right)
+            if combination is not None:
+                split_prob = self.syntax_learner.prob(f'{maybe_left} + {maybe_right}',combination)
+                possible_frontiers.append((syn_cats[:i]+[combination]+syn_cats[i+2:],split_prob))
+        return possible_frontiers
+
+    def parses_of_syn_cats(self,syn_cats):
+        """Return all possible parses (often only one) of the given syn_cats in the given order."""
+        frontiers = [([syn_cats],1)]
+        for _ in range(len(syn_cats)-1):
+            frontiers = [(cur[0]+[f[0]],cur[1]*f[1]) for cur in frontiers for f in self.possible_next_frontiers(cur[0][-1])]
+        return frontiers
+
+    def parse(self,words):
+        N = len(words)
+        beam_size = 5
+        probs_table = np.empty((N,N),dtype='object') #(i,j) will be a dict of len(beam_size) saying probs of top syn_cats
+        for i in range(N):
+            sem_probs = self.word_to_sem_probs.loc[words[i]]
+            sem_sem_shell_probs = self.sem_to_sem_shell_probs.mul(sem_probs,axis='index')
+            sem_syn_probs = sem_sem_shell_probs.dot(self.sem_shell_to_syn_probs)
+            paths_to_remember = sem_syn_probs.idxmax(axis=0)
+            probs = [sem_syn_probs.loc[yv,yk] for yk,yv in paths_to_remember.items()]
+            probs_table[1,i] = sorted(zip(paths_to_remember.items(),probs),key=lambda x: x[1])[-beam_size:]
+
+        def add_prob_of_span(i,j):
+            leaf_prob = self.word_to_sem_probs[' '.join(words[i:j])]
+            for k in range(i):
+                left_chunk_probs = probs_table[i-k,j]
+                right_chunk_probs = probs_table[k,j+k] # so total len is always j
+                for (lsyn_cat,lsem_cat), lprob in left_chunk_probs:
+                    for (rsyn_cat,rsem_cat), rprob in right_chunk_probs:
+                        breakpoint()
+
+                # now consider the different ways to combine them
+        for a in range(N):
+            for b in range(N-a):
+                add_prob_of_span(a,b)
+
     def prob_of_split(self,x,is_map): # slow, just use for pdb
         if x['left'].is_fwd:
             f = x['left'].syn_cat
@@ -309,6 +357,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--num_epochs", type=int, default=1)
     ARGS.add_argument("--devel", "--development_mode", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
+    ARGS.add_argument("--breakin", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='simple1000')
@@ -381,4 +430,7 @@ if __name__ == "__main__":
             file_print(f'{generated}: not seen during training',f)
     file_print(f'Total run time: {time()-start_time:.3f}s',f)
     f.close()
+    print(language_acquirer.parse(d['data'][0]['words']))
+    if ARGS.breakin:
+        breakpoint()
     language_acquirer.save_to(f'experiments/{expname}')

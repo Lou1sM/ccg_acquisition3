@@ -32,6 +32,9 @@ def split_respecting_brackets(s,sep=' '):
     split_points = [-1]
     if isinstance(sep,str):
         sep = [sep]
+    else:
+        assert isinstance(sep,list)
+
     for i,c in enumerate(s):
         if c in sep and num_open_brackets == 0:
             split_points.append(i)
@@ -80,6 +83,7 @@ def normalize_dict(d):
         return {k:v/norm for k,v in d.items()}
 
 def translate_by_unify(x,y):
+    """Equate corresponding subexpressions in x and y to form a translation between subexpressions"""
     translation = {}
     x_list = re.split(r'[ ,().]',x)
     y_list = re.split(r'[ ,().]',y)
@@ -125,3 +129,55 @@ def simple_translate(s,trans_dict):
 def file_print(s,f):
     print(s)
     print(s,file=f)
+
+def is_atomic(syn_cat):
+    return '\\' not in syn_cat and '/' not in syn_cat
+
+def maybe_app(sc1,sc2,direction):
+    if direction=='bck':
+        slash = '\\'
+        applier = sc2
+        appliee = sc1
+    else:
+        slash = '/'
+        applier = sc1
+        appliee = sc2
+    if appliee in applier:
+        if is_atomic(appliee):
+            if applier.endswith(f'{slash}{appliee}'):
+                return applier[:-len(appliee)-1]
+        else:
+            if applier.endswith(f'{slash}({appliee})'):
+                return applier[:-len(appliee)-3]
+
+def syn_cat_components(syn_cat):
+    splits = split_respecting_brackets(syn_cat,sep=['\\','/'])
+    in_cat = splits[-1]
+    slash = syn_cat[-len(in_cat)-1]
+    out_cat = syn_cat[:-len(in_cat)-1]
+    return out_cat, slash, in_cat
+
+def get_combination(left_syn_cat,right_syn_cat):
+    if is_atomic(left_syn_cat) and is_atomic(right_syn_cat):
+        return None
+    if left_syn_cat in right_syn_cat: # can only be bck app then
+        return maybe_app(left_syn_cat,right_syn_cat,direction='bck')
+    elif right_syn_cat in left_syn_cat: # can only be fwd app then
+        return maybe_app(left_syn_cat,right_syn_cat,direction='fwd')
+    else: # see if works by composition
+        left_out, left_slash, left_in = syn_cat_components(left_syn_cat)
+        right_out, right_slash, right_in = syn_cat_components(right_syn_cat)
+        if left_slash != right_slash: # skip crossed composition
+            return None
+        elif left_in == right_out:
+            return ''.join(left_out, left_slash, right_in)
+        elif left_out == right_in:
+            return ''.join(right_out, right_slash, left_in)
+
+def parses_of_syn_cats(self,syn_cats):
+    """Return all possible parses (often only one) of the given syn_cats in the given order."""
+    frontiers = [[syn_cats]]
+    for _ in range(len(syn_cats)-1):
+        frontiers = [current+[f] for current in frontiers for f in possible_next_frontiers(current[-1])]
+    return frontiers
+
