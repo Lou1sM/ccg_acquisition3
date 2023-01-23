@@ -12,7 +12,7 @@ with open('data/preprocessed_geoqueries.json') as f:
 
 nps = d['np_list']
 
-transitives = {'longer': ('is_longer_than', False), 'lower': ('is_lower_than', False), 'low_point': ('is_a_low_point_of', False), 'area': ('has_area', True), 'capital': ('is_the_captial_of', False), 'next_to': ('is_next_to', False), 'len': ('has_length', True), 'population': ('has_population', True), 'size': ('has_size', True), 'traverse': ('traverses', False), 'higher': ('is_higher_than', False), 'high_point': ('is_a_high_point_of', False), 'density': ('has_density', True), 'elevation': ('has_elevation', True), 'loc': ('is_in', False)}
+transitives = {'longer': ('is_longer_than', False), 'lower': ('is_lower_than', False), 'low_point': ('is_a_low_point_of', False), 'area': ('has_area', True), 'capital_of': ('is_the_captial_of', False), 'next_to': ('is_next_to', False), 'len': ('has_length', True), 'population': ('has_population', True), 'size': ('has_size', True), 'traverse': ('traverses', False), 'higher': ('is_higher_than', False), 'high_point': ('is_a_high_point_of', False), 'density': ('has_density', True), 'elevation': ('has_elevation', True), 'loc': ('is_in', False)}
 
 intransitives = {'state': 'is_a_state', 'capital': 'is_a_capital', 'place': 'is_a_place', 'lake': 'is_a_lake', 'mountain': 'is_a_mountain', 'city': 'is_a_city', 'river': 'is_a_river'}
 
