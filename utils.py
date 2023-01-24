@@ -1,6 +1,94 @@
 import re
 
 
+def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
+    if rule == 'fwd_app':
+        fin,fslash,fout = cat_components(lsem_cat,'|')
+        return f'{fin}/{fout} + {rsem_cat}'
+    elif rule == 'bck_app':
+        fin,fslash,fout = cat_components(rsem_cat,'|')
+        return f'{lsem_cat} + {fin}\\{fout}'
+    else:
+        breakpoint()
+
+
+def beta_normalize(m):
+    m = remove_possible_outer_brackets(m)
+    if m.startswith('lambda'):
+        lambda_binder = re.match(r'lambda \$\d+\.',m).group(0)
+        body = m[len(lambda_binder):]
+        return lambda_binder + beta_normalize(body)
+    if re.match(r'^[\w\$]*$',m):
+        return m
+    splits = split_respecting_brackets(m)
+    if len(splits) == 1:
+        return m
+    left_ = remove_possible_outer_brackets(' '.join(splits[:-1]))
+    left = beta_normalize(left_)
+    assert 'lambda (' not in left
+    right_ = splits[-1]
+    right = beta_normalize(right_)
+    if not re.match(r'^[\w\$]*$',right):
+        right = '('+right+')'
+
+    if left.startswith('lambda'):
+        lambda_binder,_,rest = left.partition('.')
+        assert re.match(r'lambda \$\d{1,2}',lambda_binder)
+        var_name = lambda_binder[7:]
+        assert re.match(r'\$\d',var_name)
+        combined = re.sub(re.escape(var_name),right,rest)
+        return beta_normalize(combined)
+    else:
+        return ' '.join([left,right])
+
+def strip_string(ss):
+    ss = re.sub(r'lambda \$\d+\.','',ss)
+    ss = re.sub(r'( ?\$\d+)+$','',ss.replace('(','').replace(')',''))
+    # allowed to have trailing bound variables
+    return ss.strip()
+
+def concat_lfs(lf1,lf2):
+    return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'
+
+def is_congruent(sc1,sc2):
+    sc1 = re.sub(r'[\\/]','|',sc1)
+    sc2 = re.sub(r'[\\/]','|',sc2)
+    if sc1 == sc2:
+        return True
+    # try type-raise equivalence
+    small, large = sorted([sc1,sc2],key=lambda x: len(x))
+    small_chunks = split_respecting_brackets(small,sep='|')
+    large_chunks = split_respecting_brackets(large,sep='|')
+    while True:
+        try:
+            last_large_chunk = large_chunks.pop()
+        except IndexError:
+            return False
+        if is_atomic(last_large_chunk):
+            small_chunks.append(last_large_chunk)
+            continue
+        splits = split_respecting_brackets(last_large_chunk,sep='|',debracket=True)
+        wants = splits[-1]
+        if wants in small_chunks:
+            small_chunks.remove(wants)
+            small_chunks.append('|'.join(splits[:-1]))
+            if small_chunks == large_chunks:
+                return True
+        else:
+            small_chunks.append(last_large_chunk)
+
+def num_nps(sem_cat):
+    sem_cat = re.sub(r'[\\/]','|',sem_cat)
+    if sem_cat == 'NP':
+        return 1
+    elif is_atomic(sem_cat):
+        return 0
+    else:
+        splits = split_respecting_brackets(sem_cat,sep='|',debracket=True)
+        assert splits[0] != sem_cat
+        return num_nps(splits[0]) - sum([num_nps(sc) for sc in splits[1:]])
+
+
 def is_balanced_nums_brackets(s):
     return len(re.findall(r'\(',s)) == len(re.findall(r'\)',s))
 
@@ -26,8 +114,10 @@ def outermost_first_bracketed_chunk(s):
             return s[:i+1], s[i+1:]
     breakpoint()
 
-def split_respecting_brackets(s,sep=' '):
+def split_respecting_brackets(s,sep=' ',debracket=False):
     """Only make a split when there are no open brackets."""
+    if debracket:
+        s = remove_possible_outer_brackets(s)
     num_open_brackets = 0
     split_points = [-1]
     if isinstance(sep,str):
@@ -145,6 +235,8 @@ def get_combination(left_cat,right_cat):
         return right_cat[:-len(left_cat)-3],'bck_app'
     elif right_cat.endswith(left_cat) and is_atomic(left_cat):
         return right_cat[:-len(left_cat)-1],'bck_app'
+    elif is_atomic(left_cat) or is_atomic(right_cat): # can't do composition then
+        return None, None
     else:
         left_out, left_slash, left_in = cat_components(left_cat,sep='|')
         right_out, right_slash, right_in = cat_components(right_cat,sep='|')

@@ -1,8 +1,10 @@
 import numpy as np
+from pprint import pprint
+from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import normalize_dict, split_respecting_brackets, file_print, get_combination
+from utils import normalize_dict, split_respecting_brackets, file_print, get_combination, cat_components
 from time import time
 import argparse
 from abc import ABC
@@ -127,10 +129,10 @@ class LanguageAcquirer():
         self.meaning_learner.set_from_dict(to_load['meaning'])
         self.word_learner.set_from_dict(to_load['word'])
 
+        self.word_to_lf_probs = pd.read_pickle(join(fpath,'word_to_lf_probs.pkl'))
+        self.lf_to_lf_shell_probs = pd.read_pickle(join(fpath,'lf_to_lf_shell_probs.pkl'))
+        self.lf_shell_to_sem_probs = pd.read_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
         self.word_to_sem_probs = pd.read_pickle(join(fpath,'word_to_sem_probs.pkl'))
-        self.sem_to_sem_shell_probs = pd.read_pickle(join(fpath,'sem_to_sem_shell_probs.pkl'))
-        self.sem_shell_to_syn_probs = pd.read_pickle(join(fpath,'sem_shell_to_syn_probs.pkl'))
-        self.word_to_syn_probs = pd.read_pickle(join(fpath,'word_to_syn_probs.pkl'))
 
     def save_to(self,fpath):
         to_dump = {'syntax': {'memory':self.syntax_learner.memory,
@@ -146,10 +148,10 @@ class LanguageAcquirer():
         with open(distributions_fpath,'w') as f:
             json.dump(to_dump,f)
 
+        self.word_to_lf_probs.to_pickle(join(fpath,'word_to_lf_probs.pkl'))
+        self.lf_to_lf_shell_probs.to_pickle(join(fpath,'sem_to_sem_shell.pkl'))
+        self.lf_shell_to_sem_probs.to_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
         self.word_to_sem_probs.to_pickle(join(fpath,'word_to_sem_probs.pkl'))
-        self.sem_to_sem_shell_probs.to_pickle(join(fpath,'sem_to_sem_shell.pkl'))
-        self.sem_shell_to_syn_probs.to_pickle(join(fpath,'sem_shell_to_syn_probs.pkl'))
-        self.word_to_syn_probs.to_pickle(join(fpath,'word_to_syn_probs.pkl'))
 
     def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
         distr = self.word_learner.inverse_distribution(word)
@@ -158,28 +160,28 @@ class LanguageAcquirer():
         print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs]))
 
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
-        self.word_to_sem_probs = pd.DataFrame([self.word_learner.inverse_distribution(w) for w in self.mwe_vocab],index=self.mwe_vocab)
-        self.word_to_sem_probs *= pd.Series(self.meaning_learner.base_distribution_cache)
+        self.word_to_lf_probs = pd.DataFrame([self.word_learner.inverse_distribution(w) for w in self.mwe_vocab],index=self.mwe_vocab)
+        self.word_to_lf_probs *= pd.Series(self.meaning_learner.base_distribution_cache)
+        self.word_to_lf_probs = self.word_to_lf_probs.astype(pd.SparseDtype('float',0))
+
+        self.lf_to_lf_shell_probs = pd.DataFrame([self.meaning_learner.inverse_distribution(m) for m in self.lf_vocab],index=self.lf_vocab)
+        self.lf_to_lf_shell_probs *= pd.Series(self.shell_meaning_learner.base_distribution_cache)
+        self.lf_to_lf_shell_probs = self.lf_to_lf_shell_probs.astype(pd.SparseDtype('float',0))
+
+        self.lf_shell_to_sem_probs = pd.DataFrame([self.shell_meaning_learner.inverse_distribution(m) for m in self.shell_lf_vocab],index=self.shell_lf_vocab)
+        self.lf_shell_to_sem_probs *= pd.Series({x:self.syntax_learner.base_distribution(x) for x in self.lf_shell_to_sem_probs.columns})
+        self.lf_shell_to_sem_probs = self.lf_shell_to_sem_probs.astype(pd.SparseDtype('float',0))
+
+        self.word_to_sem_probs = self.word_to_lf_probs.dot(self.lf_to_lf_shell_probs).dot(self.lf_shell_to_sem_probs)
         self.word_to_sem_probs = self.word_to_sem_probs.astype(pd.SparseDtype('float',0))
-
-        self.sem_to_sem_shell_probs = pd.DataFrame([self.meaning_learner.inverse_distribution(m) for m in self.lf_vocab],index=self.lf_vocab)
-        self.sem_to_sem_shell_probs *= pd.Series(self.shell_meaning_learner.base_distribution_cache)
-        self.sem_to_sem_shell_probs = self.sem_to_sem_shell_probs.astype(pd.SparseDtype('float',0))
-
-        self.sem_shell_to_syn_probs = pd.DataFrame([self.shell_meaning_learner.inverse_distribution(m) for m in self.shell_lf_vocab],index=self.shell_lf_vocab)
-        self.sem_shell_to_syn_probs *= pd.Series({x:self.syntax_learner.base_distribution(x) for x in self.sem_shell_to_syn_probs.columns})
-        self.sem_shell_to_syn_probs = self.sem_shell_to_syn_probs.astype(pd.SparseDtype('float',0))
-
-        self.word_to_syn_probs = self.word_to_sem_probs.dot(self.sem_to_sem_shell_probs).dot(self.sem_shell_to_syn_probs)
-        self.word_to_syn_probs = self.word_to_syn_probs.astype(pd.SparseDtype('float',0))
         self.combinator_probs =pd.DataFrame([self.syntax_learner.inverse_distribution(m) for m in self.splits_vocab],index=self.splits_vocab)
 
     def show_word(self,word,f=None):
-        meanings = self.word_to_sem_probs.loc[word].sort_values()[-10:]
+        meanings = self.word_to_lf_probs.loc[word].sort_values()[-10:]
         file_print(f'\nLearned meanings for \'{word}\'',f)
         file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in meanings.items() if prob > 1e-4]),f)
 
-        syn_cats = self.word_to_syn_probs.loc[word].sort_values()[-10:]
+        syn_cats = self.word_to_sem_probs.loc[word].sort_values()[-10:]
         file_print(f'\nLearned syntactic categories for \'{word}\'',f)
         file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in syn_cats.items() if prob > 1e-4]),f)
 
@@ -213,13 +215,19 @@ class LanguageAcquirer():
                 update_weight = node.subtree_prob * node.down_prob / root_prob # for conditional
                 self.syntax_learner.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
             leaf_prob = node.down_prob*node.stored_prob_as_leaf/root_prob
-            shell_lf = node.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
-            lf = node.logical_form.subtree_string(alpha_normalized=True)
-            word_str = ' '.join(node.words)
-            self.syntax_learner.observe('leaf',node.syn_cat,weight=leaf_prob)
-            self.shell_meaning_learner.observe(shell_lf,node.sem_cat,weight=leaf_prob)
-            self.meaning_learner.observe(lf,shell_lf,weight=leaf_prob)
-            self.word_learner.observe(word_str,lf,weight=leaf_prob)
+            if leaf_prob > 0:
+                shell_lf = node.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
+                lf = node.logical_form.subtree_string(alpha_normalized=True)
+                word_str = ' '.join(node.words)
+                if node.sem_cat == 'XXX':
+                    breakpoint()
+                    node.logical_form.stripped_subtree_string
+                self.syntax_learner.observe('leaf',node.syn_cat,weight=leaf_prob)
+                self.shell_meaning_learner.observe(shell_lf,node.sem_cat,weight=leaf_prob)
+                self.meaning_learner.observe(lf,shell_lf,weight=leaf_prob)
+                self.word_learner.observe(word_str,lf,weight=leaf_prob)
+            else:
+                breakpoint()
 
     def test_NPs(self):
         meaning_corrects = 0
@@ -228,13 +236,13 @@ class LanguageAcquirer():
         nps = [x for x,c in self.base_lexicon.items() if c=='NP']
         for w in nps:
             w_spaces = w.replace('_',' ')
-            if w_spaces not in self.word_to_sem_probs.index:
+            if w_spaces not in self.word_to_lf_probs.index:
                 if w_spaces not in ['virginia','kansas','montgomery']:
                     if not not any([w_spaces in ' '.join(x['words']) and len([z for z in x['words'] if z != '?']) <= ARGS.max_sent_len for x in d['data'][:NDPS]]):
                         print(f'\'{w_spaces}\' not here')
                 continue
-            meaning_pred = self.word_to_sem_probs.loc[w_spaces].idxmax()
-            syn_pred = self.word_to_syn_probs.loc[w_spaces].idxmax()
+            meaning_pred = self.word_to_lf_probs.loc[w_spaces].idxmax()
+            syn_pred = self.word_to_sem_probs.loc[w_spaces].idxmax()
             if meaning_pred==w:
                 meaning_corrects += 1
             if syn_pred=='NP':
@@ -269,7 +277,7 @@ class LanguageAcquirer():
             self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
         return parse_root
 
-    def MAP_analysis(self,lf_str,words):
+    def words_and_lf_to_syn_deriv(self,lf_str,words):
         parse_root = self.make_parse_node(lf_str,words)
         prob_cache = {}
         root_prob = parse_root.probs(self.syntax_learner,self.shell_meaning_learner,
@@ -312,29 +320,67 @@ class LanguageAcquirer():
     def parse(self,words):
         N = len(words)
         beam_size = 5
-        probs_table = np.empty((N,N),dtype='object') #(i,j) will be a dict of len(beam_size) saying probs of top syn_cats
+        probs_table = np.empty((N,N,beam_size),dtype='object') #(i,j) will be a dict of len(beam_size) saying probs of top syn_cats
         for i in range(N):
-            sem_probs = self.word_to_sem_probs.loc[words[i]]
-            sem_sem_shell_probs = self.sem_to_sem_shell_probs.mul(sem_probs,axis='index')
-            sem_syn_probs = sem_sem_shell_probs.dot(self.sem_shell_to_syn_probs)
-            paths_to_remember = sem_syn_probs.idxmax(axis=0)
-            probs = [sem_syn_probs.loc[yv,yk] for yk,yv in paths_to_remember.items()]
+            lf_probs = self.word_to_lf_probs.loc[words[i]]
+            lf_lf_shell_probs = self.lf_to_lf_shell_probs.mul(lf_probs,axis='index')
+            lf_sem_probs = lf_lf_shell_probs.dot(self.lf_shell_to_sem_probs)
+            paths_to_remember = lf_sem_probs.idxmax(axis=0)
+            probs = [lf_sem_probs.loc[yv,yk] for yk,yv in paths_to_remember.items()]
             probs_table[0,i] = sorted(zip(paths_to_remember.items(),probs),key=lambda x: x[1])[-beam_size:]
 
         def add_prob_of_span(i,j):
+            possible_nexts = []
             for k in range(1,i):
-                left_chunk_probs = probs_table[i-k-1,j]
-                right_chunk_probs = probs_table[k-1,j+k] # so total len is always j
-                for (lsem_cat,llf), lprob in left_chunk_probs:
-                    for (rsem_cat,rlf), rprob in right_chunk_probs:
+                left_chunk_probs = probs_table[k-1,j]
+                right_chunk_probs = probs_table[i-k-1,j+k] # total len is always i, -1s bc 0-index
+                for left_idx, ((lsem_cat,llf), lprob) in enumerate(left_chunk_probs):
+                    for right_idx, ((rsem_cat,rlf), rprob) in enumerate(right_chunk_probs):
                         combined,rule = get_combination(lsem_cat,rsem_cat)
-                        if combined:
-                            breakpoint()
+                        if rule == 'fwd_app':
+                            fin,fslash,fout = cat_components(lsem_cat,'|')
+                            split = f'{fin}/{fout} + {rsem_cat}'
+                        elif rule == 'bck_app':
+                            fin,fslash,fout = cat_components(rsem_cat,'|')
+                            split = f'{lsem_cat} + {fin}\\{fout}'
+                        else:
+                            continue
+                        prob = lprob*rprob*self.syntax_learner.prob(split,combined)
+                        back_pointer = (k,j,left_idx), (i-k,j+k,right_idx)
+                        possible_nexts.append(((combined,back_pointer),prob))
+            probs_table[i-1,j] = sorted(possible_nexts,key=lambda x:x[1])[-beam_size:]
+
+        def lookup_backpointer(backpointer,current_len,current_pos):
+            left_len,left_idx,right_idx = backpointer
+            right_len = current_len - left_len
+            left_pos = current_pos
+            right_pos = left_pos + left_len
+            left,_ = probs_table[left_len-1,left_pos]
+            right,_ = probs_table[right_len-1,right_pos]
+            return left, right
 
                 # now consider the different ways to combine them
-        for a in range(2,N):
-            for b in range(N-a):
+        for a in range(2,N+1):
+            for b in range(N-a+1):
                 add_prob_of_span(a,b)
+        print(probs_table)
+        frontier = [probs_table[N-1,0][-1][0]]
+
+        all_frontiers = []
+        for i in range(N):
+            new_frontier = []
+            for cat,back_pointer in frontier:
+                if isinstance(back_pointer,str): # it's a leaf, and back_pointer is really the lf
+                    new_frontier.append((cat,back_pointer))
+                else: # it's actually a back_pointer
+                    (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = back_pointer
+                    new_frontier.append(probs_table[left_len-1,left_pos,left_idx][0])
+                    new_frontier.append(probs_table[right_len-1,right_pos,right_idx][0])
+            all_frontiers.append(frontier)
+            frontier = copy(new_frontier)
+        pprint(all_frontiers)
+
+        breakpoint()
 
     def prob_of_split(self,x,is_map): # slow, just use for pdb
         if x['left'].is_fwd:
@@ -408,7 +454,7 @@ if __name__ == "__main__":
         final_parses = {}
         num_correct_parses = 0
         for dpoint in d['data']:
-            favoured_parse = language_acquirer.MAP_analysis(dpoint['parse'],dpoint['words'])
+            favoured_parse = language_acquirer.words_and_lf_to_syn_deriv(dpoint['parse'],dpoint['words'])
             final_syn_cats = ' + '.join([x.syn_cat for x in favoured_parse[-1]])
             if final_syn_cats == 'NP':
                 breakpoint()

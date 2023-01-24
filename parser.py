@@ -1,5 +1,5 @@
 from pprint import pprint
-from utils import split_respecting_brackets, is_bracketed, all_sublists, remove_possible_outer_brackets, maybe_bracketted
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_bracketted, beta_normalize, strip_string, concat_lfs, is_congruent, num_nps
 import re
 
 
@@ -72,12 +72,14 @@ class LogicalForm:
 
     def set_sem_cat_from_string(self):
         if self.parent != 'START':
-            ss = strip_string(self.subtree_string())
+            ss = self.stripped_subtree_string
             if ss in self.base_lexicon:
                 self.sem_cat = self.base_lexicon[ss]
                 self.is_semantic_leaf = True # but not necessary
             else:
                 self.sem_cat = 'XXX'
+        if self.sem_cat=='':
+            breakpoint()
 
     def infer_splits(self):
         if self.is_semantic_leaf or self.num_lambda_binders > 4:
@@ -85,7 +87,7 @@ class LogicalForm:
             return self.possible_splits
         if self in self.splits_cache:
             self.possible_splits = self.splits_cache[self]
-            return  self.possible_splits
+            return self.possible_splits
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type=='const']
         # splits from application
         for removee_idxs in all_sublists(possible_removee_idxs):
@@ -115,15 +117,15 @@ class LogicalForm:
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
             assert entry_point.subtree_string() in self.subtree_string()
             entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.splits_cache)
-            g.parent = self
-            g.set_sem_cat_from_string()
             if len(to_present_as_args_to_g) >= 3: # then f will end up with arity 4
                 continue
             if strip_string(f.subtree_string().replace(' AND','')) == '': # exclude just 'AND's
                 continue
             f = f.lambda_abstract(g_sub_var_num)
             f.sem_cat = f.base_lexicon.get(f.stripped_subtree_string,'XXX')
-            f.parent = self
+            f.parent = g.parent = self
+            f.set_sem_cat_from_string()
+            g.set_sem_cat_from_string()
             concatted = concat_lfs(f,g)
             assert beta_normalize(concatted) == self.subtree_string()
             assert f != self
@@ -131,12 +133,18 @@ class LogicalForm:
             self.possible_splits.append((f,g))
             if g.sem_cat_is_set:
                 if f.sem_cat_is_set:
-                    hits = re.findall(fr'\(?{re.escape(g.sem_cat)}\)?$',f.sem_cat)
+                    hits = re.findall(fr'[\\/\|]\(?{re.escape(g.sem_cat)}\)?$',f.sem_cat)
+                    assert len(hits) < 2
                     for hit in hits:
-                        self.sem_cat = f.sem_cat[:-len(hit)-1]
+                        if self.sem_cat not in ['XXX',f.sem_cat[:-len(hit)]]:
+                            breakpoint()
+                        self.sem_cat = f.sem_cat[:-len(hit)]
                 if self.sem_cat_is_set:
                     self.propagate_sem_cat_leftward(f,g)
             assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
+            assert f.sem_cat!=''
+            assert g.sem_cat!=''
+            assert self.sem_cat!=''
             f.infer_splits()
             g.infer_splits()
         if '|' in self.sem_cat:
@@ -149,7 +157,10 @@ class LogicalForm:
             new_assigned_category = f'{self.sem_cat}|({g.sem_cat})'
         else:
             new_assigned_category = f'{self.sem_cat}|{g.sem_cat}'
-        assert f.sem_cat in [new_assigned_category,'XXX']
+        #if f.sem_cat not in [new_assigned_category,'XXX']:
+            #print(f.sem_cat,new_assigned_category)
+        if new_assigned_category.startswith('|'):
+            breakpoint()
         f.sem_cat = new_assigned_category
         for f1,g1 in f.possible_splits:
             if g1.sem_cat_is_set:
@@ -165,11 +176,10 @@ class LogicalForm:
 
     @property
     def stripped_subtree_string(self):
-        ss = re.sub(r'lambda \$\d{1,2}\.','',self.subtree_string())
-        ss = re.sub(r'( \$\d)+$','',ss).replace('()','')
+        ss = re.sub(r'(lambda \$\d{1,2})+\.','',self.subtree_string())
+        ss = re.sub(r'\$\d{1,2}( )*','',ss).replace('()','')
         # allowed to have trailing bound variables
-        return strip_string(self.subtree_string())
-        return ss
+        return strip_string(ss)
 
     @property
     def descendents(self):
@@ -352,8 +362,10 @@ class ParseNode():
             if direction == 'fwd':
                 right_child = ParseNode(g,right_words,parent=self,node_type='right_fwd')
                 new_syn_cat = f'{self.syn_cat}/{maybe_bracketted(right_child.syn_cat)}'
-                if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
+                if f.sem_cat != 'XXX' and num_nps(f.sem_cat) != num_nps(new_syn_cat):
+                    print(num_nps(new_syn_cat))
                     breakpoint()
+                    num_nps(new_syn_cat)
                     pass
                 if new_syn_cat == 'S/NP\\NP':
                     breakpoint()
@@ -361,7 +373,7 @@ class ParseNode():
             elif direction == 'bck':
                 left_child = ParseNode(g,left_words,parent=self,node_type='left_bck')
                 new_syn_cat = f'{self.syn_cat}\\{maybe_bracketted(left_child.syn_cat)}'
-                if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
+                if f.sem_cat != 'XXX' and num_nps(f.sem_cat) != num_nps(new_syn_cat):
                     breakpoint()
                     pass
                 if new_syn_cat == 'S/NP\\NP':
@@ -440,46 +452,3 @@ class ParseNode():
                             # will use stored value in train_one_step()
         return self.stored_prob_as_leaf
 
-def beta_normalize(m):
-    m = remove_possible_outer_brackets(m)
-    if m.startswith('lambda'):
-        lambda_binder = re.match(r'lambda \$\d+\.',m).group(0)
-        body = m[len(lambda_binder):]
-        return lambda_binder + beta_normalize(body)
-    if re.match(r'^[\w\$]*$',m):
-        return m
-    splits = split_respecting_brackets(m)
-    if len(splits) == 1:
-        return m
-    left_ = remove_possible_outer_brackets(' '.join(splits[:-1]))
-    left = beta_normalize(left_)
-    assert 'lambda (' not in left
-    right_ = splits[-1]
-    right = beta_normalize(right_)
-    if not re.match(r'^[\w\$]*$',right):
-        right = '('+right+')'
-
-    if left.startswith('lambda'):
-        lambda_binder,_,rest = left.partition('.')
-        assert re.match(r'lambda \$\d{1,2}',lambda_binder)
-        var_name = lambda_binder[7:]
-        assert re.match(r'\$\d',var_name)
-        combined = re.sub(re.escape(var_name),right,rest)
-        return beta_normalize(combined)
-    else:
-        return ' '.join([left,right])
-
-def strip_string(ss):
-    ss = re.sub(r'lambda \$\d+\.','',ss)
-    ss = re.sub(r'( ?\$\d+)+$','',ss.replace('(','').replace(')',''))
-    # allowed to have trailing bound variables
-    return ss
-
-def is_congruent(syn_cat,sem_cat):
-    assert '\\' not in sem_cat and '/' not in sem_cat
-    sem_cat_splits = split_respecting_brackets(sem_cat,sep='|')
-    syn_cat_splits = split_respecting_brackets(syn_cat,sep=['\\','/','|'])
-    return sem_cat_splits == syn_cat_splits
-
-def concat_lfs(lf1,lf2):
-    return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'
