@@ -68,8 +68,11 @@ class LogicalForm:
             assert self.subtree_string() == defining_string
 
         self.is_semantic_leaf = self.is_leaf # is_leaf is sufficient for is_semantic_leaf
+        self.set_sem_cat_from_string()
+
+    def set_sem_cat_from_string(self):
         if self.parent != 'START':
-            ss = strip_string(defining_string)
+            ss = strip_string(self.subtree_string())
             if ss in self.base_lexicon:
                 self.sem_cat = self.base_lexicon[ss]
                 self.is_semantic_leaf = True # but not necessary
@@ -112,13 +115,15 @@ class LogicalForm:
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([n.string for n in to_present_as_args_to_g])))
             assert entry_point.subtree_string() in self.subtree_string()
             entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.splits_cache)
-            #if not (0 < len(to_present_as_args_to_g) < 3): # then f will end up with arity 4
+            g.parent = self
+            g.set_sem_cat_from_string()
             if len(to_present_as_args_to_g) >= 3: # then f will end up with arity 4
                 continue
             if strip_string(f.subtree_string().replace(' AND','')) == '': # exclude just 'AND's
                 continue
             f = f.lambda_abstract(g_sub_var_num)
             f.sem_cat = f.base_lexicon.get(f.stripped_subtree_string,'XXX')
+            f.parent = self
             concatted = concat_lfs(f,g)
             assert beta_normalize(concatted) == self.subtree_string()
             assert f != self
@@ -348,6 +353,7 @@ class ParseNode():
                 right_child = ParseNode(g,right_words,parent=self,node_type='right_fwd')
                 new_syn_cat = f'{self.syn_cat}/{maybe_bracketted(right_child.syn_cat)}'
                 if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
+                    breakpoint()
                     pass
                 if new_syn_cat == 'S/NP\\NP':
                     breakpoint()
@@ -356,6 +362,7 @@ class ParseNode():
                 left_child = ParseNode(g,left_words,parent=self,node_type='left_bck')
                 new_syn_cat = f'{self.syn_cat}\\{maybe_bracketted(left_child.syn_cat)}'
                 if not (f.sem_cat == 'XXX' or is_congruent(new_syn_cat,f.sem_cat)):
+                    breakpoint()
                     pass
                 if new_syn_cat == 'S/NP\\NP':
                     continue

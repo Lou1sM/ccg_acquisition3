@@ -130,8 +130,32 @@ def file_print(s,f):
     print(s)
     print(s,file=f)
 
-def is_atomic(syn_cat):
-    return '\\' not in syn_cat and '/' not in syn_cat
+def is_atomic(cat):
+    return '\\' not in cat and '/' not in cat and '|' not in cat
+
+def get_combination(left_cat,right_cat):
+    """Inputs can be either syncats or semcats"""
+    if is_atomic(left_cat) and is_atomic(right_cat):
+        return None, None
+    elif left_cat.endswith('('+right_cat+')'):
+        return left_cat[:-len(right_cat)-3],'fwd_app'
+    elif left_cat.endswith(right_cat) and is_atomic(right_cat):
+        return left_cat[:-len(right_cat)-1],'fwd_app'
+    elif right_cat.endswith('('+left_cat+')'):
+        return right_cat[:-len(left_cat)-3],'bck_app'
+    elif right_cat.endswith(left_cat) and is_atomic(left_cat):
+        return right_cat[:-len(left_cat)-1],'bck_app'
+    else:
+        left_out, left_slash, left_in = cat_components(left_cat,sep='|')
+        right_out, right_slash, right_in = cat_components(right_cat,sep='|')
+        if left_slash != right_slash and '|' not in [left_slash ,right_slash]: # skip crossed composition
+            return None, None
+        elif left_in == right_out:
+            return ''.join(left_out, left_slash, right_in), 'fwd_comp'
+        elif left_out == right_in:
+            return ''.join(right_out, right_slash, left_in), 'bck_comp'
+        else:
+            return None,None
 
 def maybe_app(sc1,sc2,direction):
     if direction=='bck':
@@ -150,14 +174,14 @@ def maybe_app(sc1,sc2,direction):
             if applier.endswith(f'{slash}({appliee})'):
                 return applier[:-len(appliee)-3]
 
-def syn_cat_components(syn_cat):
-    splits = split_respecting_brackets(syn_cat,sep=['\\','/'])
+def cat_components(syn_cat,sep):
+    splits = split_respecting_brackets(syn_cat,sep=sep)
     in_cat = splits[-1]
     slash = syn_cat[-len(in_cat)-1]
     out_cat = syn_cat[:-len(in_cat)-1]
     return out_cat, slash, in_cat
 
-def get_combination(left_syn_cat,right_syn_cat):
+def get_combination_old(left_syn_cat,right_syn_cat):
     if is_atomic(left_syn_cat) and is_atomic(right_syn_cat):
         return None
     if left_syn_cat in right_syn_cat: # can only be bck app then
@@ -165,8 +189,8 @@ def get_combination(left_syn_cat,right_syn_cat):
     elif right_syn_cat in left_syn_cat: # can only be fwd app then
         return maybe_app(left_syn_cat,right_syn_cat,direction='fwd')
     else: # see if works by composition
-        left_out, left_slash, left_in = syn_cat_components(left_syn_cat)
-        right_out, right_slash, right_in = syn_cat_components(right_syn_cat)
+        left_out, left_slash, left_in = cat_components(left_syn_cat,sep=['\\','/'])
+        right_out, right_slash, right_in = cat_components(right_syn_cat,sep=['\\','/'])
         if left_slash != right_slash: # skip crossed composition
             return None
         elif left_in == right_out:

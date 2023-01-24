@@ -56,6 +56,8 @@ class BaseDirichletProcessLearner(ABC):
         return prob
 
     def conditional_sample(self,x):
+        if x not in self.memory:
+            breakpoint()
         options,unnormed_probs = zip(*[z for z in self.memory[x].items() if z[0]!='count'])
         probs = np.array(unnormed_probs)/sum(unnormed_probs)
         return np.random.choice(options,p=probs)
@@ -65,7 +67,7 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
         if x == 'NP + S/NP\\NP':
             breakpoint()
             return 0
-        num_slashes = len(re.findall(r'\\/\|',x))
+        num_slashes = len(re.findall(r'[\\/\|]',x))
         return 0.2**(num_slashes+1)
 
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
@@ -243,7 +245,12 @@ class LanguageAcquirer():
         return meaning_acc, syn_acc
 
     def generate_words(self,syn_cat):
-        split = self.syntax_learner.conditional_sample(syn_cat)
+        while True:
+            split = self.syntax_learner.conditional_sample(syn_cat)
+            if split == 'leaf':
+                break
+            if all([s in self.syntax_learner.memory for s in split.split(' + ') ]):
+                break
         sem_cat = re.sub(r'[\\/]','|',syn_cat)
         if split=='leaf':
             shell_lf = self.shell_meaning_learner.conditional_sample(sem_cat)
@@ -312,19 +319,20 @@ class LanguageAcquirer():
             sem_syn_probs = sem_sem_shell_probs.dot(self.sem_shell_to_syn_probs)
             paths_to_remember = sem_syn_probs.idxmax(axis=0)
             probs = [sem_syn_probs.loc[yv,yk] for yk,yv in paths_to_remember.items()]
-            probs_table[1,i] = sorted(zip(paths_to_remember.items(),probs),key=lambda x: x[1])[-beam_size:]
+            probs_table[0,i] = sorted(zip(paths_to_remember.items(),probs),key=lambda x: x[1])[-beam_size:]
 
         def add_prob_of_span(i,j):
-            leaf_prob = self.word_to_sem_probs[' '.join(words[i:j])]
-            for k in range(i):
-                left_chunk_probs = probs_table[i-k,j]
-                right_chunk_probs = probs_table[k,j+k] # so total len is always j
-                for (lsyn_cat,lsem_cat), lprob in left_chunk_probs:
-                    for (rsyn_cat,rsem_cat), rprob in right_chunk_probs:
-                        breakpoint()
+            for k in range(1,i):
+                left_chunk_probs = probs_table[i-k-1,j]
+                right_chunk_probs = probs_table[k-1,j+k] # so total len is always j
+                for (lsem_cat,llf), lprob in left_chunk_probs:
+                    for (rsem_cat,rlf), rprob in right_chunk_probs:
+                        combined,rule = get_combination(lsem_cat,rsem_cat)
+                        if combined:
+                            breakpoint()
 
                 # now consider the different ways to combine them
-        for a in range(N):
+        for a in range(2,N):
             for b in range(N-a):
                 add_prob_of_span(a,b)
 
