@@ -11,7 +11,6 @@ def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
     else:
         breakpoint()
 
-
 def beta_normalize(m):
     m = remove_possible_outer_brackets(m)
     if m.startswith('lambda'):
@@ -53,29 +52,7 @@ def concat_lfs(lf1,lf2):
 def is_congruent(sc1,sc2):
     sc1 = re.sub(r'[\\/]','|',sc1)
     sc2 = re.sub(r'[\\/]','|',sc2)
-    if sc1 == sc2:
-        return True
-    # try type-raise equivalence
-    small, large = sorted([sc1,sc2],key=lambda x: len(x))
-    small_chunks = split_respecting_brackets(small,sep='|')
-    large_chunks = split_respecting_brackets(large,sep='|')
-    while True:
-        try:
-            last_large_chunk = large_chunks.pop()
-        except IndexError:
-            return False
-        if is_atomic(last_large_chunk):
-            small_chunks.append(last_large_chunk)
-            continue
-        splits = split_respecting_brackets(last_large_chunk,sep='|',debracket=True)
-        wants = splits[-1]
-        if wants in small_chunks:
-            small_chunks.remove(wants)
-            small_chunks.append('|'.join(splits[:-1]))
-            if small_chunks == large_chunks:
-                return True
-        else:
-            small_chunks.append(last_large_chunk)
+    return sc1 == sc2
 
 def num_nps(sem_cat):
     sem_cat = re.sub(r'[\\/]','|',sem_cat)

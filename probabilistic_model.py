@@ -4,7 +4,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import normalize_dict, split_respecting_brackets, file_print, get_combination, cat_components
+from utils import normalize_dict, is_congruent, file_print, get_combination, cat_components
 from time import time
 import argparse
 from abc import ABC
@@ -327,15 +327,15 @@ class LanguageAcquirer():
             lf_sem_probs = lf_lf_shell_probs.dot(self.lf_shell_to_sem_probs)
             paths_to_remember = lf_sem_probs.idxmax(axis=0)
             probs = [lf_sem_probs.loc[yv,yk] for yk,yv in paths_to_remember.items()]
-            probs_table[0,i] = sorted(zip(paths_to_remember.items(),probs),key=lambda x: x[1])[-beam_size:]
+            probs_table[0,i] = [((k,v,None),p) for (k,v),p in sorted(zip(paths_to_remember.items(),probs),key=lambda x: x[1])[-beam_size:]]
 
         def add_prob_of_span(i,j):
             possible_nexts = []
             for k in range(1,i):
                 left_chunk_probs = probs_table[k-1,j]
                 right_chunk_probs = probs_table[i-k-1,j+k] # total len is always i, -1s bc 0-index
-                for left_idx, ((lsem_cat,llf), lprob) in enumerate(left_chunk_probs):
-                    for right_idx, ((rsem_cat,rlf), rprob) in enumerate(right_chunk_probs):
+                for left_idx, ((lsem_cat,llf,rule), lprob) in enumerate(left_chunk_probs):
+                    for right_idx, ((rsem_cat,rlf,rule), rprob) in enumerate(right_chunk_probs):
                         combined,rule = get_combination(lsem_cat,rsem_cat)
                         if rule == 'fwd_app':
                             fin,fslash,fout = cat_components(lsem_cat,'|')
@@ -346,20 +346,10 @@ class LanguageAcquirer():
                         else:
                             continue
                         prob = lprob*rprob*self.syntax_learner.prob(split,combined)
-                        back_pointer = (k,j,left_idx), (i-k,j+k,right_idx)
-                        possible_nexts.append(((combined,back_pointer),prob))
+                        backpointer = (k,j,left_idx), (i-k,j+k,right_idx)
+                        possible_nexts.append(((combined,backpointer,rule),prob))
             probs_table[i-1,j] = sorted(possible_nexts,key=lambda x:x[1])[-beam_size:]
 
-        def lookup_backpointer(backpointer,current_len,current_pos):
-            left_len,left_idx,right_idx = backpointer
-            right_len = current_len - left_len
-            left_pos = current_pos
-            right_pos = left_pos + left_len
-            left,_ = probs_table[left_len-1,left_pos]
-            right,_ = probs_table[right_len-1,right_pos]
-            return left, right
-
-                # now consider the different ways to combine them
         for a in range(2,N+1):
             for b in range(N-a+1):
                 add_prob_of_span(a,b)
@@ -369,13 +359,27 @@ class LanguageAcquirer():
         all_frontiers = []
         for i in range(N):
             new_frontier = []
-            for cat,back_pointer in frontier:
-                if isinstance(back_pointer,str): # it's a leaf, and back_pointer is really the lf
-                    new_frontier.append((cat,back_pointer))
-                else: # it's actually a back_pointer
-                    (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = back_pointer
-                    new_frontier.append(probs_table[left_len-1,left_pos,left_idx][0])
-                    new_frontier.append(probs_table[right_len-1,right_pos,right_idx][0])
+            for item in frontier:
+                if len(item) == 2 or item[2] is None:
+                    assert isinstance(item[1],str)
+                    new_frontier.append(item[:2]) # remove possible trailing None
+                    continue
+                cat,backpointer,rule = item
+                (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = backpointer
+                lsem_cat,lbackpointer,lrule = probs_table[left_len-1,left_pos,left_idx][0]
+                rsem_cat,rbackpointer,rrule = probs_table[right_len-1,right_pos,right_idx][0]
+                if rule == 'fwd_app':
+                    fin,fslash,fout = cat_components(lsem_cat,'|')
+                    assert is_congruent(fin,cat)
+                    fcat = f'{cat}/{fout}'
+                    new_frontier.append((fcat,lbackpointer,lrule) if lrule else (fcat,lbackpointer))
+                    new_frontier.append((rsem_cat,rbackpointer,rrule) if rrule else (rsem_cat,rbackpointer))
+                elif rule == 'bck_app':
+                    fin,fslash,fout = cat_components(rsem_cat,'|')
+                    assert is_congruent(fin,cat)
+                    fcat = f'{cat}\\{fout}'
+                    new_frontier.append((lsem_cat,lbackpointer,lrule) if lrule else (lsem_cat,lbackpointer))
+                    new_frontier.append((fcat,rbackpointer,rrule) if rrule else (fcat,rbackpointer))
             all_frontiers.append(frontier)
             frontier = copy(new_frontier)
         pprint(all_frontiers)
