@@ -96,8 +96,8 @@ class LanguageAcquirer():
         self.shell_meaning_learner = ShellMeaningDirichletProcessLearner(1000)
         self.meaning_learner = MeaningDirichletProcessLearner(500)
         self.word_learner = WordSpanDirichletProcessLearner(1)
-        self.lf_cache = {} # maps lf_strings to LogicalForm objects
-        self.lf_splits_cache = {} # maps LogicalForm objects to lists of (left-child,right-child)
+        self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
+        self.lf_parts_cache = {'splits':{},'sem_cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
 
     @property
@@ -193,11 +193,11 @@ class LanguageAcquirer():
         file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
 
     def get_lf(self,lf_str):
-        if lf_str in self.lf_cache:
-            return self.lf_cache[lf_str]
+        if lf_str in self.full_lfs_cache:
+            return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,self.base_lexicon,self.lf_splits_cache,parent='START',sem_cat=ARGS.root_sem_cat)
-            self.lf_cache[lf_str] = lf
+            lf = LogicalForm(lf_str,self.base_lexicon,self.lf_parts_cache,parent='START',sem_cat=ARGS.root_sem_cat)
+            self.full_lfs_cache[lf_str] = lf
             return lf
 
     def train_one_step(self,lf_str,words):
@@ -325,6 +325,7 @@ class LanguageAcquirer():
             lf_probs = self.word_to_lf_probs.loc[words[i]]
             lf_lf_shell_probs = self.lf_to_lf_shell_probs.mul(lf_probs,axis='index')
             lf_sem_probs = lf_lf_shell_probs.dot(self.lf_shell_to_sem_probs)
+            breakpoint()
             paths_to_remember = lf_sem_probs.idxmax(axis=0)
             probs = [lf_sem_probs.loc[yv,yk] for yk,yv in paths_to_remember.items()]
             probs_table[0,i] = [((k,v,None),p) for (k,v),p in sorted(zip(paths_to_remember.items(),probs),key=lambda x: x[1])[-beam_size:]]

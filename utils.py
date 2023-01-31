@@ -11,13 +11,22 @@ def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
     else:
         breakpoint()
 
+def lambda_body_split(lf):
+    """lambda_binder has the dot on the end"""
+    try:
+        lambda_binder = re.match(r'lambda \$\d+\.',lf).group(0)
+    except AttributeError: #there's no lambda binder in the lf
+        return '', lf, -1
+    body = lf[len(lambda_binder):]
+    first_var_num = int(lambda_binder[8:-1])
+    return lambda_binder, body, first_var_num
+
 def beta_normalize(m):
     m = remove_possible_outer_brackets(m)
     if m.startswith('lambda'):
-        lambda_binder = re.match(r'lambda \$\d+\.',m).group(0)
-        body = m[len(lambda_binder):]
+        lambda_binder, body, _ = lambda_body_split(m)
         return lambda_binder + beta_normalize(body)
-    if re.match(r'^[\w\$]*$',m):
+    if re.match(r'^[\w\$]*$',m): # has no variables
         return m
     splits = split_respecting_brackets(m)
     if len(splits) == 1:
@@ -50,6 +59,9 @@ def concat_lfs(lf1,lf2):
     return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'
 
 def is_congruent(sc1,sc2):
+    return sc1 == 'XXX' or sc2 == 'XXX' or num_nps(sc1) == num_nps(sc2)
+
+def is_direct_congruent(sc1,sc2):
     sc1 = re.sub(r'[\\/]','|',sc1)
     sc2 = re.sub(r'[\\/]','|',sc2)
     return sc1 == sc2
@@ -64,7 +76,6 @@ def num_nps(sem_cat):
         splits = split_respecting_brackets(sem_cat,sep='|',debracket=True)
         assert splits[0] != sem_cat
         return num_nps(splits[0]) - sum([num_nps(sc) for sc in splits[1:]])
-
 
 def is_balanced_nums_brackets(s):
     return len(re.findall(r'\(',s)) == len(re.findall(r'\)',s))
@@ -116,7 +127,7 @@ def split_respecting_brackets(s,sep=' ',debracket=False):
 def is_bracketed(s):
     return s.startswith('(') and s.endswith(')')
 
-def maybe_bracketted(s):
+def maybe_brac(s):
     """Add brackets if not a leaf."""
     if '|' in s or '\\' in s or '/' in s:
         return '('+s+')'
@@ -225,6 +236,26 @@ def get_combination(left_cat,right_cat):
             return ''.join(right_out, right_slash, left_in), 'bck_comp'
         else:
             return None,None
+
+def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
+    pout,pslash,pin = cat_components(parent_cat,sep=['/','\\','|'])
+    gout,gslash,gin = cat_components(g_cat,sep=['/','\\','|'])
+    assert remove_possible_outer_brackets(pin) == remove_possible_outer_brackets(gin)
+    if sem_only or (gslash != '\\' and pslash != '\\'): # just fwd cmp for now
+        return maybe_brac(pout) + gslash + maybe_brac(gout) # hard-coding fwd slash
+
+def parent_cmp_from_f_and_g(f_cat,g_cat,sem_only):
+    fout,fslash,fin = cat_components(f_cat,sep=['/','\\','|'])
+    gout,gslash,gin = cat_components(g_cat,sep=['/','\\','|'])
+    if sem_only or (fslash == '/' and gslash == '/'):
+        assert remove_possible_outer_brackets(fin) == remove_possible_outer_brackets(gout)
+        return maybe_brac(fout) + fslash + maybe_brac(gin)
+
+def alpha_normalize(x):
+    trans_list = sorted(set(re.findall(r'\$\d{1,2}',x)))
+    for v_new, v_old in enumerate(trans_list):
+        x = x.replace(fr'{v_old}',f'${v_new}')
+    return x
 
 def maybe_app(sc1,sc2,direction):
     if direction=='bck':
