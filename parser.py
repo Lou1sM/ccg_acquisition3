@@ -304,6 +304,8 @@ class LogicalForm:
         if recompute:
             self.set_subtree_string(as_shell,alpha_normalized=False,string=x)
 
+        if x.startswith('.'):
+            breakpoint()
         return x
 
     def copy(self):
@@ -347,11 +349,13 @@ class LogicalForm:
         """Returns a new LogicalForm which is the same as self except with 'lambda x' in front."""
         if var_num is None:
             var_num = self.new_var_num
-        new = self.spawn_self_like(f'lambda ${var_num}')
+        new = self.spawn_self_like(f'lambda ${var_num}.')
         new.node_type = 'lmbda'
         new.children = [self]
+        if not f'${var_num}' in self.subtree_string():
+            breakpoint()
         new.stored_subtree_string = f'lambda ${var_num}.{self.subtree_string()}'
-        new.stored_alpha_normalized_subtree_string =f'lambda ${var_num}.{self.subtree_string(alpha_normalized=True)}'
+        new.stored_alpha_normalized_subtree_string =alpha_normalize(f'lambda ${var_num}.{self.subtree_string()}')
         new.stored_shell_subtree_string = f'lambda ${var_num}.{self.subtree_string(as_shell=True)}'
         new.stored_alpha_normalized_shell_subtree_string = f'lambda ${var_num}.{self.subtree_string(alpha_normalized=True,as_shell=True)}'
         new.var_descendents = list(set(self.var_descendents + [var_num]))
