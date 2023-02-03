@@ -354,7 +354,6 @@ class LogicalForm:
         new.children = [self]
         if not f'${var_num}' in self.subtree_string():
             breakpoint()
-        #new.stored_subtree_string = f'lambda ${var_num}.{self.subtree_string()}'
         new.stored_subtree_string = f'lambda ${var_num}.{self.subtree_string()}'
         new.stored_alpha_normalized_subtree_string =alpha_normalize(f'lambda ${var_num}.{self.subtree_string()}')
         new.stored_shell_subtree_string = f'lambda ${var_num}.{self.subtree_string(as_shell=True)}'

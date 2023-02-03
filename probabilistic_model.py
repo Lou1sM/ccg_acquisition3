@@ -182,18 +182,6 @@ class LanguageAcquirer():
         print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs]))
 
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
-        #self.word_to_lf_probs = pd.DataFrame([self.word_learner.inverse_distribution(w) for w in self.mwe_vocab],index=self.mwe_vocab)
-        #self.word_to_lf_probs *= pd.Series(self.meaning_learner.base_distribution_cache)
-        #self.word_to_lf_probs = self.word_to_lf_probs.astype(pd.SparseDtype('float',0))
-
-        #self.lf_to_lf_shell_probs = pd.DataFrame([self.meaning_learner.inverse_distribution(m) for m in self.lf_vocab],index=self.lf_vocab)
-        #self.lf_to_lf_shell_probs *= pd.Series(self.shell_meaning_learner.base_distribution_cache)
-        #self.lf_to_lf_shell_probs = self.lf_to_lf_shell_probs.astype(pd.SparseDtype('float',0))
-
-        #self.lf_shell_to_sem_probs = pd.DataFrame([self.shell_meaning_learner.inverse_distribution(m) for m in self.shell_lf_vocab],index=self.shell_lf_vocab)
-        #self.lf_shell_to_sem_probs *= pd.Series({x:self.syntax_learner.base_distribution(x) for x in self.lf_shell_to_sem_probs.columns})
-        #self.lf_shell_to_sem_probs = self.lf_shell_to_sem_probs.astype(pd.SparseDtype('float',0))
-
         base = pd.Series({x:self.meaning_learner.base_distribution(x) for x in self.lf_vocab})
         self.word_to_lf_probs = self.word_learner.all_inverse_distributions(self.mwe_vocab,base)
 
@@ -248,18 +236,9 @@ class LanguageAcquirer():
             if leaf_prob > 0:
                 shell_lf = node.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
                 lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
-                if '.' in shell_lf:
-                    lambda_string, _, remaining_string = shell_lf.partition('.')
-                    lambda_num = int(lambda_string[8:])
-                    if not f'${lambda_num}' in remaining_string:
-                        breakpoint()
-                node.logical_form.subtree_string(alpha_normalized=True,as_shell=True,recompute=True)
                 word_str = ' '.join(node.words)
-                if node.sem_cat == 'XXX':
-                    breakpoint()
-                    node.logical_form.stripped_subtree_string
+                assert node.sem_cat != 'XXX'
                 self.syntax_learner.observe('leaf',node.syn_cat,weight=leaf_prob)
-                #self.syntax_learner.observe('leaf',node.sem_cat,weight=leaf_prob)
                 self.shell_meaning_learner.observe(shell_lf,node.sem_cat,weight=leaf_prob)
                 self.meaning_learner.observe(lf,shell_lf,weight=leaf_prob)
                 self.word_learner.observe(word_str,lf,weight=leaf_prob)
@@ -369,7 +348,6 @@ class LanguageAcquirer():
         sorted_paths_and_probs = sorted(zip(paths_to_remember.items(),probs),key=lambda x:x[1])
         options = [{'syn_cat':k,'lf':v,'backpointer':None,'rule':'leaf','prob':p,'words':words}
             for (k,v),p in sorted_paths_and_probs[-beam_size:] if p>0]
-        #return sorted([dict(option,syn_cat=syn_cat) for option in options for syn_cat in possible_syn_cats(option['sem_cat'])],key=lambda x:x['prob'])[-beam_size:]
         return sorted(options,key=lambda x:x['prob'])[-beam_size:]
 
     def parse(self,words):
@@ -390,14 +368,6 @@ class LanguageAcquirer():
                         combined,rule = get_combination(lsyn_cat,rsyn_cat)
                         if combined is None:
                             continue
-                        #if rule == 'fwd_app':
-                        #    fin,fslash,fout = cat_components(lsem_cat,'|')
-                        #    split = f'{fin}/{fout} + {rsem_cat}'
-                        #elif rule == 'bck_app':
-                        #    fin,fslash,fout = cat_components(rsem_cat,'|')
-                        #    split = f'{lsem_cat} + {fin}\\{fout}'
-                        #else:
-                        #    continue
                         split = lsyn_cat + ' + ' + rsyn_cat
                         prob = left_option['prob']*right_option['prob']*self.syntax_learner.prob(split,combined)
                         #backpointer contains the coordinates in probs_table, and the idx in the
@@ -423,29 +393,12 @@ class LanguageAcquirer():
                     assert item['backpointer'] is None
                     new_frontier.append(item)
                     continue
-                #cat = item['sem_cat']
                 backpointer = item['backpointer']
                 (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = backpointer
                 left_split = probs_table[left_len-1,left_pos][left_idx]
                 right_split = probs_table[right_len-1,right_pos][right_idx]
-                #lsem_cat = left_split['sem_cat']
-                #rsem_cat = right_split['sem_cat']
                 new_frontier.append(right_split)
                 new_frontier.append(left_split)
-                #if item['rule'] == 'fwd_app':
-                #    #fin,fslash,fout = cat_components(lsem_cat,'|')
-                #    #assert is_congruent(fin,cat)
-                #    # do this to get slash direction
-                #    #fcat = f'{cat}/{fout}'
-                #    #left_split['sem_cat'] = fcat
-                #elif item['rule'] == 'bck_app':
-                #    fout,fslash,fin = cat_components(rsem_cat,'|')
-                #    # do this to get slash direction
-                #    assert is_congruent(fout,cat)
-                #    fcat = f'{cat}\\{fin}'
-                #    new_frontier.append(left_split)
-                #    right_split['sem_cat'] = fcat
-                #    new_frontier.append(right_split)
             all_frontiers.append(frontier)
             if all([x['rule']=='leaf' for x in frontier]): # parse is already at all leaves
                 break
