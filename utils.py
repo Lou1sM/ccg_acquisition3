@@ -1,6 +1,12 @@
 import re
 
 
+def possible_syn_cats(sem_cat):
+    if is_atomic(sem_cat):
+        return [sem_cat]
+    out_cat,slash,in_cat = cat_components(remove_possible_outer_brackets(sem_cat),'|')
+    return [rest_out+sd+rest_in for sd in ('\\','/') for rest_in in possible_syn_cats(in_cat) for rest_out in possible_syn_cats(out_cat)]
+
 def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
     if rule == 'fwd_app':
         fin,fslash,fout = cat_components(lsem_cat,'|')
@@ -225,7 +231,7 @@ def get_combination(left_cat,right_cat):
         return right_cat[:-len(left_cat)-1],'bck_app'
     elif is_atomic(left_cat) or is_atomic(right_cat): # can't do composition then
         return None, None
-    else:
+    elif '|' in left_cat and '|' in right_cat:
         left_out, left_slash, left_in = cat_components(left_cat,sep='|')
         right_out, right_slash, right_in = cat_components(right_cat,sep='|')
         if left_slash != right_slash and '|' not in [left_slash ,right_slash]: # skip crossed composition
@@ -236,6 +242,8 @@ def get_combination(left_cat,right_cat):
             return ''.join(right_out, right_slash, left_in), 'bck_comp'
         else:
             return None,None
+    else:
+        return None,None
 
 def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
     pout,pslash,pin = cat_components(parent_cat,sep=['/','\\','|'])

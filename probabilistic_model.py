@@ -4,7 +4,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import normalize_dict, is_congruent, file_print, get_combination, cat_components
+from utils import normalize_dict, is_congruent, file_print, get_combination, cat_components, possible_syn_cats
 from time import time
 import argparse
 from abc import ABC
@@ -80,7 +80,7 @@ class BaseDirichletProcessLearner(ABC):
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
         if x == 'NP + S/NP\\NP':
-            breakpoint()
+            print('observing weird SVO')
             return 0
         num_slashes = len(re.findall(r'[\\/\|]',x))
         return 0.2**(num_slashes+1)
@@ -247,19 +247,19 @@ class LanguageAcquirer():
             leaf_prob = node.down_prob*node.stored_prob_as_leaf/root_prob
             if leaf_prob > 0:
                 shell_lf = node.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
-                lf = node.logical_form.subtree_string(alpha_normalized=True)
-                if '.' in lf:
-                    lambda_string, _, remaining_string = lf.partition('.')
+                lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
+                if '.' in shell_lf:
+                    lambda_string, _, remaining_string = shell_lf.partition('.')
                     lambda_num = int(lambda_string[8:])
                     if not f'${lambda_num}' in remaining_string:
                         breakpoint()
-                lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
+                node.logical_form.subtree_string(alpha_normalized=True,as_shell=True,recompute=True)
                 word_str = ' '.join(node.words)
                 if node.sem_cat == 'XXX':
                     breakpoint()
                     node.logical_form.stripped_subtree_string
                 self.syntax_learner.observe('leaf',node.syn_cat,weight=leaf_prob)
-                self.syntax_learner.observe('leaf',node.sem_cat,weight=leaf_prob)
+                #self.syntax_learner.observe('leaf',node.sem_cat,weight=leaf_prob)
                 self.shell_meaning_learner.observe(shell_lf,node.sem_cat,weight=leaf_prob)
                 self.meaning_learner.observe(lf,shell_lf,weight=leaf_prob)
                 self.word_learner.observe(word_str,lf,weight=leaf_prob)
@@ -355,21 +355,27 @@ class LanguageAcquirer():
         return frontiers
 
     def leaf_probs_of_word_span(self,words,beam_size):
-        lf_probs = self.word_to_lf_probs.loc[words]
+        try:
+            lf_probs = self.word_to_lf_probs.loc[words]
+        except KeyError: # words has never been observed as a leaf
+            return []
         lf_lf_shell_probs = self.lf_to_lf_shell_probs.mul(lf_probs,axis='index')
         lf_sem_probs = lf_lf_shell_probs.dot(self.lf_shell_to_sem_probs)
-        lf_sem_probs *= [self.syntax_learner.prob('leaf',cat) for cat in lf_sem_probs.columns]
-        paths_to_remember = lf_sem_probs.idxmax(axis=0)
-        probs = [lf_sem_probs.loc[yv,yk] for yk,yv in paths_to_remember.items()]
+        sem_to_syn = [(sem,syn) for sem in lf_sem_probs.columns for syn in possible_syn_cats(sem)]
+        lf_syn_probs = pd.DataFrame([lf_sem_probs[a] for a,b in sem_to_syn],index=[b for a,b in sem_to_syn]).T
+        lf_syn_probs *= [self.syntax_learner.prob('leaf',cat) for cat in lf_syn_probs.columns]
+        paths_to_remember = lf_syn_probs.idxmax(axis=0)
+        probs = [lf_syn_probs.loc[yv,yk] for yk,yv in paths_to_remember.items()]
         sorted_paths_and_probs = sorted(zip(paths_to_remember.items(),probs),key=lambda x:x[1])
-        return [{'sem_cat':k,'lf':v,'backpointer':None,'rule':'leaf','prob':p,'words':words}
-            for (k,v),p in sorted_paths_and_probs[-beam_size:]]
-
+        options = [{'syn_cat':k,'lf':v,'backpointer':None,'rule':'leaf','prob':p,'words':words}
+            for (k,v),p in sorted_paths_and_probs[-beam_size:] if p>0]
+        #return sorted([dict(option,syn_cat=syn_cat) for option in options for syn_cat in possible_syn_cats(option['sem_cat'])],key=lambda x:x['prob'])[-beam_size:]
+        return sorted(options,key=lambda x:x['prob'])[-beam_size:]
 
     def parse(self,words):
         N = len(words)
         beam_size = 5
-        probs_table = np.empty((N,N,beam_size),dtype='object') #(i,j) will be a dict of len(beam_size) saying probs of top syn_cats
+        probs_table = np.empty((N,N),dtype='object') #(i,j) will be a dict of len(beam_size) saying probs of top syn_cats
         for i in range(N):
             probs_table[0,i] = self.leaf_probs_of_word_span(words[i],beam_size)
 
@@ -380,23 +386,26 @@ class LanguageAcquirer():
                 right_chunk_probs = probs_table[i-k-1,j+k] # total len is always i, -1s bc 0-index
                 for left_idx, left_option in enumerate(left_chunk_probs):
                     for right_idx, right_option in enumerate(right_chunk_probs):
-                        lsem_cat, rsem_cat = left_option['sem_cat'], right_option['sem_cat']
-                        combined,rule = get_combination(lsem_cat,rsem_cat)
-                        if rule == 'fwd_app':
-                            fin,fslash,fout = cat_components(lsem_cat,'|')
-                            split = f'{fin}/{fout} + {rsem_cat}'
-                        elif rule == 'bck_app':
-                            fin,fslash,fout = cat_components(rsem_cat,'|')
-                            split = f'{lsem_cat} + {fin}\\{fout}'
-                        else:
+                        lsyn_cat, rsyn_cat = left_option['syn_cat'], right_option['syn_cat']
+                        combined,rule = get_combination(lsyn_cat,rsyn_cat)
+                        if combined is None:
                             continue
+                        #if rule == 'fwd_app':
+                        #    fin,fslash,fout = cat_components(lsem_cat,'|')
+                        #    split = f'{fin}/{fout} + {rsem_cat}'
+                        #elif rule == 'bck_app':
+                        #    fin,fslash,fout = cat_components(rsem_cat,'|')
+                        #    split = f'{lsem_cat} + {fin}\\{fout}'
+                        #else:
+                        #    continue
+                        split = lsyn_cat + ' + ' + rsyn_cat
                         prob = left_option['prob']*right_option['prob']*self.syntax_learner.prob(split,combined)
-                        if (i,j) == (2,1) and left_idx==4 and right_idx==4:
-                            breakpoint()
                         #backpointer contains the coordinates in probs_table, and the idx in the
                         #beam, of the two locations that the current one could be split into
                         backpointer = (k,j,left_idx), (i-k,j+k,right_idx)
-                        pn = {'sem_cat':combined,'lf':None,'backpointer':backpointer,'rule':rule,'prob':prob,'words':words[j:j+i]}
+                        pn = {'sem_cat':combined,'syn_cat':combined,'lf':None,'backpointer':backpointer,'rule':rule,'prob':prob,'words':words[j:j+i]}
+                        if '|' in combined:
+                            breakpoint()
                         possible_nexts.append(pn)
             probs_table[i-1,j] = sorted(possible_nexts,key=lambda x:x['prob'])[-beam_size:]
 
@@ -414,35 +423,34 @@ class LanguageAcquirer():
                     assert item['backpointer'] is None
                     new_frontier.append(item)
                     continue
-                cat = item['sem_cat']
+                #cat = item['sem_cat']
                 backpointer = item['backpointer']
                 (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = backpointer
-                left_split = probs_table[left_len-1,left_pos,left_idx]
-                right_split = probs_table[right_len-1,right_pos,right_idx]
-                lsem_cat = left_split['sem_cat']
-                rsem_cat = right_split['sem_cat']
-                right_split = probs_table[right_len-1,right_pos,right_idx]
-                if item['rule'] == 'fwd_app':
-                    fin,fslash,fout = cat_components(lsem_cat,'|')
-                    assert is_congruent(fin,cat)
-                    # do this to get slash direction
-                    fcat = f'{cat}/{fout}'
-                    new_frontier.append(right_split)
-                    left_split['sem_cat'] = fcat
-                    new_frontier.append(left_split)
-                elif item['rule'] == 'bck_app':
-                    fout,fslash,fin = cat_components(rsem_cat,'|')
-                    # do this to get slash direction
-                    assert is_congruent(fout,cat)
-                    fcat = f'{cat}\\{fin}'
-                    new_frontier.append(left_split)
-                    right_split['sem_cat'] = fcat
-                    new_frontier.append(right_split)
+                left_split = probs_table[left_len-1,left_pos][left_idx]
+                right_split = probs_table[right_len-1,right_pos][right_idx]
+                #lsem_cat = left_split['sem_cat']
+                #rsem_cat = right_split['sem_cat']
+                new_frontier.append(right_split)
+                new_frontier.append(left_split)
+                #if item['rule'] == 'fwd_app':
+                #    #fin,fslash,fout = cat_components(lsem_cat,'|')
+                #    #assert is_congruent(fin,cat)
+                #    # do this to get slash direction
+                #    #fcat = f'{cat}/{fout}'
+                #    #left_split['sem_cat'] = fcat
+                #elif item['rule'] == 'bck_app':
+                #    fout,fslash,fin = cat_components(rsem_cat,'|')
+                #    # do this to get slash direction
+                #    assert is_congruent(fout,cat)
+                #    fcat = f'{cat}\\{fin}'
+                #    new_frontier.append(left_split)
+                #    right_split['sem_cat'] = fcat
+                #    new_frontier.append(right_split)
             all_frontiers.append(frontier)
+            if all([x['rule']=='leaf' for x in frontier]): # parse is already at all leaves
+                break
             frontier = copy(new_frontier)
         pprint(all_frontiers)
-
-        breakpoint()
 
     def prob_of_split(self,x,is_map): # slow, just use for pdb
         if x['left'].is_fwd:

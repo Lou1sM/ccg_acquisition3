@@ -274,6 +274,8 @@ class LogicalForm:
             x = remove_possible_outer_brackets(x)
             if alpha_normalized:
                 x = alpha_normalize(x)
+        if recompute:
+            self.set_subtree_string(as_shell,alpha_normalized=alpha_normalized,string=x)
         return x
 
     def subtree_string_(self,show_treelike,as_shell,recompute):
@@ -301,8 +303,6 @@ class LogicalForm:
             x = self.string
 
         assert as_shell or 'PLACEHOLDER' not in x
-        if recompute:
-            self.set_subtree_string(as_shell,alpha_normalized=False,string=x)
 
         if x.startswith('.'):
             breakpoint()
@@ -354,10 +354,11 @@ class LogicalForm:
         new.children = [self]
         if not f'${var_num}' in self.subtree_string():
             breakpoint()
+        #new.stored_subtree_string = f'lambda ${var_num}.{self.subtree_string()}'
         new.stored_subtree_string = f'lambda ${var_num}.{self.subtree_string()}'
         new.stored_alpha_normalized_subtree_string =alpha_normalize(f'lambda ${var_num}.{self.subtree_string()}')
         new.stored_shell_subtree_string = f'lambda ${var_num}.{self.subtree_string(as_shell=True)}'
-        new.stored_alpha_normalized_shell_subtree_string = f'lambda ${var_num}.{self.subtree_string(alpha_normalized=True,as_shell=True)}'
+        new.stored_alpha_normalized_shell_subtree_string = alpha_normalize(f'lambda ${var_num}.{self.subtree_string(as_shell=True)}')
         new.var_descendents = list(set(self.var_descendents + [var_num]))
         return new
 
