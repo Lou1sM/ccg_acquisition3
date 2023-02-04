@@ -1,5 +1,5 @@
 from pprint import pprint
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, beta_normalize, strip_string, concat_lfs, cat_components, is_congruent, lambda_body_split, alpha_normalize, remove_possible_outer_brackets, parent_cmp_from_f_and_g, f_cmp_from_parent_and_g, num_nps
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, beta_normalize, strip_string, concat_lfs, cat_components, is_congruent, lambda_body_split, alpha_normalize, maybe_debrac, parent_cmp_from_f_and_g, f_cmp_from_parent_and_g, num_nps
 import re
 
 
@@ -8,9 +8,9 @@ import re
 # e.g. lambda $0. state $0 is a semantic leaf but not a leaf
 
 # split_prob is the prob, according to the syntax_learner, of the split that
-# gave birth to it; down_prob is the prob of the branch this node is on, equal
-# to split_prob*parent.down_prob; subtree_prob is the prob of the word span of this node
-# given its lf, under all possible splits;
+# gave birth to it; above_prob is the prob of the branch this node is on, equal
+# to split_prob*parent.above_prob*sibling.below_prob; below_prob is the prob of
+# the word span of this node given its lf, under all possible splits;
 class LogicalForm:
     def __init__(self,defining_string,base_lexicon,caches=None,parent=None,sem_cat=None):
         had_surrounding_brackets = False
@@ -151,9 +151,7 @@ class LogicalForm:
         assert g.sem_cat != ''
         if split_type == 'app':
             f.set_sem_cat_from_string()
-            #if num_nps(f.sem_cat) != f.num_lambda_binders:
-                #print('f',num_nps(f.sem_cat),f.num_lambda_binders)
-                #return
+            assert f.sem_cat == 'XXX' or f.num_lambda_binders in [0,-num_nps(f.sem_cat)]
             to_test = concat_lfs(f,g)
             to_add_to = self.possible_app_splits
         else:
@@ -193,7 +191,7 @@ class LogicalForm:
             new_inferred_sem_cat = f'{self.sem_cat}|{maybe_brac(g.sem_cat)}'
         else:
             assert comb_type == 'cmp'
-            new_inferred_sem_cat = f_cmp_from_parent_and_g(self.sem_cat,g.sem_cat,sem_only=True)
+            new_inferred_sem_cat,_ = f_cmp_from_parent_and_g(self.sem_cat,g.sem_cat,sem_only=True)
         if new_inferred_sem_cat.startswith('|'):
             breakpoint()
         assert is_congruent(f.sem_cat,new_inferred_sem_cat)
@@ -271,7 +269,7 @@ class LogicalForm:
         if x == '' or recompute:
             x = self.subtree_string_(show_treelike=show_treelike,as_shell=as_shell,recompute=recompute)
             assert is_bracketed(x) or ' ' not in x or self.node_type == 'lmbda'
-            x = remove_possible_outer_brackets(x)
+            x = maybe_debrac(x)
             if alpha_normalized:
                 x = alpha_normalize(x)
         if recompute:
@@ -404,12 +402,14 @@ class ParseNode():
     def add_cmp_splits(self,f,g,left_words,right_words):
         # just fwd_cmp for now
         right_child_fwd = ParseNode(g,right_words,parent=self,node_type='right_fwd_cmp')
-        new_syn_cat = f_cmp_from_parent_and_g(self.syn_cat,right_child_fwd.syn_cat,sem_only=False)
-        assert new_syn_cat != 'S/NP\\NP'
-        if new_syn_cat is None:
+        new_f_syn_cat, new_g_syn_cat = f_cmp_from_parent_and_g(self.syn_cat,right_child_fwd.syn_cat,sem_only=False)
+        assert new_f_syn_cat != 'S/NP\\NP'
+        if new_f_syn_cat is None:
             return
-        left_child_fwd = ParseNode(f,left_words,parent=self,node_type='left_fwd_cmp',syn_cat=new_syn_cat)
-        assert is_congruent(f.sem_cat,new_syn_cat)
+        left_child_fwd = ParseNode(f,left_words,parent=self,node_type='left_fwd_cmp',syn_cat=new_f_syn_cat)
+        assert is_congruent(f.sem_cat,new_f_syn_cat)
+        assert is_congruent(g.sem_cat,new_g_syn_cat)
+        right_child_fwd.syn_cat = new_g_syn_cat
         self.append_split(left_child_fwd,right_child_fwd,'fwd_cmp')
 
     def add_app_splits(self,f,g,left_words,right_words):
@@ -457,7 +457,7 @@ class ParseNode():
         self.sibling = other
         other.sibling = self
 
-    def probs(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map):
+    def propagate_below_probs(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map):
         self.split_prob = split_prob
         if self in cache:
             return cache[self]
@@ -465,23 +465,24 @@ class ParseNode():
         for ps in self.possible_splits:
             syntax_split = ps['left'].syn_cat + ' + ' + ps['right'].syn_cat
             split_prob = syntax_learner.prob(syntax_split,self.syn_cat)
-            left_subtree_prob = ps['left'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map)
-            right_subtree_prob = ps['right'].probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map)
-            all_probs.append(left_subtree_prob*right_subtree_prob*split_prob)
+            left_below_prob = ps['left'].propagate_below_probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map)
+            right_below_prob = ps['right'].propagate_below_probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,cache,split_prob,is_map)
+            all_probs.append(left_below_prob*right_below_prob*split_prob)
 
-        subtree_prob = max(all_probs) if is_map else sum(all_probs)
-        cache[self] = subtree_prob
-        self.subtree_prob = subtree_prob
-        return subtree_prob
+        below_prob = max(all_probs) if is_map else sum(all_probs)
+        cache[self] = below_prob
+        self.below_prob = below_prob
+        return below_prob
 
-    def propagate_down_prob(self,passed_down_prob):
-        self.down_prob = passed_down_prob*self.split_prob
+    def propagate_above_probs(self,passed_above_prob): #reuse split_prob from propagate_below_probs
+        self.above_prob = passed_above_prob*self.split_prob
         for ps in self.possible_splits:
             # this is how to get cousins probs
-            ps['left'].propagate_down_prob(self.down_prob*ps['right'].subtree_prob)
-            ps['right'].propagate_down_prob(self.down_prob*ps['left'].subtree_prob)
+            ps['left'].propagate_above_probs(self.above_prob*ps['right'].below_prob)
+            ps['right'].propagate_above_probs(self.above_prob*ps['left'].below_prob)
+            assert abs(ps['left'].above_prob*ps['left'].below_prob - ps['right'].above_prob*ps['right'].below_prob) < 1e-10*(ps['left'].above_prob*ps['left'].below_prob + ps['right'].above_prob*ps['right'].below_prob)
         if self.possible_splits != []:
-            if not self.down_prob > max([z.down_prob for ps in self.possible_splits for z in (ps['right'],ps['left'])]):
+            if not self.above_prob > max([z.above_prob for ps in self.possible_splits for z in (ps['right'],ps['left'])]):
                 breakpoint()
 
     def prob_as_leaf(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner):
@@ -496,3 +497,4 @@ class ParseNode():
                                    word_learner.prob(word_str,lf)
                             # will use stored value in train_one_step()
         return self.stored_prob_as_leaf
+

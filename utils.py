@@ -1,11 +1,15 @@
 import re
 
 
+class Cat():
+    def __init__(self,defining_string):
+        self.string = defining_string
+
 def possible_syn_cats(sem_cat):
     if is_atomic(sem_cat):
         return [sem_cat]
-    out_cat,slash,in_cat = cat_components(remove_possible_outer_brackets(sem_cat),'|')
-    return [rest_out+sd+rest_in for sd in ('\\','/') for rest_in in possible_syn_cats(in_cat) for rest_out in possible_syn_cats(out_cat)]
+    out_cat,slash,in_cat = cat_components(maybe_debrac(sem_cat),'|')
+    return [rest_out+sd+maybe_brac(rest_in) for sd in ('\\','/') for rest_in in possible_syn_cats(in_cat) for rest_out in possible_syn_cats(out_cat)]
 
 def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
     if rule == 'fwd_app':
@@ -28,7 +32,7 @@ def lambda_body_split(lf):
     return lambda_binder, body, first_var_num
 
 def beta_normalize(m):
-    m = remove_possible_outer_brackets(m)
+    m = maybe_debrac(m)
     if m.startswith('lambda'):
         lambda_binder, body, _ = lambda_body_split(m)
         return lambda_binder + beta_normalize(body)
@@ -37,7 +41,7 @@ def beta_normalize(m):
     splits = split_respecting_brackets(m)
     if len(splits) == 1:
         return m
-    left_ = remove_possible_outer_brackets(' '.join(splits[:-1]))
+    left_ = maybe_debrac(' '.join(splits[:-1]))
     left = beta_normalize(left_)
     assert 'lambda (' not in left
     right_ = splits[-1]
@@ -111,7 +115,7 @@ def outermost_first_bracketed_chunk(s):
 def split_respecting_brackets(s,sep=' ',debracket=False):
     """Only make a split when there are no open brackets."""
     if debracket:
-        s = remove_possible_outer_brackets(s)
+        s = maybe_debrac(s)
     num_open_brackets = 0
     split_points = [-1]
     if isinstance(sep,str):
@@ -147,7 +151,7 @@ def all_sublists(x):
     recursed = all_sublists(x[1:])
     return recursed + [[x[0]]+item for item in recursed]
 
-def remove_possible_outer_brackets(s):
+def maybe_debrac(s):
     while True:
         if not is_bracketed(s):
             return s
@@ -231,33 +235,44 @@ def get_combination(left_cat,right_cat):
         return right_cat[:-len(left_cat)-1],'bck_app'
     elif is_atomic(left_cat) or is_atomic(right_cat): # can't do composition then
         return None, None
-    elif '|' in left_cat and '|' in right_cat:
-        left_out, left_slash, left_in = cat_components(left_cat,sep='|')
-        right_out, right_slash, right_in = cat_components(right_cat,sep='|')
+    else:
+        left_out, left_slash, left_in = cat_components(left_cat)
+        right_out, right_slash, right_in = cat_components(right_cat)
         if left_slash != right_slash and '|' not in [left_slash ,right_slash]: # skip crossed composition
             return None, None
-        elif left_in == right_out:
-            return ''.join(left_out, left_slash, right_in), 'fwd_comp'
+        elif maybe_debrac(left_in) == maybe_debrac(right_out):
+            return ''.join((left_out, left_slash, right_in)), 'fwd_cmp'
         elif left_out == right_in:
-            return ''.join(right_out, right_slash, left_in), 'bck_comp'
+            return ''.join((right_out, right_slash, left_in)), 'bck_cmp'
         else:
             return None,None
-    else:
-        return None,None
 
 def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
-    pout,pslash,pin = cat_components(parent_cat,sep=['/','\\','|'])
-    gout,gslash,gin = cat_components(g_cat,sep=['/','\\','|'])
-    assert remove_possible_outer_brackets(pin) == remove_possible_outer_brackets(gin)
-    if sem_only or (gslash != '\\' and pslash != '\\'): # just fwd cmp for now
-        return maybe_brac(pout) + gslash + maybe_brac(gout) # hard-coding fwd slash
+    pout,pslash,pin = cat_components(parent_cat)
+    gout,gslash,gin = cat_components(g_cat)
+    assert maybe_debrac(pin) == maybe_debrac(gin)
+    if gslash == '\\' or pslash == '\\': # disallow bck cmp for now
+        return None, None
+    elif sem_only:
+        assert pslash == '|' and gslash == '|'
+        return maybe_brac(pout) + '|' + maybe_brac(gout), g_cat # hard-coding fwd slash
+    else:
+        goutout,gout_slash,goutin = cat_components(gout,allow_atomic=True)
+        composed_cat = goutout + '\\' + goutin # has to be mirror of the main slash
+        new_f = pout + '/' + maybe_brac(composed_cat)
+        new_g = composed_cat + '/' + gin
+        return new_f, new_g # hard-coding fwd slash
 
 def parent_cmp_from_f_and_g(f_cat,g_cat,sem_only):
     fout,fslash,fin = cat_components(f_cat,sep=['/','\\','|'])
     gout,gslash,gin = cat_components(g_cat,sep=['/','\\','|'])
     if sem_only or (fslash == '/' and gslash == '/'):
-        assert remove_possible_outer_brackets(fin) == remove_possible_outer_brackets(gout)
-        return maybe_brac(fout) + fslash + maybe_brac(gin)
+        assert maybe_debrac(fin) == maybe_debrac(gout)
+        return fout + fslash + maybe_brac(gin)
+
+def reverse_slash(slash):
+    assert slash in ['\\','/']
+    return '\\' if slash == '/' else '/'
 
 def alpha_normalize(x):
     trans_list = sorted(set(re.findall(r'\$\d{1,2}',x)))
@@ -282,7 +297,12 @@ def maybe_app(sc1,sc2,direction):
             if applier.endswith(f'{slash}({appliee})'):
                 return applier[:-len(appliee)-3]
 
-def cat_components(syn_cat,sep):
+def cat_components(syn_cat,allow_atomic=False,sep=None):
+    if is_atomic(syn_cat):
+        assert allow_atomic
+        return syn_cat
+    if sep is None:
+        sep = ['\\','/','|']
     splits = split_respecting_brackets(syn_cat,sep=sep)
     in_cat = splits[-1]
     slash = syn_cat[-len(in_cat)-1]
