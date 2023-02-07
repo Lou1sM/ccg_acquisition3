@@ -1,5 +1,4 @@
-from pprint import pprint
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, beta_normalize, strip_string, concat_lfs, cat_components, is_congruent, lambda_body_split, alpha_normalize, maybe_debrac, parent_cmp_from_f_and_g, f_cmp_from_parent_and_g, num_nps
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, beta_normalize, strip_string, concat_lfs, cat_components, is_congruent, lambda_body_split, alpha_normalize, maybe_debrac, parent_cmp_from_f_and_g, f_cmp_from_parent_and_g, num_nps, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise
 import re
 
 
@@ -126,6 +125,7 @@ class LogicalForm:
             if self.node_type == 'lmbda':
                 lambda_binder,rest,_ = lambda_body_split(g.subtree_string())
                 f_cmp_string = f'lambda ${g.new_var_num}.{lambda_binder}${g.new_var_num} {rest}'
+                assert f_cmp_string == logical_type_raise(g.subtree_string())
                 f_cmp = LogicalForm(f_cmp_string,self.base_lexicon)
                 fparts = f.subtree_string().split('.')
                 g_cmp_parts = [fparts[n_removees]] + fparts[:n_removees] + fparts[n_removees+1:]
@@ -152,22 +152,16 @@ class LogicalForm:
         if split_type == 'app':
             f.set_sem_cat_from_string()
             assert f.sem_cat == 'XXX' or f.num_lambda_binders in [0,-num_nps(f.sem_cat)]
-            to_test = concat_lfs(f,g)
             to_add_to = self.possible_app_splits
         else:
             assert split_type == 'cmp'
             assert f.subtree_string().startswith('lambda')
             assert g.subtree_string().startswith('lambda')
             f.sem_cat = 'XXX'
-            f_lambda_binder,frest,f_first_var_num = lambda_body_split(f.subtree_string())
-            _,grest,g_first_var_num = lambda_body_split(g.subtree_string())
-            max_var_num = max(f.new_var_num,g.new_var_num)
-            f_lambda_binder = f_lambda_binder.replace(f'${f_first_var_num}',f'${max_var_num}')
-            to_sub_in = grest.replace(f'${g_first_var_num}',f'${max_var_num}')
-            subbed_in = frest.replace(f'${f_first_var_num}',f'({to_sub_in})')
-            to_test = f_lambda_binder + subbed_in
             to_add_to = self.possible_cmp_splits
-        assert alpha_normalize(beta_normalize(to_test)) == alpha_normalize(self.subtree_string())
+        to_test = combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True)
+        #assert alpha_normalize(beta_normalize(to_test)) == alpha_normalize(self.subtree_string())
+        assert to_test == self.subtree_string(alpha_normalized=True)
         to_add_to.append((f,g))
         if g.sem_cat_is_set:
             if f.sem_cat_is_set:
@@ -444,6 +438,20 @@ class ParseNode():
     def is_fwd(self):
         return self.node_type in ['right_fwd_app','left_fwd_app','right_fwd_cmp','left_fwd_cmp']
 
+    def info_if_leaf(self):
+        shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
+        lf = self.logical_form.subtree_string(alpha_normalized=True)
+        word_str = ' '.join(self.words)
+        sem_cat = maybe_de_type_raise(self.sem_cat)
+        syn_cat = maybe_de_type_raise(self.syn_cat)
+        if sem_cat != self.sem_cat: # has been de-type-raised
+            assert sem_cat in self.sem_cat
+            assert syn_cat in self.syn_cat
+            assert syn_cat != self.syn_cat
+            shell_lf = alpha_normalize(logical_de_type_raise(shell_lf))
+            lf = alpha_normalize(logical_de_type_raise(lf))
+        return word_str, lf, shell_lf, sem_cat, syn_cat
+
     def __repr__(self):
         base = (f"ParseNode\n"
                 f"\tWords: {' '.join(self.words)}\n"
@@ -486,13 +494,9 @@ class ParseNode():
                 breakpoint()
 
     def prob_as_leaf(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner):
-        shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
-        if 'city' in shell_lf:
-            breakpoint()
-        lf = self.logical_form.subtree_string(alpha_normalized=True)
-        word_str = ' '.join(self.words)
-        self.stored_prob_as_leaf = syntax_learner.prob('leaf',self.syn_cat) * \
-                                   shell_meaning_learner.prob(shell_lf,self.sem_cat) * \
+        word_str, lf, shell_lf, sem_cat, syn_cat = self.info_if_leaf()
+        self.stored_prob_as_leaf = syntax_learner.prob('leaf',syn_cat) * \
+                                   shell_meaning_learner.prob(shell_lf,sem_cat) * \
                                    meaning_learner.prob(lf,shell_lf) * \
                                    word_learner.prob(word_str,lf)
                             # will use stored value in train_one_step()

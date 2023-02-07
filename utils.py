@@ -1,9 +1,44 @@
 import re
 
 
-class Cat():
-    def __init__(self,defining_string):
-        self.string = defining_string
+def maybe_de_type_raise(cat):
+    new_cat = re.sub(r'(.*)[\\/\|]\(\1[\\/\|](.*)\)',r'\2',cat)
+    return new_cat
+
+def combine_lfs(f_str,g_str,comb_type,normalize=True):
+    if comb_type == 'app':
+        unnormed = concat_lfs(f_str,g_str)
+    elif comb_type == 'cmp':
+        unnormed = get_cmp_of_lfs(f_str,g_str)
+    else:
+        breakpoint()
+    if '$$' in unnormed:
+        breakpoint()
+    return alpha_normalize(beta_normalize(unnormed)) if normalize else unnormed
+
+def logical_type_raise(lf_str):
+    lambda_binder, rest, max_var_num = lambda_body_split(lf_str)
+    return f'lambda ${max_var_num+1}.{lambda_binder}${max_var_num+1} {rest}'
+
+def logical_de_type_raise(lf_str):
+    lambda_binder, rest, _ = lambda_body_split(lf_str)
+    if lambda_binder == '':
+        return rest
+    first_lambda,possible_dot,other_lambdas = lambda_binder.partition('.')
+    first_of_body,_,rest_of_body = rest.partition(' ')
+    assert first_lambda == f'lambda {first_of_body}'
+    return f'{other_lambdas}{rest_of_body}'
+
+def get_cmp_of_lfs(f_str,g_str):
+    f_lambda_binder,frest,f_first_var_num = lambda_body_split(f_str)
+    _,grest,g_first_var_num = lambda_body_split(g_str)
+    #max_var_num = max(f_str.new_var_num,g_str.new_var_num)
+    var_nums = re.findall(r'\$\d{1,2}',f_str+g_str)
+    new_var_num = max([int(x[1:]) for x in var_nums])+1
+    f_lambda_binder = f_lambda_binder.replace(f'${f_first_var_num}',f'${new_var_num}')
+    to_sub_in = grest.replace(f'${g_first_var_num}',f'${new_var_num}')
+    subbed_in = frest.replace(f'${f_first_var_num}',f'({to_sub_in})')
+    return f_lambda_binder + subbed_in
 
 def possible_syn_cats(sem_cat):
     if is_atomic(sem_cat):
@@ -65,8 +100,8 @@ def strip_string(ss):
     # allowed to have trailing bound variables
     return ss.strip()
 
-def concat_lfs(lf1,lf2):
-    return '(' + lf1.subtree_string() + ') (' + lf2.subtree_string() + ')'
+def concat_lfs(lf_str1,lf_str2):
+    return '(' + lf_str1 + ') (' + lf_str2 + ')'
 
 def is_congruent(sc1,sc2):
     return sc1 == 'XXX' or sc2 == 'XXX' or num_nps(sc1) == num_nps(sc2)
@@ -221,6 +256,15 @@ def file_print(s,f):
 def is_atomic(cat):
     return '\\' not in cat and '/' not in cat and '|' not in cat
 
+def is_fit_by_type_raise(left_cat,right_cat):
+    if is_atomic(right_cat): # just fwd for now
+        return False, None
+    rout,rslash,rin = cat_components(right_cat)
+    if is_atomic(rout): # just fwd for now
+        return False, None
+    routout,routslash,routin = cat_components(rout)
+    return routin==left_cat, routout
+
 def get_combination(left_cat,right_cat):
     """Inputs can be either syncats or semcats"""
     if is_atomic(left_cat) and is_atomic(right_cat):
@@ -275,9 +319,17 @@ def reverse_slash(slash):
     return '\\' if slash == '/' else '/'
 
 def alpha_normalize(x):
-    trans_list = sorted(set(re.findall(r'\$\d{1,2}',x)))
+    hits = re.findall(r'(?<=\$)\d{1,2}',x)
+    if len(hits) == 0:
+        return x
+    trans_list = sorted(set(hits),key=lambda x:hits.index(x))
+    buffer = int(max(trans_list))+1 # big enough to not clobber anything
     for v_new, v_old in enumerate(trans_list):
-        x = x.replace(fr'{v_old}',f'${v_new}')
+        assert f'${v_new+buffer}' not in x
+        x = x.replace(fr'${v_old}',f'${v_new+buffer}')
+    for v_num in range(len(trans_list)):
+        assert f'${v_num}' not in x
+        x = x.replace(fr'${v_num+buffer}',f'${v_num}')
     return x
 
 def maybe_app(sc1,sc2,direction):

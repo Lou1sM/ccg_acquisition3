@@ -4,7 +4,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, cat_components, possible_syn_cats
+from utils import file_print, get_combination, cat_components, possible_syn_cats, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise
 from time import time
 import argparse
 from abc import ABC
@@ -23,10 +23,6 @@ def type_raise(cat,direction,out_cat='S'):
         return f'{out_cat}\\({out_cat}/{cat})'
     elif direction == 'sem':
         return f'{out_cat}|({out_cat}|{cat})'
-
-def maybe_de_type_raise(cat):
-    new_cat = re.sub(r'(.*)[\\/\|]\(\1[\\/\|](.*)\)',r'\2',cat)
-    return new_cat
 
 class BaseDirichletProcessLearner(ABC):
     def __init__(self,alpha):
@@ -258,20 +254,20 @@ class LanguageAcquirer():
                 self.syntax_learner.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
             assert leaf_prob > 0
-            shell_lf = node.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
             lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
-            word_str = ' '.join(node.words)
-            assert node.sem_cat != 'XXX'
-            self.syntax_learner.observe('leaf',node.syn_cat,weight=leaf_prob)
-            self.shell_meaning_learner.observe(shell_lf,node.sem_cat,weight=leaf_prob)
+            word_str, lf, shell_lf, sem_cat, syn_cat = node.info_if_leaf()
+            self.syntax_learner.observe('leaf',syn_cat,weight=leaf_prob)
+            self.shell_meaning_learner.observe(shell_lf,sem_cat,weight=leaf_prob)
             self.meaning_learner.observe(lf,shell_lf,weight=leaf_prob)
             self.word_learner.observe(word_str,lf,weight=leaf_prob)
-        if len(words)==3:
+        if len(words)==3 and False:
             map_root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=True)
             best_cmp_prob = max([p['left'].below_prob*p['left'].above_prob for p in root.possible_splits if len(p['left'].words)==2 and p['left'].syn_cat == 'S/NP'])/map_root_prob
             best_app_prob = max([p['left'].below_prob*p['left'].above_prob for p in root.possible_splits if len(p['right'].words)==2 and p['right'].syn_cat == 'S\\NP'])/map_root_prob
             print(words,f'app:{best_app_prob:.5f} cmp:{best_cmp_prob:.5f}')
-            if best_app_prob > 2*best_cmp_prob:
+            if best_app_prob > 10*best_cmp_prob:
+                z1=[s for s in root.possible_splits if s['combinator']=='bck_app' and len(s['left'].words)==1 and s['left'].words[0] == s['left'].logical_form.subtree_string()][0]
+                z2=[s for s in root.possible_splits if s['combinator']=='fwd_app' and len(s['left'].words)==2 and s['right'].words[0] == s['right'].logical_form.subtree_string()][0]
                 breakpoint()
 
     def test_NPs(self):
@@ -381,7 +377,7 @@ class LanguageAcquirer():
 
     def parse(self,words):
         N = len(words)
-        beam_size = 50
+        beam_size = 5
         probs_table = np.empty((N,N),dtype='object') #(i,j) will be a dict of len(beam_size) saying probs of top syn_cats
         for i in range(N):
             probs_table[0,i] = self.leaf_probs_of_word_span(words[i],beam_size)
@@ -394,17 +390,30 @@ class LanguageAcquirer():
                 for left_idx, left_option in enumerate(left_chunk_probs):
                     for right_idx, right_option in enumerate(right_chunk_probs):
                         lsyn_cat, rsyn_cat = left_option['syn_cat'], right_option['syn_cat']
-                        if lsyn_cat == 'S/(S\\NP)' and rsyn_cat == 'S\\NP/NP':
-                            breakpoint()
+                        #if lsyn_cat == 'NP' and rsyn_cat == 'S\\NP/NP':
+                            #breakpoint()
+                        should_type_raise, outcat = is_fit_by_type_raise(lsyn_cat,rsyn_cat)
+                        if should_type_raise:
+                            lsyn_cat = type_raise(lsyn_cat,'fwd',outcat)
                         combined,rule = get_combination(lsyn_cat,rsyn_cat)
                         if combined is None:
                             continue
+                        direction,comb_type = rule.split('_')
+                        if direction == 'fwd':
+                            f,g = left_option['lf'], right_option['lf']
+                        elif direction == 'bck':
+                            f,g = right_option['lf'], left_option['lf']
+                        else:
+                            breakpoint()
+                        if comb_type == 'cmp':
+                            f = logical_type_raise(f)
+                        lf = combine_lfs(f,g,comb_type)
                         split = lsyn_cat + ' + ' + rsyn_cat
                         prob = left_option['prob']*right_option['prob']*self.syntax_learner.prob(split,combined)
                         #backpointer contains the coordinates in probs_table, and the idx in the
                         #beam, of the two locations that the current one could be split into
                         backpointer = (k,j,left_idx), (i-k,j+k,right_idx)
-                        pn = {'sem_cat':combined,'syn_cat':combined,'lf':None,'backpointer':backpointer,'rule':rule,'prob':prob,'words':words[j:j+i]}
+                        pn = {'sem_cat':combined,'syn_cat':combined,'lf':lf,'backpointer':backpointer,'rule':rule,'prob':prob,'words':words[j:j+i]}
                         if '|' in combined:
                             breakpoint()
                         possible_nexts.append(pn)
@@ -435,6 +444,7 @@ class LanguageAcquirer():
                 break
             frontier = copy(new_frontier)
         pprint(all_frontiers)
+        breakpoint()
 
     def prob_of_split(self,x,is_map): # slow, just use for pdb
         if x['left'].is_fwd:
@@ -553,4 +563,4 @@ if __name__ == "__main__":
     print(language_acquirer.syntax_learner.memory['S/NP'])
     if ARGS.breakin:
         breakpoint()
-    language_acquirer.save_to(f'experiments/{expname}')
+    language_acquirer.save_to(f'experiments/{ARGS.expname}')
