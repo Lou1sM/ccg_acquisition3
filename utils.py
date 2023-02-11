@@ -1,6 +1,33 @@
 import re
 
 
+def is_wellformed_lf(lf):
+    if lf == '': return True
+    if lf == '$4 (lambda $2.traverse a $2 $3)':
+        breakpoint()
+    if bool(re.search(r'lambda(?! \$\d)',lf)): # rule out this simple string
+        return False
+    lf = maybe_debrac(lf)
+    if bool(re.match(r'[a-zA-Z0-9_]+',lf)):
+        return True
+    if bool(re.match(r'\$\d{1,2}$',lf)):
+        return True
+    possible_first_lambda = re.match(r'lambda \$\d{1,2}',lf)
+    if bool(possible_first_lambda):
+        return is_wellformed_lf(lf[possible_first_lambda.end():])
+    splits = split_respecting_brackets(lf)
+    if len(splits) > 1:
+        return all([is_wellformed_lf(s) for s in splits])
+    if 'lambda' in lf:
+        skolem_matches = re.findall(r'\(lambda (\$\d{1,2})\.[a-z]* \1\)',lf)
+        if len(re.findall(r'lambda',lf)) != len(skolem_matches):
+            return False
+    #first, rest = outermost_first_bracketed_chunk(lf)
+    #if first != lf:
+        #return is_wellformed_lf(first) and is_wellformed_lf(rest)
+    return False
+
+
 def maybe_de_type_raise(cat):
     new_cat = re.sub(r'(.*)[\\/\|]\(\1[\\/\|](.*)\)',r'\2',cat)
     return new_cat
@@ -18,7 +45,18 @@ def combine_lfs(f_str,g_str,comb_type,normalize=True):
 
 def logical_type_raise(lf_str):
     lambda_binder, rest, max_var_num = lambda_body_split(lf_str)
-    return f'lambda ${max_var_num+1}.{lambda_binder}${max_var_num+1} {rest}'
+    return f"lambda ${max_var_num+1}.{lambda_binder}${max_var_num+1} {maybe_brac(rest,sep=' ')}"
+
+def is_type_raised(lf_str):
+    possible_first_lambda = re.match(r'lambda \$\d{1,2}',lf_str)
+    if lf_str == 'lambda $0.jumps a $0':
+        breakpoint()
+    if not bool(possible_first_lambda):
+        return False
+    first_lambda_var_num = lf_str[possible_first_lambda.end()-2:possible_first_lambda.end()]
+    body = split_respecting_brackets(lf_str,sep='.')[-1]
+    return body.startswith(first_lambda_var_num)
+
 
 def logical_de_type_raise(lf_str):
     lambda_binder, rest, _ = lambda_body_split(lf_str)
@@ -68,6 +106,10 @@ def lambda_body_split(lf):
 
 def beta_normalize(m):
     m = maybe_debrac(m)
+    if not is_wellformed_lf(m):
+        breakpoint()
+    if m == 'lambda a.mountain a':
+        breakpoint()
     if m.startswith('lambda'):
         lambda_binder, body, _ = lambda_body_split(m)
         return lambda_binder + beta_normalize(body)
@@ -104,7 +146,7 @@ def concat_lfs(lf_str1,lf_str2):
     return '(' + lf_str1 + ') (' + lf_str2 + ')'
 
 def is_congruent(sc1,sc2):
-    return sc1 == 'XXX' or sc2 == 'XXX' or num_nps(sc1) == num_nps(sc2)
+    return sc1 == 'X' or sc2 == 'X' or num_nps(sc1) == num_nps(sc2)
 
 def is_direct_congruent(sc1,sc2):
     sc1 = re.sub(r'[\\/]','|',sc1)
@@ -112,14 +154,14 @@ def is_direct_congruent(sc1,sc2):
     return sc1 == sc2
 
 def num_nps(sem_cat):
-    sem_cat = re.sub(r'[\\/]','|',sem_cat)
     if sem_cat == 'NP':
         return 1
-    elif is_atomic(sem_cat):
+    elif sem_cat == 'S':
         return 0
     else:
-        splits = split_respecting_brackets(sem_cat,sep='|',debracket=True)
-        assert splits[0] != sem_cat
+        splits = split_respecting_brackets(sem_cat,sep=['\\','/','|'],debracket=True)
+        if not splits[0] != sem_cat:
+            breakpoint()
         return num_nps(splits[0]) - sum([num_nps(sc) for sc in splits[1:]])
 
 def is_balanced_nums_brackets(s):
@@ -132,7 +174,7 @@ def outermost_first_bracketed_chunk(s):
     """
     if '(' not in s:
         assert ')' not in s
-        return s
+        return s, ''
     num_open_brackets = 0
     has_been_bracketed = False
     for i,c in enumerate(s):
@@ -172,9 +214,12 @@ def split_respecting_brackets(s,sep=' ',debracket=False):
 def is_bracketed(s):
     return s.startswith('(') and s.endswith(')')
 
-def maybe_brac(s):
+def maybe_brac(s,sep=['|','\\','/']):
     """Add brackets if not a leaf."""
-    if '|' in s or '\\' in s or '/' in s:
+    #if '|' in s or '\\' in s or '/' in s:
+    if not any([x in s for x in sep]):
+        return s
+    elif len(split_respecting_brackets(s,sep=sep)) > 1:
         return '('+s+')'
     else:
         return s
@@ -190,7 +235,7 @@ def maybe_debrac(s):
     while True:
         if not is_bracketed(s):
             return s
-        elif outermost_first_bracketed_chunk(s)[0] == s:
+        elif outermost_first_bracketed_chunk(s)[0] == s: # don't debrac cases like (...)(...)
             s = s[1:-1]
         else:
             return s

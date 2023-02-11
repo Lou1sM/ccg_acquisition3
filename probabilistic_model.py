@@ -496,10 +496,11 @@ if __name__ == "__main__":
     set_experiment_dir(f'experiments/{ARGS.expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
     with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
 
-    NPS = d['np_list'] + [str(x) for x in range(1,11)] # because of the numbers in simple dsets
+    NAMES = d['np_list'] + [str(x) for x in range(1,11)] # because of the numbers in simple dsets
+    NOUNS = d['nouns']
     TRANSITIVES = d['transitive_verbs']
     INTRANSITIVES = d['intransitive_verbs']
-    base_lexicon = {w:cat for item,cat in zip([NPS,INTRANSITIVES,TRANSITIVES],('NP','S|NP','S|NP|NP')) for w in item}
+    base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','S|NP','S|NP','S|NP|NP')) for w in item}
 
     language_acquirer = LanguageAcquirer(base_lexicon)
     if ARGS.reload_from is not None:
@@ -511,9 +512,10 @@ if __name__ == "__main__":
     for epoch_num in range(ARGS.num_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(d['data'][:NDPS]):
+            print(dpoint)
             if i < 10 and epoch_num > 0:
                 continue
-            words, lf_str = dpoint['words'], dpoint['parse']
+            words, lf_str = dpoint['words'], dpoint['lf']
             if words[-1] == '?':
                 words = words[:-1]
             if i == ARGS.db_at:
@@ -528,7 +530,7 @@ if __name__ == "__main__":
         num_correct_parses = 0
         if not ARGS.test_run:
             for dpoint in d['data']:
-                favoured_parse = language_acquirer.words_and_lf_to_syn_deriv(dpoint['parse'],dpoint['words'])
+                favoured_parse = language_acquirer.words_and_lf_to_syn_deriv(dpoint['lf'],dpoint['words'])
                 final_syn_cats = ' + '.join([x.syn_cat for x in favoured_parse[-1]])
                 if final_syn_cats == 'NP':
                     breakpoint()
@@ -536,9 +538,9 @@ if __name__ == "__main__":
                     final_parses[final_syn_cats] += 1
                 except KeyError:
                     final_parses[final_syn_cats] = 1
-                if final_syn_cats == 'S\\NP/NP + NP' and len(dpoint['parse'].split())==3:
+                if final_syn_cats == 'S\\NP/NP + NP' and len(dpoint['lf'].split())==3:
                     num_correct_parses += 1
-                elif final_syn_cats == 'NP + S\\NP' and len(dpoint['parse'].split())==2:
+                elif final_syn_cats == 'NP + S\\NP' and len(dpoint['lf'].split())==2:
                     num_correct_parses += 1
             print(final_parses)
             print(f"parse accuracy: {num_correct_parses/len(d['data']):.3f}")
