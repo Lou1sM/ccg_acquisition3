@@ -1,10 +1,10 @@
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, beta_normalize, strip_string, concat_lfs, cat_components, is_congruent, lambda_body_split, alpha_normalize, maybe_debrac, parent_cmp_from_f_and_g, f_cmp_from_parent_and_g, num_nps, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, beta_normalize, strip_string, concat_lfs, cat_components, is_congruent, lambda_body_split, alpha_normalize, maybe_debrac, parent_cmp_from_f_and_g, f_cmp_from_parent_and_g, num_nps, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num
 import re
 
 
 # is_leaf means it's atomic in lambda calculus
 # is_semantic_leaf means we shouldn't consider breaking it further
-# e.g. lambda $0. state $0 is a semantic leaf but not a leaf
+# e.g. lambda $0. runs $0 is a semantic leaf but not a leaf
 
 # split_prob is the prob, according to the syntax_learner, of the split that
 # gave birth to it; above_prob is the prob of the branch this node is on, equal
@@ -101,7 +101,7 @@ class LogicalForm:
         if self in self.caches['splits']:
             self.possible_app_splits = self.caches['splits'][self]
             return self.possible_app_splits
-        possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','dconst']]
+        possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','dconst','noun']]
         for removee_idxs in all_sublists(possible_removee_idxs):
             n_removees = len(removee_idxs)
             if n_removees == 0: continue
@@ -122,6 +122,8 @@ class LogicalForm:
                         entry_point = entry_point.parent
                         break
             g = entry_point.copy()
+            #if entry_point.subtree_string() == 'lambda $0.capital $0':
+                #breakpoint()
             to_present_as_args_to_g = '' if len(to_remove)==1 and to_remove[0].node_type=='dconst' else [d for d in entry_point.leaf_descendents if d not in to_remove]
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
             if (g.num_lambda_binders > 4) or (strip_string(g.subtree_string().replace(' AND','')) == ''): # don't consider only variables
@@ -129,7 +131,7 @@ class LogicalForm:
             g_sub_var_num = self.new_var_num
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([maybe_brac(n.string,sep=' ') for n in to_present_as_args_to_g])))
             assert entry_point.subtree_string() in self.subtree_string()
-            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.caches['splits'])
+            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.caches)
             if len(to_present_as_args_to_g) >= 3: # then f will end up with arity 4
                 continue
             if strip_string(f.subtree_string().replace(' AND','')) == '': # exclude just 'AND's
@@ -252,10 +254,7 @@ class LogicalForm:
     @property
     def new_var_num(self):
         #return 0 if self.var_descendents == [] else max(self.var_descendents)+1
-        vars_in_self = re.findall(r'\$\d{1,2}',self.subtree_string())
-        if len(vars_in_self) == 0:
-            return 0
-        return max([int(x[1:]) for x in vars_in_self])+1
+        return new_var_num(self.subtree_string())
 
     @property
     def num_lambda_binders(self):
@@ -471,6 +470,10 @@ class ParseNode():
     def is_fwd(self):
         return self.node_type in ['right_fwd_app','left_fwd_app','right_fwd_cmp','left_fwd_cmp']
 
+    @property
+    def lf_str(self):
+        return self.logical_form.subtree_string(alpha_normalized=True)
+
     def info_if_leaf(self):
         shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
         lf = self.logical_form.subtree_string(alpha_normalized=True)
@@ -534,4 +537,3 @@ class ParseNode():
                                    word_learner.prob(word_str,lf)
                             # will use stored value in train_one_step()
         return self.stored_prob_as_leaf
-

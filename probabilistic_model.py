@@ -4,7 +4,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, cat_components, possible_syn_cats, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise
+from utils import file_print, get_combination, is_direct_congruent, possible_syn_cats, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise
 from time import time
 import argparse
 from abc import ABC
@@ -244,6 +244,8 @@ class LanguageAcquirer():
         root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,
                        self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=False)
         root.propagate_above_probs(1)
+        if words[0] == 'the':
+            breakpoint()
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 if node.is_fwd:
@@ -363,9 +365,10 @@ class LanguageAcquirer():
             lf_probs = self.word_to_lf_probs.loc[words]
         except KeyError: # words has never been observed as a leaf
             return []
-        lf_lf_shell_probs = self.lf_to_lf_shell_probs.mul(lf_probs,axis='index')
+        lf_lf_shell_probs = self.lf_to_lf_shell_probs.mul(lf_probs,axis='index') # joint dist.
         lf_sem_probs = lf_lf_shell_probs.dot(self.lf_shell_to_sem_probs)
-        sem_to_syn = [(sem,syn) for sem in lf_sem_probs.columns for syn in possible_syn_cats(sem)]
+        sem_to_syn = [(sem,syn) for sem in lf_sem_probs.columns for syn in self.syn_cat_vocab if is_direct_congruent(sem,syn)]
+        #sem_to_syn = [(sem,syn) for sem in lf_sem_probs.columns for syn in possible_syn_cats(sem)]
         lf_syn_probs = pd.DataFrame([lf_sem_probs[a] for a,b in sem_to_syn],index=[b for a,b in sem_to_syn]).T
         lf_syn_probs *= [self.syntax_learner.prob('leaf',cat) for cat in lf_syn_probs.columns]
         paths_to_remember = lf_syn_probs.idxmax(axis=0)
@@ -414,8 +417,6 @@ class LanguageAcquirer():
                         #beam, of the two locations that the current one could be split into
                         backpointer = (k,j,left_idx), (i-k,j+k,right_idx)
                         pn = {'sem_cat':combined,'syn_cat':combined,'lf':lf,'backpointer':backpointer,'rule':rule,'prob':prob,'words':words[j:j+i]}
-                        if '|' in combined:
-                            breakpoint()
                         possible_nexts.append(pn)
             probs_table[i-1,j] = sorted(possible_nexts,key=lambda x:x['prob'])[-beam_size:]
 
@@ -423,6 +424,7 @@ class LanguageAcquirer():
             for b in range(N-a+1):
                 add_prob_of_span(a,b)
         print(probs_table)
+        breakpoint()
         frontier = [probs_table[N-1,0][-1]]
 
         all_frontiers = []
@@ -471,7 +473,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--reload_from", type=str)
     ARGS.add_argument("--num_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
-    ARGS.add_argument("--max_sent_len", type=int, default=6)
+    ARGS.add_argument("--max_sent_len", type=int, default=9)
     ARGS.add_argument("--num_epochs", type=int, default=1)
     ARGS.add_argument("-tt","--short_test_run", action="store_true")
     ARGS.add_argument("-t","--test_run", action="store_true")
@@ -479,7 +481,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--breakin", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
-    ARGS.add_argument("-d", "--dset", type=str, default='simple1000')
+    ARGS.add_argument("-d", "--dset", type=str, default='determiners_spaces1000')
     ARGS.add_argument("--root_sem_cat", type=str, default='S')
     ARGS = ARGS.parse_args()
 
@@ -512,7 +514,6 @@ if __name__ == "__main__":
     for epoch_num in range(ARGS.num_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(d['data'][:NDPS]):
-            print(dpoint)
             if i < 10 and epoch_num > 0:
                 continue
             words, lf_str = dpoint['words'], dpoint['lf']

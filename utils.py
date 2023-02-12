@@ -1,6 +1,12 @@
 import re
 
 
+def new_var_num(lf_str):
+    vars_in_self = re.findall(r'\$\d{1,2}',lf_str)
+    if len(vars_in_self) == 0:
+        return 0
+    return max([int(x[1:]) for x in vars_in_self])+1
+
 def is_wellformed_lf(lf):
     if lf == '': return True
     if lf == '$4 (lambda $2.traverse a $2 $3)':
@@ -27,7 +33,6 @@ def is_wellformed_lf(lf):
         #return is_wellformed_lf(first) and is_wellformed_lf(rest)
     return False
 
-
 def maybe_de_type_raise(cat):
     new_cat = re.sub(r'(.*)[\\/\|]\(\1[\\/\|](.*)\)',r'\2',cat)
     return new_cat
@@ -44,8 +49,9 @@ def combine_lfs(f_str,g_str,comb_type,normalize=True):
     return alpha_normalize(beta_normalize(unnormed)) if normalize else unnormed
 
 def logical_type_raise(lf_str):
-    lambda_binder, rest, max_var_num = lambda_body_split(lf_str)
-    return f"lambda ${max_var_num+1}.{lambda_binder}${max_var_num+1} {maybe_brac(rest,sep=' ')}"
+    lambda_binder, rest, _ = lambda_body_split(lf_str)
+    n = new_var_num(lf_str)
+    return f"lambda ${n}.{lambda_binder}${n} {maybe_brac(rest,sep=' ')}"
 
 def is_type_raised(lf_str):
     possible_first_lambda = re.match(r'lambda \$\d{1,2}',lf_str)
@@ -56,7 +62,6 @@ def is_type_raised(lf_str):
     first_lambda_var_num = lf_str[possible_first_lambda.end()-2:possible_first_lambda.end()]
     body = split_respecting_brackets(lf_str,sep='.')[-1]
     return body.startswith(first_lambda_var_num)
-
 
 def logical_de_type_raise(lf_str):
     lambda_binder, rest, _ = lambda_body_split(lf_str)
@@ -76,6 +81,8 @@ def get_cmp_of_lfs(f_str,g_str):
     f_lambda_binder = f_lambda_binder.replace(f'${f_first_var_num}',f'${new_var_num}')
     to_sub_in = grest.replace(f'${g_first_var_num}',f'${new_var_num}')
     subbed_in = frest.replace(f'${f_first_var_num}',f'({to_sub_in})')
+    if not is_wellformed_lf(f_lambda_binder+subbed_in):
+        breakpoint()
     return f_lambda_binder + subbed_in
 
 def possible_syn_cats(sem_cat):
@@ -107,8 +114,6 @@ def lambda_body_split(lf):
 def beta_normalize(m):
     m = maybe_debrac(m)
     if not is_wellformed_lf(m):
-        breakpoint()
-    if m == 'lambda a.mountain a':
         breakpoint()
     if m.startswith('lambda'):
         lambda_binder, body, _ = lambda_body_split(m)
