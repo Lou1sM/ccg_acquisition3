@@ -11,11 +11,12 @@ import re
 # to split_prob*parent.above_prob*sibling.below_prob; below_prob is the prob of
 # the word span of this node given its lf, under all possible splits;
 class LogicalForm:
-    def __init__(self,defining_string,base_lexicon,caches=None,parent=None,sem_cat=None):
-        if not is_wellformed_lf(defining_string):
-            breakpoint()
+    def __init__(self,defining_string,base_lexicon,idx_in_tree=[],caches=None,parent=None,sem_cat=None):
+        assert isinstance(idx_in_tree,list)
+        assert is_wellformed_lf(defining_string)
         had_surrounding_brackets = False
         self.base_lexicon = base_lexicon
+        self.idx_in_tree = idx_in_tree
         self.caches = {'splits':{},'sem_cats':{}} if caches is None else caches
         self.var_descendents = []
         self.possible_app_splits = []
@@ -42,7 +43,7 @@ class LogicalForm:
             self.is_leaf = False
             self.string = lambda_string
             self.node_type = 'lmbda'
-            self.children = [self.spawn_child(remaining_string)]
+            self.children = [self.spawn_child(remaining_string,0)]
 
             for d in self.descendents:
                 if d.node_type == 'unbound_var' and d.string == variable_index:
@@ -56,8 +57,8 @@ class LogicalForm:
                     had_surrounding_brackets = True
                     assert not is_bracketed(defining_string[1:-1])
                     arguments = split_respecting_brackets(defining_string[1:-1])
-                self.children = [self.spawn_child(a) for a in arguments]
-                if [c.node_type for c in self.children] == ['const','noun']:
+                self.children = [self.spawn_child(a,i) for i,a in enumerate(arguments)]
+                if [c.node_type for c in self.children] == ['quant','noun']:
                     self.node_type = 'dconst'
                 else:
                     self.node_type = 'composite'
@@ -71,6 +72,8 @@ class LogicalForm:
                     self.extend_var_descendents(int(self.string[1:]))
                 elif self.string == 'AND':
                     self.node_type = 'connective'
+                elif self.string in ['a','the']:
+                    self.node_type = 'quant'
                 else:
                     self.node_type = 'const'
         if had_surrounding_brackets:
@@ -98,15 +101,17 @@ class LogicalForm:
         if self.is_semantic_leaf or self.num_lambda_binders > 4:
             self.possible_app_splits = []
             return self.possible_app_splits
-        if self in self.caches['splits']:
-            self.possible_app_splits = self.caches['splits'][self]
+        if self.lf_str in self.caches['splits']:
+            self.possible_app_splits = self.caches['splits'][self.lf_str]
             return self.possible_app_splits
-        possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','dconst','noun']]
+        possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','noun','quant']]
         for removee_idxs in all_sublists(possible_removee_idxs):
             n_removees = len(removee_idxs)
             if n_removees == 0: continue
+            if n_removees == len(possible_removee_idxs): continue
             f = self.copy()
             to_remove = [f.descendents[i] for i in removee_idxs]
+            assert all([n.node_type in ['const','dconst','noun','quant'] for n in to_remove])
             leftmost = f.descendents[min(removee_idxs)]
             entry_point = leftmost # where to substitute g into f
             changed = True
@@ -122,16 +127,15 @@ class LogicalForm:
                         entry_point = entry_point.parent
                         break
             g = entry_point.copy()
-            #if entry_point.subtree_string() == 'lambda $0.capital $0':
-                #breakpoint()
             to_present_as_args_to_g = '' if len(to_remove)==1 and to_remove[0].node_type=='dconst' else [d for d in entry_point.leaf_descendents if d not in to_remove]
+            assert len(to_present_as_args_to_g) == len(entry_point.leaf_descendents) - n_removees
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
             if (g.num_lambda_binders > 4) or (strip_string(g.subtree_string().replace(' AND','')) == ''): # don't consider only variables
                 continue
             g_sub_var_num = self.new_var_num
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([maybe_brac(n.string,sep=' ') for n in to_present_as_args_to_g])))
             assert entry_point.subtree_string() in self.subtree_string()
-            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,entry_point.caches)
+            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,self.idx_in_tree,entry_point.caches)
             if len(to_present_as_args_to_g) >= 3: # then f will end up with arity 4
                 continue
             if strip_string(f.subtree_string().replace(' AND','')) == '': # exclude just 'AND's
@@ -146,7 +150,7 @@ class LogicalForm:
                 assert f_cmp_string == logical_type_raise(f.subtree_string())
                 f_cmp = LogicalForm(f_cmp_string,self.base_lexicon)
                 gparts = split_respecting_brackets(g.subtree_string(),sep='.')
-                # g_cmp is just f reordered, move the part at n_removees position to front
+                # g_cmp is just g reordered, move the part at n_removees position to front
                 assert bool(re.match(r'lambda \$\d{1,2}',gparts[n_removees]))
                 g_cmp_parts = [gparts[n_removees]] + gparts[:n_removees] + gparts[n_removees+1:]
                 g_cmp_string = '.'.join(g_cmp_parts)
@@ -157,7 +161,7 @@ class LogicalForm:
                     print(x.subtree_string())
         if '|' in self.sem_cat:
             assert self.subtree_string().startswith('lambda')
-        self.caches['splits'][self] = self.possible_app_splits
+        self.caches['splits'][self.lf_str] = self.possible_app_splits
         return self.possible_app_splits
 
     def add_split(self,f,g,split_type):
@@ -182,9 +186,7 @@ class LogicalForm:
             assert g.subtree_string().startswith('lambda')
             f.sem_cat = 'X'
             to_add_to = self.possible_cmp_splits
-        to_test = combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True)
-        #assert alpha_normalize(beta_normalize(to_test)) == alpha_normalize(self.subtree_string())
-        assert to_test == self.subtree_string(alpha_normalized=True)
+        assert combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True)== self.subtree_string(alpha_normalized=True)
         if g.sem_cat_is_set:
             if f.sem_cat_is_set:
                 assert split_type == 'app'
@@ -201,6 +203,8 @@ class LogicalForm:
                 if not f.type_raised_consistent():
                     return
         assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
+        if (f,g) in to_add_to:
+            breakpoint()
         to_add_to.append((f,g))
         f.infer_splits()
         g.infer_splits()
@@ -225,12 +229,14 @@ class LogicalForm:
             if g1.sem_cat_is_set:
                 f.propagate_sem_cat_leftward(f1,g1,comb_type)
 
-    def spawn_child(self,defining_string):
+    def spawn_child(self,defining_string,sibling_idx):
         """Careful, this means a child in the tree of one logical form, not a possible split."""
-        return LogicalForm(defining_string,base_lexicon=self.base_lexicon,caches=self.caches,parent=self)
+        return LogicalForm(defining_string,idx_in_tree=self.idx_in_tree+[sibling_idx],base_lexicon=self.base_lexicon,caches=self.caches,parent=self)
 
-    def spawn_self_like(self,defining_string):
-        new = LogicalForm(defining_string,base_lexicon=self.base_lexicon,caches=self.caches,parent=self.parent,sem_cat=self.sem_cat)
+    def spawn_self_like(self,defining_string,idx_in_tree=None):
+        if idx_in_tree is None:
+            idx_in_tree = self.idx_in_tree
+        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,base_lexicon=self.base_lexicon,caches=self.caches,parent=self.parent,sem_cat=self.sem_cat)
         new.sem_cat = self.sem_cat
         return new
 
@@ -240,6 +246,11 @@ class LogicalForm:
         ss = re.sub(r'\$\d{1,2}( )*','',ss).replace('()','')
         # allowed to have trailing bound variables
         return strip_string(ss)
+
+    @property
+    def lf_str(self): return self.subtree_string()
+    @property
+    def lf_str_a(self): return self.subtree_string(alpha_normalized=True)
 
     @property
     def descendents(self):
@@ -274,10 +285,10 @@ class LogicalForm:
         elif as_shell and not alpha_normalized:
             self.stored_shell_subtree_string = string
         elif not as_shell and alpha_normalized:
-            assert 'PLACEHOLDER' not in string
+            assert 'PLACE' not in string
             self.stored_alpha_normalized_subtree_string = string
         else:
-            assert 'PLACEHOLDER' not in string
+            assert 'PLACE' not in string
             self.stored_subtree_string = string
 
     def get_stored_subtree_string(self,as_shell,alpha_normalized):
@@ -312,7 +323,16 @@ class LogicalForm:
                 x = f'{self.string}.{subtree_string}'
         elif self.node_type in ['composite','dconst']:
             if as_shell:
-                child_trees = ['PLACEHOLDER' if c.node_type == 'const' else maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']) for c in self.children]
+                child_trees = []
+                for c in self.children:
+                    if c.node_type == 'const':
+                        child_trees.append('PLACE')
+                    elif c.node_type == 'noun':
+                        child_trees.append('NPLACE')
+                    elif c.node_type == 'quant':
+                        child_trees.append('QUANT')
+                    else:
+                        child_trees.append(maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']))
             else:
                 child_trees = [maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']) for c in self.children]
             if show_treelike:
@@ -322,11 +342,13 @@ class LogicalForm:
                 subtree_string = ' '.join(child_trees)
                 x = f'{self.string}({subtree_string})'
         elif self.node_type == 'const' and as_shell:
-            return 'PLACEHOLDER'
+            return 'PLACE'
+        elif self.node_type == 'quant' and as_shell:
+            return 'QUANT'
         else:
             x = self.string
 
-        assert as_shell or 'PLACEHOLDER' not in x
+        assert as_shell or 'PLACE' not in x
 
         if x.startswith('.'):
             breakpoint()
@@ -334,21 +356,21 @@ class LogicalForm:
 
     def copy(self):
         copied_version = self.spawn_self_like(self.subtree_string())
-        assert copied_version == self
+        assert copied_version.lf_str_a == self.lf_str_a
         copied_version.sem_cat = self.sem_cat
         return copied_version
 
     def __repr__(self):
         return (f'LogicalForm of type {self.node_type.upper()}: {self.subtree_string()}'
-                f'\n\tsemantic category: {self.sem_cat}')
+                f'\n\tsemantic category: {self.sem_cat}\tindex in tree: {self.idx_in_tree}\n')
 
     def __hash__(self):
-        return hash(self.subtree_string(alpha_normalized=True))
+        return hash(self.subtree_string(alpha_normalized=True)+str(self.idx_in_tree))
 
     def __eq__(self,other):
         if not isinstance(other,LogicalForm):
             return False
-        return other.subtree_string() == self.subtree_string()
+        return other.lf_str == self.lf_str and other.idx_in_tree == self.idx_in_tree
 
     def turn_nodes_to_vars(self,nodes):
         copied = self.copy()
@@ -366,14 +388,14 @@ class LogicalForm:
             desc.extend_var_descendents(var_num)
             desc.node_type = 'bound_var'
         lambda_prefix = '.'.join([f'lambda ${vn}' for vn in reversed(vars_abstracted)])
-        copied = self.spawn_self_like(lambda_prefix+'.' + copied.subtree_string())
+        copied = self.spawn_self_like(lambda_prefix+'.' + copied.subtree_string(),idx_in_tree=[])
         return copied
 
     def lambda_abstract(self,var_num=None):
         """Returns a new LogicalForm which is the same as self except with 'lambda x' in front."""
         if var_num is None:
             var_num = self.new_var_num
-        new = self.spawn_self_like(f'lambda ${var_num}.')
+        new = self.spawn_self_like(f'lambda ${var_num}.',idx_in_tree=[])
         new.node_type = 'lmbda'
         new.children = [self]
         if not f'${var_num}' in self.subtree_string():
@@ -496,6 +518,14 @@ class ParseNode():
         if hasattr(self,'stored_prob'):
             base += f'\tProb: {self.stored_prob}\n'
         return base
+
+    def __eq__(self,other):
+        if not isinstance(other,LogicalForm):
+            return False
+        return self.lf_str == other.lf_str and self.words == other.words
+
+    def __hash__(self):
+        return hash(self.lf_str + ' '.join(self.words))
 
     def siblingify(self,other):
         self.sibling = other

@@ -4,7 +4,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, possible_syn_cats, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise
+from utils import file_print, get_combination, is_direct_congruent, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise
 from time import time
 import argparse
 from abc import ABC
@@ -12,9 +12,6 @@ import re
 from parser import LogicalForm, ParseNode
 import json
 
-
-def alphaify(seen_probs,base,alpha):
-    return (seen_probs*alpha + base)/(1+alpha)
 
 def type_raise(cat,direction,out_cat='S'):
     if direction == 'fwd':
@@ -63,7 +60,6 @@ class BaseDirichletProcessLearner(ABC):
         seen_before = any([y in d for d in self.memory.values()])
         assert seen_before, f'learner hasn\'t seen word \'{y}\' before'
         inverse_distribution = {x:m.get(y,0) for x,m in self.memory.items()}
-        #return normalize_dict(inverse_distribution)
         return inverse_distribution
 
     def base_distribution(self,y):
@@ -86,8 +82,11 @@ class BaseDirichletProcessLearner(ABC):
         not_in_base = [x for x in seen_probs.columns if x not in base.index]
         seen_probs[unseen] = 0 # some items in base but never seen, set their seen prob to 0
         for b in not_in_base: base[b]=0 # should really recompute, just doing this for now
-        unnormed_probs = alphaify(seen_probs,base,alpha=500).astype(pd.SparseDtype('float',0))
-        return unnormed_probs/unnormed_probs.to_numpy().sum(axis=1,keepdims=True)
+        base /= base.sum()
+        a = self.alpha
+        df =(seen_probs+a*base)/(seen_probs.to_numpy().sum(axis=1,keepdims=True)+a)
+        assert (df.sum(axis=1)<=1+1e-7).all()
+        return df
 
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
@@ -106,7 +105,7 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
         num_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
-        num_constants = float('PLACEHOLDER' in x)
+        num_constants = float('PLACE' in x)+float('QUANT' in x)
         norm_factor = (np.e+1)/(np.e**2 - np.e - 1)
         return norm_factor * np.e**(-2*num_vars - num_constants)
 
@@ -126,8 +125,8 @@ class LanguageAcquirer():
     def __init__(self,base_lexicon):
         self.base_lexicon = base_lexicon
         self.syntax_learner = CCGDirichletProcessLearner(1)
-        self.shell_meaning_learner = ShellMeaningDirichletProcessLearner(1000)
-        self.meaning_learner = MeaningDirichletProcessLearner(500)
+        self.shell_meaning_learner = ShellMeaningDirichletProcessLearner(1)
+        self.meaning_learner = MeaningDirichletProcessLearner(1)
         self.word_learner = WordSpanDirichletProcessLearner(1)
         self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
         self.lf_parts_cache = {'splits':{},'sem_cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
@@ -201,19 +200,6 @@ class LanguageAcquirer():
         print(f'\nLearned Meaning for \'{word}\'')
         print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs]))
 
-    def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
-        base = pd.Series({x:self.meaning_learner.base_distribution(x) for x in self.lf_vocab})
-        self.word_to_lf_probs = self.word_learner.all_inverse_distributions(self.mwe_vocab,base)
-
-        base = pd.Series({x:self.shell_meaning_learner.base_distribution(x) for x in self.shell_lf_vocab})
-        self.lf_to_lf_shell_probs = self.meaning_learner.all_inverse_distributions(self.lf_vocab,base)
-        base = pd.Series({x:self.syntax_learner.base_distribution(x) for x in self.sem_cat_vocab})
-        self.lf_shell_to_sem_probs = self.shell_meaning_learner.all_inverse_distributions(self.shell_lf_vocab,base)
-
-        self.word_to_sem_probs = self.word_to_lf_probs[self.lf_to_lf_shell_probs.index].dot(self.lf_to_lf_shell_probs)[self.lf_shell_to_sem_probs.index].dot(self.lf_shell_to_sem_probs)
-        self.word_to_sem_probs = self.word_to_sem_probs.astype(pd.SparseDtype('float',0))
-        self.combinator_probs =pd.DataFrame([self.syntax_learner.inverse_distribution(m) for m in self.splits_vocab],index=self.splits_vocab)
-
     def show_word(self,word,f=None):
         meanings = self.word_to_lf_probs.loc[word].sort_values()[-10:]
         file_print(f'\nLearned meanings for \'{word}\'',f)
@@ -234,7 +220,7 @@ class LanguageAcquirer():
         if lf_str in self.full_lfs_cache:
             return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,self.base_lexicon,self.lf_parts_cache,parent='START',sem_cat=ARGS.root_sem_cat)
+            lf = LogicalForm(lf_str,base_lexicon=self.base_lexicon,caches=self.lf_parts_cache,parent='START',sem_cat=ARGS.root_sem_cat)
             self.full_lfs_cache[lf_str] = lf
             return lf
 
@@ -244,8 +230,6 @@ class LanguageAcquirer():
         root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,
                        self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=False)
         root.propagate_above_probs(1)
-        if words[0] == 'the':
-            breakpoint()
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 if node.is_fwd:
@@ -360,6 +344,19 @@ class LanguageAcquirer():
             frontiers = [(cur[0]+[f[0]],cur[1]*f[1]) for cur in frontiers for f in self.possible_next_frontiers(cur[0][-1])]
         return frontiers
 
+    def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
+        base = pd.Series({x:self.meaning_learner.base_distribution(x) for x in self.lf_vocab})
+        self.word_to_lf_probs = self.word_learner.all_inverse_distributions(self.mwe_vocab,base)
+
+        base = pd.Series({x:self.shell_meaning_learner.base_distribution(x) for x in self.shell_lf_vocab})
+        self.lf_to_lf_shell_probs = self.meaning_learner.all_inverse_distributions(self.lf_vocab,base)
+        base = pd.Series({x:self.syntax_learner.base_distribution(x) for x in self.sem_cat_vocab})
+        self.lf_shell_to_sem_probs = self.shell_meaning_learner.all_inverse_distributions(self.shell_lf_vocab,base)
+
+        self.word_to_sem_probs = self.word_to_lf_probs[self.lf_to_lf_shell_probs.index].dot(self.lf_to_lf_shell_probs)[self.lf_shell_to_sem_probs.index].dot(self.lf_shell_to_sem_probs)
+        self.word_to_sem_probs = self.word_to_sem_probs.astype(pd.SparseDtype('float',0))
+        self.combinator_probs =pd.DataFrame([self.syntax_learner.inverse_distribution(m) for m in self.splits_vocab],index=self.splits_vocab)
+
     def leaf_probs_of_word_span(self,words,beam_size):
         try:
             lf_probs = self.word_to_lf_probs.loc[words]
@@ -425,6 +422,7 @@ class LanguageAcquirer():
                 add_prob_of_span(a,b)
         print(probs_table)
         breakpoint()
+        self.word_learner.prob('lake','lambda $0.lake $0')
         frontier = [probs_table[N-1,0][-1]]
 
         all_frontiers = []
