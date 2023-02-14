@@ -129,7 +129,7 @@ class LanguageAcquirer():
         self.meaning_learner = MeaningDirichletProcessLearner(1)
         self.word_learner = WordSpanDirichletProcessLearner(1)
         self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
-        self.lf_parts_cache = {'splits':{},'sem_cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
+        self.lf_parts_cache = {'splits':{},'cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
 
     @property
@@ -220,7 +220,7 @@ class LanguageAcquirer():
         if lf_str in self.full_lfs_cache:
             return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,base_lexicon=self.base_lexicon,caches=self.lf_parts_cache,parent='START',sem_cat=ARGS.root_sem_cat)
+            lf = LogicalForm(lf_str,base_lexicon=self.base_lexicon,caches=self.lf_parts_cache,parent='START',sem_cat=ARGS.root_cat)
             self.full_lfs_cache[lf_str] = lf
             return lf
 
@@ -304,46 +304,6 @@ class LanguageAcquirer():
             self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
         return parse_root
 
-    def words_and_lf_to_syn_deriv(self,lf_str,words):
-        root = self.make_parse_node(lf_str,words)
-        prob_cache = {}
-        root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,
-                       self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=True)
-
-        frontier = [root]
-        layers = []
-        while True:
-            if frontier != []:
-                layers.append(frontier)
-            if all([x.is_leaf for x in frontier]):
-                break
-            new_frontier = []
-            for node in frontier:
-                if len(node.possible_splits) > 0:
-                    assert all([x['left'].split_prob == x['right'].split_prob for x in node.possible_splits])
-                    y = max(node.possible_splits, key=lambda x: x['left'].below_prob*x['right'].below_prob*x['left'].split_prob)
-                    if y['left'].below_prob*y['right'].below_prob*y['left'].split_prob > node.stored_prob_as_leaf:
-                        new_frontier += [y['left'],y['right']]
-            frontier = new_frontier
-        return layers
-
-    def possible_next_frontiers(self,syn_cats):
-        possible_frontiers = []
-        for i in range(len(syn_cats)-1):
-            maybe_left, maybe_right = syn_cats[i], syn_cats[i+1]
-            combination = get_combination(maybe_left,maybe_right)
-            if combination is not None:
-                split_prob = self.syntax_learner.prob(f'{maybe_left} + {maybe_right}',combination)
-                possible_frontiers.append((syn_cats[:i]+[combination]+syn_cats[i+2:],split_prob))
-        return possible_frontiers
-
-    def parses_of_syn_cats(self,syn_cats):
-        """Return all possible parses (often only one) of the given syn_cats in the given order."""
-        frontiers = [([syn_cats],1)]
-        for _ in range(len(syn_cats)-1):
-            frontiers = [(cur[0]+[f[0]],cur[1]*f[1]) for cur in frontiers for f in self.possible_next_frontiers(cur[0][-1])]
-        return frontiers
-
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
         base = pd.Series({x:self.meaning_learner.base_distribution(x) for x in self.lf_vocab})
         self.word_to_lf_probs = self.word_learner.all_inverse_distributions(self.mwe_vocab,base)
@@ -365,7 +325,6 @@ class LanguageAcquirer():
         lf_lf_shell_probs = self.lf_to_lf_shell_probs.mul(lf_probs,axis='index') # joint dist.
         lf_sem_probs = lf_lf_shell_probs.dot(self.lf_shell_to_sem_probs)
         sem_to_syn = [(sem,syn) for sem in lf_sem_probs.columns for syn in self.syn_cat_vocab if is_direct_congruent(sem,syn)]
-        #sem_to_syn = [(sem,syn) for sem in lf_sem_probs.columns for syn in possible_syn_cats(sem)]
         lf_syn_probs = pd.DataFrame([lf_sem_probs[a] for a,b in sem_to_syn],index=[b for a,b in sem_to_syn]).T
         lf_syn_probs *= [self.syntax_learner.prob('leaf',cat) for cat in lf_syn_probs.columns]
         paths_to_remember = lf_syn_probs.idxmax(axis=0)
@@ -390,8 +349,6 @@ class LanguageAcquirer():
                 for left_idx, left_option in enumerate(left_chunk_probs):
                     for right_idx, right_option in enumerate(right_chunk_probs):
                         lsyn_cat, rsyn_cat = left_option['syn_cat'], right_option['syn_cat']
-                        #if lsyn_cat == 'NP' and rsyn_cat == 'S\\NP/NP':
-                            #breakpoint()
                         should_type_raise, outcat = is_fit_by_type_raise(lsyn_cat,rsyn_cat)
                         if should_type_raise:
                             lsyn_cat = type_raise(lsyn_cat,'fwd',outcat)
@@ -420,9 +377,6 @@ class LanguageAcquirer():
         for a in range(2,N+1):
             for b in range(N-a+1):
                 add_prob_of_span(a,b)
-        print(probs_table)
-        breakpoint()
-        self.word_learner.prob('lake','lambda $0.lake $0')
         frontier = [probs_table[N-1,0][-1]]
 
         all_frontiers = []
@@ -437,14 +391,17 @@ class LanguageAcquirer():
                 (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = backpointer
                 left_split = probs_table[left_len-1,left_pos][left_idx]
                 right_split = probs_table[right_len-1,right_pos][right_idx]
-                new_frontier.append(right_split)
                 new_frontier.append(left_split)
+                new_frontier.append(right_split)
             all_frontiers.append(frontier)
             if all([x['rule']=='leaf' for x in frontier]): # parse is already at all leaves
                 break
             frontier = copy(new_frontier)
-        pprint(all_frontiers)
-        breakpoint()
+        if ARGS.db_parse:
+            print(probs_table)
+            pprint(all_frontiers)
+            breakpoint()
+        return all_frontiers[-1]
 
     def prob_of_split(self,x,is_map): # slow, just use for pdb
         if x['left'].is_fwd:
@@ -473,14 +430,16 @@ if __name__ == "__main__":
     ARGS.add_argument("--db_at", type=int, default=-1)
     ARGS.add_argument("--max_sent_len", type=int, default=9)
     ARGS.add_argument("--num_epochs", type=int, default=1)
+    ARGS.add_argument("--num_generate", type=int, default=0)
     ARGS.add_argument("-tt","--short_test_run", action="store_true")
     ARGS.add_argument("-t","--test_run", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
-    ARGS.add_argument("--breakin", action="store_true")
+    ARGS.add_argument("--db_parse", action="store_true")
+    ARGS.add_argument("--db_after", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='determiners_spaces1000')
-    ARGS.add_argument("--root_sem_cat", type=str, default='S')
+    ARGS.add_argument("--root_cat", type=str, default='S')
     ARGS = ARGS.parse_args()
 
     ARGS.test_run = ARGS.test_run or ARGS.short_test_run
@@ -488,7 +447,7 @@ if __name__ == "__main__":
     if ARGS.test_run:
         ARGS.expname = 'tmp'
     elif ARGS.expname is None:
-        expname = f'{ARGS.num_epochs}_{ARGS.max_sent_len}_root-{ARGS.root_sem_cat}'
+        expname = f'{ARGS.num_epochs}_{ARGS.max_sent_len}_root-{ARGS.root_cat}'
     else:
         expname = ARGS.expname
     if ARGS.short_test_run:
@@ -500,7 +459,7 @@ if __name__ == "__main__":
     NOUNS = d['nouns']
     TRANSITIVES = d['transitive_verbs']
     INTRANSITIVES = d['intransitive_verbs']
-    base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','S|NP','S|NP','S|NP|NP')) for w in item}
+    base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','N','S|NP','S|NP|NP')) for w in item}
 
     language_acquirer = LanguageAcquirer(base_lexicon)
     if ARGS.reload_from is not None:
@@ -524,7 +483,7 @@ if __name__ == "__main__":
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
         print(f"Epoch {epoch_num} time: {time()-epoch_start_time:.3f} per dpoint: {time_per_dpoint:.6f}")
-        language_acquirer.show_splits(ARGS.root_sem_cat,f)
+        language_acquirer.show_splits(ARGS.root_cat,f)
         final_parses = {}
         num_correct_parses = 0
         if not ARGS.test_run:
@@ -550,9 +509,9 @@ if __name__ == "__main__":
     meaning_acc ,syn_acc = language_acquirer.test_NPs()
     file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
-    file_print(f'\nSamples for type {ARGS.root_sem_cat}:',f)
-    for _ in range(10):
-        generated = language_acquirer.generate_words(ARGS.root_sem_cat)
+    file_print(f'\nSamples for type {ARGS.root_cat}:',f)
+    for _ in range(ARGS.num_generate):
+        generated = language_acquirer.generate_words(ARGS.root_cat)
         if any([x['words'][:-1]==generated.split() for x in d['data']]):
             file_print(f'{generated}: seen during training',f)
         else:
@@ -560,8 +519,8 @@ if __name__ == "__main__":
     file_print(f'Total run time: {time()-start_time:.3f}s',f)
     f.close()
     for dpoint in d['data'][:10]:
-        print(language_acquirer.parse(dpoint['words']))
+        pprint(language_acquirer.parse(dpoint['words']))
     print(language_acquirer.syntax_learner.memory['S/NP'])
-    if ARGS.breakin:
+    if ARGS.db_after:
         breakpoint()
     language_acquirer.save_to(f'experiments/{ARGS.expname}')

@@ -163,6 +163,8 @@ def num_nps(sem_cat):
         return 1
     elif sem_cat == 'S':
         return 0
+    elif sem_cat == 'N':
+        return -1
     else:
         splits = split_respecting_brackets(sem_cat,sep=['\\','/','|'],debracket=True)
         if not splits[0] != sem_cat:

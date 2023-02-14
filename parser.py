@@ -17,7 +17,7 @@ class LogicalForm:
         had_surrounding_brackets = False
         self.base_lexicon = base_lexicon
         self.idx_in_tree = idx_in_tree
-        self.caches = {'splits':{},'sem_cats':{}} if caches is None else caches
+        self.caches = {'splits':{},'sem_cats':{},'lfs':{}} if caches is None else caches
         self.var_descendents = []
         self.possible_app_splits = []
         self.possible_cmp_splits = []
@@ -26,29 +26,30 @@ class LogicalForm:
         self.stored_shell_subtree_string = ''
         self.stored_alpha_normalized_subtree_string = ''
         self.stored_alpha_normalized_shell_subtree_string = ''
+        defining_string = maybe_debrac(defining_string)
         if parent == 'START':
             assert sem_cat is not None
             self.sem_cat = sem_cat
 
-        if bool(re.match(r'^\(lambda \$\d',defining_string)):
-            assert is_bracketed(defining_string)
-            defining_string = maybe_debrac(defining_string)
-            self.children = []
-            self.is_leaf = True
-            self.node_type = 'noun'
-            self.string = defining_string
-        elif bool(re.match(r'^lambda \$\d',defining_string)):
-            lambda_string, _, remaining_string = defining_string.partition('.')
-            variable_index = lambda_string[-2:]
-            self.is_leaf = False
-            self.string = lambda_string
-            self.node_type = 'lmbda'
-            self.children = [self.spawn_child(remaining_string,0)]
+        if bool(re.match(r'^lambda \$\d',defining_string)):
+            ss = re.search(r'(?<=lambda \$\d\.)([a-z])*(?= \$\d{1,2}$)',defining_string)
+            if ss is not None and self.base_lexicon[ss.group()] == 'N':
+                self.children = []
+                self.is_leaf = True
+                self.node_type = 'noun'
+                self.string = defining_string
+            else:
+                lambda_string, _, remaining_string = defining_string.partition('.')
+                variable_index = lambda_string[-2:]
+                self.is_leaf = False
+                self.string = lambda_string
+                self.node_type = 'lmbda'
+                self.children = [self.spawn_child(remaining_string,0)]
 
-            for d in self.descendents:
-                if d.node_type == 'unbound_var' and d.string == variable_index:
-                    d.binder = self
-                    d.node_type = 'bound_var'
+                for d in self.descendents:
+                    if d.node_type == 'unbound_var' and d.string == variable_index:
+                        d.binder = self
+                        d.node_type = 'bound_var'
         else:
             if ' ' in defining_string:
                 self.string = ''
@@ -83,9 +84,9 @@ class LogicalForm:
             assert self.subtree_string() == defining_string
 
         self.is_semantic_leaf = self.is_leaf # is_leaf is sufficient for is_semantic_leaf
-        self.set_sem_cat_from_string()
+        self.set_cats_from_string()
 
-    def set_sem_cat_from_string(self):
+    def set_cats_from_string(self):
         if self.parent != 'START':
             ss = self.stripped_subtree_string
             if ss in self.base_lexicon:
@@ -156,9 +157,6 @@ class LogicalForm:
                 g_cmp_string = '.'.join(g_cmp_parts)
                 g_cmp = LogicalForm(g_cmp_string,self.base_lexicon)
                 self.add_split(f_cmp,g_cmp,'cmp')
-            for x in (f,g):
-                if x.sem_cat == '(e>t)>t':
-                    print(x.subtree_string())
         if '|' in self.sem_cat:
             assert self.subtree_string().startswith('lambda')
         self.caches['splits'][self.lf_str] = self.possible_app_splits
@@ -166,7 +164,7 @@ class LogicalForm:
 
     def add_split(self,f,g,split_type):
         f.parent = g.parent = self
-        g.set_sem_cat_from_string()
+        g.set_cats_from_string()
         if g.sem_cat != 'N' and len(re.findall(r'[\\/\|]',g.sem_cat)) != g.num_lambda_binders:
             return
         if not g.type_raised_consistent():
@@ -176,7 +174,7 @@ class LogicalForm:
         assert g != self
         assert g.sem_cat != ''
         if split_type == 'app':
-            f.set_sem_cat_from_string()
+            f.set_cats_from_string()
             if f.sem_cat not in ['N','X'] and f.num_lambda_binders not in [0,-num_nps(f.sem_cat)]:
                 return
             to_add_to = self.possible_app_splits
@@ -264,7 +262,6 @@ class LogicalForm:
 
     @property
     def new_var_num(self):
-        #return 0 if self.var_descendents == [] else max(self.var_descendents)+1
         return new_var_num(self.subtree_string())
 
     @property
@@ -322,19 +319,7 @@ class LogicalForm:
             else:
                 x = f'{self.string}.{subtree_string}'
         elif self.node_type in ['composite','dconst']:
-            if as_shell:
-                child_trees = []
-                for c in self.children:
-                    if c.node_type == 'const':
-                        child_trees.append('PLACE')
-                    elif c.node_type == 'noun':
-                        child_trees.append('NPLACE')
-                    elif c.node_type == 'quant':
-                        child_trees.append('QUANT')
-                    else:
-                        child_trees.append(maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']))
-            else:
-                child_trees = [maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']) for c in self.children]
+            child_trees = [maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']) for c in self.children]
             if show_treelike:
                 subtree_string = '\n\t'.join([c.replace('\n\t','\n\t\t') for c in child_trees])
                 x = f'{self.string}\n\t{subtree_string}'
@@ -343,6 +328,8 @@ class LogicalForm:
                 x = f'{self.string}({subtree_string})'
         elif self.node_type == 'const' and as_shell:
             return 'PLACE'
+        elif self.node_type == 'noun' and as_shell:
+            return 'NPLACE'
         elif self.node_type == 'quant' and as_shell:
             return 'QUANT'
         else:
@@ -429,7 +416,7 @@ class ParseNode():
         if syn_cat is not None:
             self.syn_cat = syn_cat
         else:
-            self.syn_cat = self.logical_form.sem_cat # no directionality then
+            self.syn_cat = lf.sem_cat
         self.is_leaf = self.logical_form.is_semantic_leaf or len(self.words) == 1
         if not self.is_leaf:
             if self.logical_form.possible_app_splits == []:
