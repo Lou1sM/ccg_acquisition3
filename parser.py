@@ -9,9 +9,12 @@ import re
 # split_prob is the prob, according to the syntax_learner, of the split that
 # gave birth to it; above_prob is the prob of the branch this node is on, equal
 # to split_prob*parent.above_prob*sibling.below_prob; below_prob is the prob of
-# the word span of this node given its lf, under all possible splits;
+# this node, under all possible ways of splitting it down to the leaves;
+
+# Q(.) is like a composite, or composite is like a dummy wrapper around an lf,
+# Q then being an alternative non-dummy wrapper
 class LogicalForm:
-    def __init__(self,defining_string,base_lexicon,idx_in_tree=[],caches=None,parent=None,sem_cat=None):
+    def __init__(self,defining_string,base_lexicon,idx_in_tree=[],caches=None,parent=None):
         assert isinstance(idx_in_tree,list)
         assert is_wellformed_lf(defining_string)
         had_surrounding_brackets = False
@@ -28,8 +31,10 @@ class LogicalForm:
         self.stored_alpha_normalized_shell_subtree_string = ''
         defining_string = maybe_debrac(defining_string)
         if parent == 'START':
-            assert sem_cat is not None
-            self.sem_cat = sem_cat
+            if defining_string.startswith('Q'):
+                self.sem_cat = 'Sq'
+            else:
+                self.sem_cat = 'S'
 
         if bool(re.match(r'^lambda \$\d',defining_string)):
             ss = re.search(r'(?<=lambda \$\d\.)([a-z])*(?= \$\d{1,2}$)',defining_string)
@@ -50,33 +55,39 @@ class LogicalForm:
                     if d.node_type == 'unbound_var' and d.string == variable_index:
                         d.binder = self
                         d.node_type = 'bound_var'
-        else:
-            if ' ' in defining_string:
-                self.string = ''
-                arguments = split_respecting_brackets(defining_string)
-                if len(arguments) == 1 and is_bracketed(defining_string):
-                    had_surrounding_brackets = True
-                    assert not is_bracketed(defining_string[1:-1])
-                    arguments = split_respecting_brackets(defining_string[1:-1])
-                self.children = [self.spawn_child(a,i) for i,a in enumerate(arguments)]
-                if [c.node_type for c in self.children] == ['quant','noun']:
-                    self.node_type = 'dconst'
-                else:
-                    self.node_type = 'composite'
-                self.is_leaf = False
+        elif bool(re.match(r'^Q\(.*\)$',defining_string)):
+            assert False
+            self.node_type = 'Q'
+            self.string = 'Q'
+            self.children = [self.spawn_child(cstr,i) for i,cstr in enumerate(split_respecting_brackets(defining_string[2:-1]))]
+            self.is_leaf = False
+        elif ' ' in defining_string:
+            self.string = ''
+            arguments = split_respecting_brackets(defining_string)
+            assert arguments != [self] # would enter a loop if so
+            if len(arguments) == 1 and is_bracketed(defining_string):
+                had_surrounding_brackets = True
+                assert not is_bracketed(defining_string[1:-1])
+                arguments = split_respecting_brackets(defining_string[1:-1])
+            self.children = [self.spawn_child(a,i) for i,a in enumerate(arguments)]
+            if [c.node_type for c in self.children] == ['quant','noun']:
+                self.node_type = 'dconst'
             else:
-                self.string = defining_string
-                self.children = []
-                self.is_leaf = True
-                if self.string.startswith('$'):
-                    self.node_type = 'unbound_var'
-                    self.extend_var_descendents(int(self.string[1:]))
-                elif self.string == 'AND':
-                    self.node_type = 'connective'
-                elif self.string in ['a','the']:
-                    self.node_type = 'quant'
-                else:
-                    self.node_type = 'const'
+                self.node_type = 'composite'
+            self.is_leaf = False
+        else:
+            self.string = defining_string
+            self.children = []
+            self.is_leaf = True
+            if self.string.startswith('$'):
+                self.node_type = 'unbound_var'
+                self.extend_var_descendents(int(self.string[1:]))
+            elif self.string == 'AND':
+                self.node_type = 'connective'
+            elif self.string in ['a','the']:
+                self.node_type = 'quant'
+            else:
+                self.node_type = 'const'
         if had_surrounding_brackets:
             if not self.subtree_string() == defining_string[1:-1]:
                 breakpoint()
@@ -106,6 +117,8 @@ class LogicalForm:
             self.possible_app_splits = self.caches['splits'][self.lf_str]
             return self.possible_app_splits
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','noun','quant']]
+        #if self.lf_str == 'Q (dance maryland)':
+            #breakpoint()
         for removee_idxs in all_sublists(possible_removee_idxs):
             n_removees = len(removee_idxs)
             if n_removees == 0: continue
@@ -127,7 +140,15 @@ class LogicalForm:
                         changed = True
                         entry_point = entry_point.parent
                         break
-            g = entry_point.copy()
+            if entry_point.node_type == 'Q':
+                g = self.spawn_self_like(' '.join([maybe_brac(c.lf_str,sep=' ')
+                    for c in entry_point.children]),idx_in_tree=entry_point.idx_in_tree)
+                assert all([c1.lf_str==c2.lf_str for c1,c2 in zip(g.descendents,entry_point.descendents)][1:])
+                if self.parent == 'START':
+                    breakpoint()
+                assert entry_point.descendents[0].lf_str != g.descendents[0].lf_str
+            else:
+                g = entry_point.copy()
             to_present_as_args_to_g = '' if len(to_remove)==1 and to_remove[0].node_type=='dconst' else [d for d in entry_point.leaf_descendents if d not in to_remove]
             assert len(to_present_as_args_to_g) == len(entry_point.leaf_descendents) - n_removees
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
@@ -234,7 +255,7 @@ class LogicalForm:
     def spawn_self_like(self,defining_string,idx_in_tree=None):
         if idx_in_tree is None:
             idx_in_tree = self.idx_in_tree
-        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,base_lexicon=self.base_lexicon,caches=self.caches,parent=self.parent,sem_cat=self.sem_cat)
+        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,base_lexicon=self.base_lexicon,caches=self.caches,parent=self.parent)
         new.sem_cat = self.sem_cat
         return new
 
@@ -302,7 +323,7 @@ class LogicalForm:
         x = self.get_stored_subtree_string(as_shell,alpha_normalized)
         if x == '' or recompute:
             x = self.subtree_string_(show_treelike=show_treelike,as_shell=as_shell,recompute=recompute)
-            assert is_bracketed(x) or ' ' not in x or self.node_type in ['noun','lmbda']
+            assert is_bracketed(x) or ' ' not in x or self.node_type in ['noun','lmbda','Q']
             x = maybe_debrac(x)
             if alpha_normalized:
                 x = alpha_normalize(x)
@@ -318,7 +339,7 @@ class LogicalForm:
                 x = f'{self.string}\n\t{subtree_string}\n'
             else:
                 x = f'{self.string}.{subtree_string}'
-        elif self.node_type in ['composite','dconst']:
+        elif self.node_type in ['composite','dconst','Q']:
             child_trees = [maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']) for c in self.children]
             if show_treelike:
                 subtree_string = '\n\t'.join([c.replace('\n\t','\n\t\t') for c in child_trees])

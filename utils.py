@@ -161,7 +161,7 @@ def is_direct_congruent(sc1,sc2):
 def num_nps(sem_cat):
     if sem_cat == 'NP':
         return 1
-    elif sem_cat == 'S':
+    elif sem_cat in ['Sq','S']:
         return 0
     elif sem_cat == 'N':
         return -1
@@ -380,7 +380,7 @@ def alpha_normalize(x):
         assert f'${v_new+buffer}' not in x
         x = x.replace(fr'${v_old}',f'${v_new+buffer}')
     for v_num in range(len(trans_list)):
-        assert f'${v_num}' not in x
+        assert not bool(re.search(fr'${v_num}',x))
         x = x.replace(fr'${v_num+buffer}',f'${v_num}')
     return x
 

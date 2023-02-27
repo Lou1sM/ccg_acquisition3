@@ -26,6 +26,7 @@ class BaseDirichletProcessLearner(ABC):
         self.alpha = alpha
         self.memory = {}
         self.base_distribution_cache = {}
+        self.buffer = []
 
     def base_distribution_(self,x):
         raise NotImplementedError
@@ -55,6 +56,11 @@ class BaseDirichletProcessLearner(ABC):
     def observe(self,*args,**kwargs):
         """Can be overwritten if necessary."""
         return self._observe(*args,**kwargs)
+
+    def flush_buffer(self):
+        for _ in range(len(self.buffer)):
+            self.observe(*self.buffer.pop())
+        assert len(self.buffer) == 0
 
     def inverse_distribution(self,y): # conditional on y
         seen_before = any([y in d for d in self.memory.values()])
@@ -194,6 +200,12 @@ class LanguageAcquirer():
         self.lf_shell_to_sem_probs.to_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
         self.word_to_sem_probs.to_pickle(join(fpath,'word_to_sem_probs.pkl'))
 
+    def flush_buffers(self):
+        self.syntax_learner.flush_buffer()
+        self.shell_meaning_learner.flush_buffer()
+        self.meaning_learner.flush_buffer()
+        self.word_learner.flush_buffer()
+
     def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
         distr = self.word_learner.inverse_distribution(word)
         probs = sorted(distr.items(), key=lambda x:x[1])[-15:]
@@ -220,7 +232,7 @@ class LanguageAcquirer():
         if lf_str in self.full_lfs_cache:
             return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,base_lexicon=self.base_lexicon,caches=self.lf_parts_cache,parent='START',sem_cat=ARGS.root_cat)
+            lf = LogicalForm(lf_str,base_lexicon=self.base_lexicon,caches=self.lf_parts_cache,parent='START')
             self.full_lfs_cache[lf_str] = lf
             return lf
 
@@ -230,6 +242,8 @@ class LanguageAcquirer():
         root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,
                        self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=False)
         root.propagate_above_probs(1)
+        #if words == 'does maryland dance'.split():
+            #breakpoint()
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 if node.is_fwd:
@@ -242,10 +256,12 @@ class LanguageAcquirer():
             assert leaf_prob > 0
             lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cat, syn_cat = node.info_if_leaf()
-            self.syntax_learner.observe('leaf',syn_cat,weight=leaf_prob)
-            self.shell_meaning_learner.observe(shell_lf,sem_cat,weight=leaf_prob)
-            self.meaning_learner.observe(lf,shell_lf,weight=leaf_prob)
-            self.word_learner.observe(word_str,lf,weight=leaf_prob)
+            #self.syntax_learner.observe('leaf',syn_cat,weight=leaf_prob)
+            self.syntax_learner.buffer.append(('leaf',syn_cat,leaf_prob))
+            self.shell_meaning_learner.buffer.append((shell_lf,sem_cat,leaf_prob))
+            self.meaning_learner.buffer.append((lf,shell_lf,leaf_prob))
+            self.word_learner.buffer.append((word_str,lf,leaf_prob))
+        self.flush_buffers()
         if len(words)==3 and False:
             map_root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=True)
             best_cmp_prob = max([p['left'].below_prob*p['left'].above_prob for p in root.possible_splits if len(p['left'].words)==2 and p['left'].syn_cat == 'S/NP'])/map_root_prob
@@ -439,7 +455,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='determiners_spaces1000')
-    ARGS.add_argument("--root_cat", type=str, default='S')
+    ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
     ARGS = ARGS.parse_args()
 
     ARGS.test_run = ARGS.test_run or ARGS.short_test_run
@@ -447,7 +463,7 @@ if __name__ == "__main__":
     if ARGS.test_run:
         ARGS.expname = 'tmp'
     elif ARGS.expname is None:
-        expname = f'{ARGS.num_epochs}_{ARGS.max_sent_len}_root-{ARGS.root_cat}'
+        expname = f'{ARGS.num_epochs}_{ARGS.max_sent_len}'
     else:
         expname = ARGS.expname
     if ARGS.short_test_run:
@@ -467,10 +483,13 @@ if __name__ == "__main__":
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
     f = open(f'experiments/{ARGS.expname}/results.txt','w')
+    all_data = d['data'][:NDPS]
+    train_data = all_data[:-len(all_data)//5]
+    test_data = all_data[-len(all_data)//5:]
     start_time = time()
     for epoch_num in range(ARGS.num_epochs):
         epoch_start_time = time()
-        for i,dpoint in enumerate(d['data'][:NDPS]):
+        for i,dpoint in enumerate(train_data):
             if i < 10 and epoch_num > 0:
                 continue
             words, lf_str = dpoint['words'], dpoint['lf']
@@ -483,11 +502,11 @@ if __name__ == "__main__":
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
         print(f"Epoch {epoch_num} time: {time()-epoch_start_time:.3f} per dpoint: {time_per_dpoint:.6f}")
-        language_acquirer.show_splits(ARGS.root_cat,f)
+        language_acquirer.show_splits(ARGS.cat_to_sample_from,f)
         final_parses = {}
         num_correct_parses = 0
         if not ARGS.test_run:
-            for dpoint in d['data']:
+            for dpoint in test_data:
                 favoured_parse = language_acquirer.words_and_lf_to_syn_deriv(dpoint['lf'],dpoint['words'])
                 final_syn_cats = ' + '.join([x.syn_cat for x in favoured_parse[-1]])
                 if final_syn_cats == 'NP':
@@ -509,9 +528,9 @@ if __name__ == "__main__":
     meaning_acc ,syn_acc = language_acquirer.test_NPs()
     file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
-    file_print(f'\nSamples for type {ARGS.root_cat}:',f)
+    file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
     for _ in range(ARGS.num_generate):
-        generated = language_acquirer.generate_words(ARGS.root_cat)
+        generated = language_acquirer.generate_words(ARGS.cat_to_sample_from)
         if any([x['words'][:-1]==generated.split() for x in d['data']]):
             file_print(f'{generated}: seen during training',f)
         else:
