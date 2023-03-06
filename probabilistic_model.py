@@ -244,6 +244,9 @@ class LanguageAcquirer():
         root.propagate_above_probs(1)
         #if words == 'does maryland dance'.split():
             #breakpoint()
+        if words == ['tucson', 'kicks', 'alaska']:
+            print(root.possible_splits[4]['left'].logical_form.possible_cmp_splits)
+            breakpoint()
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 if node.is_fwd:
@@ -417,6 +420,10 @@ class LanguageAcquirer():
             print(probs_table)
             pprint(all_frontiers)
             breakpoint()
+        #cmp_derivs = [x for x in probs_table[-1][0] if x['rule'] == 'fwd_cmp']
+        #if len(cmp_derivs) > 0:
+            #assert len(cmp_derivs) == 1
+            #print(cmp_derivs[0])
         return all_frontiers[-1]
 
     def prob_of_split(self,x,is_map): # slow, just use for pdb
@@ -440,7 +447,7 @@ class LanguageAcquirer():
 
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
-    ARGS.add_argument("--expname", type=str)
+    ARGS.add_argument("--expname", type=str,default='tmp')
     ARGS.add_argument("--reload_from", type=str)
     ARGS.add_argument("--num_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
@@ -454,7 +461,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--db_after", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
-    ARGS.add_argument("-d", "--dset", type=str, default='determiners_spaces1000')
+    ARGS.add_argument("-d", "--dset", type=str, default='determiners1000')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
     ARGS = ARGS.parse_args()
 
@@ -505,22 +512,6 @@ if __name__ == "__main__":
         language_acquirer.show_splits(ARGS.cat_to_sample_from,f)
         final_parses = {}
         num_correct_parses = 0
-        if not ARGS.test_run:
-            for dpoint in test_data:
-                favoured_parse = language_acquirer.words_and_lf_to_syn_deriv(dpoint['lf'],dpoint['words'])
-                final_syn_cats = ' + '.join([x.syn_cat for x in favoured_parse[-1]])
-                if final_syn_cats == 'NP':
-                    breakpoint()
-                try:
-                    final_parses[final_syn_cats] += 1
-                except KeyError:
-                    final_parses[final_syn_cats] = 1
-                if final_syn_cats == 'S\\NP/NP + NP' and len(dpoint['lf'].split())==3:
-                    num_correct_parses += 1
-                elif final_syn_cats == 'NP + S\\NP' and len(dpoint['lf'].split())==2:
-                    num_correct_parses += 1
-            print(final_parses)
-            print(f"parse accuracy: {num_correct_parses/len(d['data']):.3f}")
 
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
