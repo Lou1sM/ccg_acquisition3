@@ -1,4 +1,4 @@
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, beta_normalize, strip_string, concat_lfs, cat_components, is_congruent, lambda_body_split, alpha_normalize, maybe_debrac, parent_cmp_from_f_and_g, f_cmp_from_parent_and_g, num_nps, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, concat_lfs, cat_components, is_congruent, first_lambda_body_split, alpha_normalize, maybe_debrac, parent_cmp_from_f_and_g, f_cmp_from_parent_and_g, num_nps, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num
 import re
 
 
@@ -13,6 +13,7 @@ import re
 
 # Q(.) is like a composite, or composite is like a dummy wrapper around an lf,
 # Q then being an alternative non-dummy wrapper
+
 class LogicalForm:
     def __init__(self,defining_string,base_lexicon,idx_in_tree=[],caches=None,parent=None):
         assert isinstance(idx_in_tree,list)
@@ -56,7 +57,6 @@ class LogicalForm:
                         d.binder = self
                         d.node_type = 'bound_var'
         elif bool(re.match(r'^Q\(.*\)$',defining_string)):
-            assert False
             self.node_type = 'Q'
             self.string = 'Q'
             self.children = [self.spawn_child(cstr,i) for i,cstr in enumerate(split_respecting_brackets(defining_string[2:-1]))]
@@ -71,7 +71,7 @@ class LogicalForm:
                 arguments = split_respecting_brackets(defining_string[1:-1])
             self.children = [self.spawn_child(a,i) for i,a in enumerate(arguments)]
             if [c.node_type for c in self.children] == ['quant','noun']:
-                self.node_type = 'dconst'
+                self.node_type = 'dconst' # determiner + noun treated kinda like a const
             else:
                 self.node_type = 'composite'
             self.is_leaf = False
@@ -117,13 +117,14 @@ class LogicalForm:
             self.possible_app_splits = self.caches['splits'][self.lf_str]
             return self.possible_app_splits
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','noun','quant']]
-        #if self.lf_str == 'Q (dance maryland)':
-            #breakpoint()
         for removee_idxs in all_sublists(possible_removee_idxs):
+            if self.lf_str == 'Q(jump kansas)' and removee_idxs == [1,2]:
+                breakpoint()
             n_removees = len(removee_idxs)
             if n_removees == 0: continue
-            if n_removees == len(possible_removee_idxs): continue
+            if n_removees == len(possible_removee_idxs) and self.node_type!='Q': continue
             f = self.copy()
+            f.parent = self
             to_remove = [f.descendents[i] for i in removee_idxs]
             assert all([n.node_type in ['const','dconst','noun','quant'] for n in to_remove])
             leftmost = f.descendents[min(removee_idxs)]
@@ -144,8 +145,6 @@ class LogicalForm:
                 g = self.spawn_self_like(' '.join([maybe_brac(c.lf_str,sep=' ')
                     for c in entry_point.children]),idx_in_tree=entry_point.idx_in_tree)
                 assert all([c1.lf_str==c2.lf_str for c1,c2 in zip(g.descendents,entry_point.descendents)][1:])
-                if self.parent == 'START':
-                    breakpoint()
                 assert entry_point.descendents[0].lf_str != g.descendents[0].lf_str
             else:
                 g = entry_point.copy()
@@ -162,19 +161,22 @@ class LogicalForm:
                 continue
             if strip_string(f.subtree_string().replace(' AND','')) == '': # exclude just 'AND's
                 continue
+            f.set_cats_from_string()
             f = f.lambda_abstract(g_sub_var_num)
             self.add_split(f,g,'app')
             # if self is a lambda and had it's bound var removed and put in g then try cmp
-            if self.node_type == 'lmbda' and self.string[7:] in [x.string for x in to_remove]:
-                assert g.num_lambda_binders > n_removees
-                lambda_binder,rest,_ = lambda_body_split(f.subtree_string())
-                f_cmp_string = f"lambda ${f.new_var_num}.{lambda_binder}${f.new_var_num} {maybe_brac(rest,sep=' ')}"
-                assert f_cmp_string == logical_type_raise(f.subtree_string())
+            if self.node_type == 'lmbda' and f.node_type == 'lmbda' and cat_components(self.sem_cat,allow_atomic=True)[-1] == cat_components(f.sem_cat,allow_atomic=True)[-1]:
+                #assert g.num_lambda_binders > n_removees
+                #f_cmp_string = f"lambda ${g.new_var_num}.{lambda_binder}${g.new_var_num} {maybe_brac(rest,sep=' ')}"
+                f_cmp_string = logical_type_raise(g.lf_str)
+                assert f_cmp_string == logical_type_raise(g.lf_str)
                 f_cmp = LogicalForm(f_cmp_string,self.base_lexicon)
-                gparts = split_respecting_brackets(g.subtree_string(),sep='.')
+                fparts = split_respecting_brackets(f.subtree_string(),sep='.')
                 # g_cmp is just g reordered, move the part at n_removees position to front
-                assert bool(re.match(r'lambda \$\d{1,2}',gparts[n_removees]))
-                g_cmp_parts = [gparts[n_removees]] + gparts[:n_removees] + gparts[n_removees+1:]
+                # because first var will get chopped off from cmp and need
+                # remainder to be able to receive body of f_cmp just like f received g
+                #assert bool(re.match(r'lambda \$\d{1,2}',fparts[n_removees]))
+                g_cmp_parts = [fparts[f.num_lambda_binders-1]] + fparts[:f.num_lambda_binders-1] + fparts[f.num_lambda_binders:]
                 g_cmp_string = '.'.join(g_cmp_parts)
                 g_cmp = LogicalForm(g_cmp_string,self.base_lexicon)
                 self.add_split(f_cmp,g_cmp,'cmp')
@@ -204,8 +206,11 @@ class LogicalForm:
             assert f.subtree_string().startswith('lambda')
             assert g.subtree_string().startswith('lambda')
             f.sem_cat = 'X'
+            assert not (g.sem_cat_is_set and is_atomic(g.sem_cat))
             to_add_to = self.possible_cmp_splits
         assert combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True)== self.subtree_string(alpha_normalized=True)
+        f.infer_splits()
+        g.infer_splits()
         if g.sem_cat_is_set:
             if f.sem_cat_is_set:
                 assert split_type == 'app'
@@ -225,8 +230,6 @@ class LogicalForm:
         if (f,g) in to_add_to:
             breakpoint()
         to_add_to.append((f,g))
-        f.infer_splits()
-        g.infer_splits()
         if '/' in f.sem_cat:
             breakpoint()
 
@@ -245,7 +248,7 @@ class LogicalForm:
         assert is_congruent(f.sem_cat,new_inferred_sem_cat)
         f.sem_cat = new_inferred_sem_cat
         for f1,g1 in f.possible_app_splits:
-            if g1.sem_cat_is_set:
+            if g1.sem_cat_is_set and not (is_atomic(g1.sem_cat) and comb_type=='cmp'):
                 f.propagate_sem_cat_leftward(f1,g1,comb_type)
 
     def spawn_child(self,defining_string,sibling_idx):
@@ -347,14 +350,20 @@ class LogicalForm:
             else:
                 subtree_string = ' '.join(child_trees)
                 x = f'{self.string}({subtree_string})'
-        elif self.node_type == 'const' and as_shell:
-            return 'PLACE'
-        elif self.node_type == 'noun' and as_shell:
-            return 'NPLACE'
-        elif self.node_type == 'quant' and as_shell:
-            return 'QUANT'
-        else:
+        elif (not as_shell) or self.node_type in ['bound_var','unbound_var']:
             x = self.string
+        else:
+            x = self.node_type
+        #elif self.node_type == 'const' and as_shell:
+        #    return 'PLACE'
+        #elif self.node_type == 'noun' and as_shell:
+        #    return 'NPLACE'
+        #elif self.node_type == 'quant' and as_shell:
+        #    return 'QUANT'
+        #else:
+        #    if as_shell:
+        #        print(self.node_type)
+        #    x = self.string
 
         assert as_shell or 'PLACE' not in x
 
