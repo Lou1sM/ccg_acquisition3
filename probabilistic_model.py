@@ -100,7 +100,7 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
             print('observing weird SVO')
             return 0
         num_slashes = len(re.findall(r'[\\/\|]',x))
-        return 0.2**(num_slashes+1)
+        return (1.1)*0.9**(num_slashes+1) # Omri 2017 had 0.2
 
     def observe(self,y,x,weight):
         if y == 'leaf':
@@ -130,7 +130,7 @@ class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
 class LanguageAcquirer():
     def __init__(self,base_lexicon):
         self.base_lexicon = base_lexicon
-        self.syntax_learner = CCGDirichletProcessLearner(1)
+        self.syntax_learner = CCGDirichletProcessLearner(100)
         self.shell_meaning_learner = ShellMeaningDirichletProcessLearner(1)
         self.meaning_learner = MeaningDirichletProcessLearner(1)
         self.word_learner = WordSpanDirichletProcessLearner(1)
@@ -242,11 +242,6 @@ class LanguageAcquirer():
         root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,
                        self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=False)
         root.propagate_above_probs(1)
-        #if words == 'does maryland dance'.split():
-            #breakpoint()
-        if words == ['tucson', 'kicks', 'alaska']:
-            print(root.possible_splits[4]['left'].logical_form.possible_cmp_splits)
-            breakpoint()
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 if node.is_fwd:
@@ -259,21 +254,11 @@ class LanguageAcquirer():
             assert leaf_prob > 0
             lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cat, syn_cat = node.info_if_leaf()
-            #self.syntax_learner.observe('leaf',syn_cat,weight=leaf_prob)
             self.syntax_learner.buffer.append(('leaf',syn_cat,leaf_prob))
             self.shell_meaning_learner.buffer.append((shell_lf,sem_cat,leaf_prob))
             self.meaning_learner.buffer.append((lf,shell_lf,leaf_prob))
             self.word_learner.buffer.append((word_str,lf,leaf_prob))
         self.flush_buffers()
-        if len(words)==3 and False:
-            map_root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=True)
-            best_cmp_prob = max([p['left'].below_prob*p['left'].above_prob for p in root.possible_splits if len(p['left'].words)==2 and p['left'].syn_cat == 'S/NP'])/map_root_prob
-            best_app_prob = max([p['left'].below_prob*p['left'].above_prob for p in root.possible_splits if len(p['right'].words)==2 and p['right'].syn_cat == 'S\\NP'])/map_root_prob
-            print(words,f'app:{best_app_prob:.5f} cmp:{best_cmp_prob:.5f}')
-            if best_app_prob > 10*best_cmp_prob:
-                z1=[s for s in root.possible_splits if s['combinator']=='bck_app' and len(s['left'].words)==1 and s['left'].words[0] == s['left'].logical_form.subtree_string()][0]
-                z2=[s for s in root.possible_splits if s['combinator']=='fwd_app' and len(s['left'].words)==2 and s['right'].words[0] == s['right'].logical_form.subtree_string()][0]
-                breakpoint()
 
     def test_NPs(self):
         meaning_corrects = 0

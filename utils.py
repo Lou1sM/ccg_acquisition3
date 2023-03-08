@@ -34,7 +34,7 @@ def is_wellformed_lf(lf):
     return False
 
 def maybe_de_type_raise(cat):
-    new_cat = re.sub(r'(.*)[\\/\|]\(\1[\\/\|](.*)\)',r'\2',cat)
+    new_cat = re.sub(r'([A-Z]{1,2})[\\/\|]\(\1[\\/\|](.*)\)$',r'\2',cat)
     return new_cat
 
 def combine_lfs(f_str,g_str,comb_type,normalize=True):
@@ -49,9 +49,8 @@ def combine_lfs(f_str,g_str,comb_type,normalize=True):
     return alpha_normalize(beta_normalize(unnormed)) if normalize else unnormed
 
 def logical_type_raise(lf_str):
-    lambda_binder, rest, _ = lambda_body_split(lf_str)
     n = new_var_num(lf_str)
-    return f"lambda ${n}.{lambda_binder}${n} {maybe_brac(rest,sep=' ')}"
+    return f"lambda ${n}.${n} {maybe_brac(lf_str,sep=' ')}"
 
 def is_type_raised(lf_str):
     possible_first_lambda = re.match(r'lambda \$\d{1,2}',lf_str)
@@ -64,17 +63,16 @@ def is_type_raised(lf_str):
     return body.startswith(first_lambda_var_num)
 
 def logical_de_type_raise(lf_str):
-    lambda_binder, rest, _ = lambda_body_split(lf_str)
-    if lambda_binder == '':
-        return rest
-    first_lambda,possible_dot,other_lambdas = lambda_binder.partition('.')
-    first_of_body,_,rest_of_body = rest.partition(' ')
-    assert first_lambda == f'lambda {first_of_body}'
-    return f'{other_lambdas}{rest_of_body}'
+    lambda_binder, _, rest = lf_str.rpartition('.')
+    type_raising_part = re.match(r'lambda (\$\d{1,2}).\1',lf_str)
+    len_of_type_raising_part = type_raising_part.span()[1]
+    rest = lf_str[len_of_type_raising_part+1:]
+    rest = maybe_debrac(rest)
+    return rest
 
 def get_cmp_of_lfs(f_str,g_str):
-    f_lambda_binder,frest,f_first_var_num = lambda_body_split(f_str)
-    _,grest,g_first_var_num = lambda_body_split(g_str)
+    f_lambda_binder,frest,f_first_var_num = first_lambda_body_split(f_str)
+    _,grest,g_first_var_num = first_lambda_body_split(g_str)
     #max_var_num = max(f_str.new_var_num,g_str.new_var_num)
     var_nums = re.findall(r'\$\d{1,2}',f_str+g_str)
     new_var_num = max([int(x[1:]) for x in var_nums])+1
@@ -101,7 +99,7 @@ def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
     else:
         breakpoint()
 
-def lambda_body_split(lf):
+def first_lambda_body_split(lf):
     """lambda_binder has the dot on the end"""
     try:
         lambda_binder = re.match(r'lambda \$\d+\.',lf).group(0)
@@ -111,12 +109,21 @@ def lambda_body_split(lf):
     first_var_num = int(lambda_binder[8:-1])
     return lambda_binder, body, first_var_num
 
+def all_lambda_body_splits(lf):
+    """lambda_binder has the dot on the end"""
+    try:
+        lambda_binder = re.match(r'(lambda \$\d{1,2}+\.)*',lf).group(0)
+    except AttributeError: #there's no lambda binder in the lf
+        return '', lf
+    body = lf[len(lambda_binder):]
+    return lambda_binder, body
+
 def beta_normalize(m):
     m = maybe_debrac(m)
     if not is_wellformed_lf(m):
         breakpoint()
     if m.startswith('lambda'):
-        lambda_binder, body, _ = lambda_body_split(m)
+        lambda_binder, body, _ = first_lambda_body_split(m)
         return lambda_binder + beta_normalize(body)
     if re.match(r'^[\w\$]*$',m): # has no variables
         return m
