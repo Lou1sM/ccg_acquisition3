@@ -21,6 +21,24 @@ def type_raise(cat,direction,out_cat='S'):
     elif direction == 'sem':
         return f'{out_cat}|({out_cat}|{cat})'
 
+class DirichletProcess():
+    def __init__(self,alpha):
+        self.memory = {'count':0}
+        self.alpha = alpha
+
+    def observe(self,obs):
+        if obs in self.memory:
+            self.memory[obs] += 1
+        else:
+            self.memory = self.memory | {obs:1}
+        self.memory['count'] += 1
+        assert np.allclose(2*self.memory['count'],sum(self.memory.values()),rtol=1e-6)
+
+    def prob(self,obs):
+        base_prob = 0.5 # hard-coding for now as one of {S,S_q}
+        mx = self.memory.get(obs,0)
+        return (mx+self.alpha*base_prob)/(self.memory['count']+self.alpha)
+
 class BaseDirichletProcessLearner(ABC):
     def __init__(self,alpha):
         self.alpha = alpha
@@ -137,6 +155,7 @@ class LanguageAcquirer():
         self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
         self.lf_parts_cache = {'splits':{},'cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
+        self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
 
     @property
     def lf_vocab(self):
@@ -305,6 +324,7 @@ class LanguageAcquirer():
             parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
         else:
             parse_root = ParseNode(lf,words,'ROOT')
+            self.root_sem_cat_memory.observe(parse_root.sem_cat)
             self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
         return parse_root
 
@@ -371,12 +391,16 @@ class LanguageAcquirer():
                         lf = combine_lfs(f,g,comb_type)
                         split = lsyn_cat + ' + ' + rsyn_cat
                         prob = left_option['prob']*right_option['prob']*self.syntax_learner.prob(split,combined)
+                        backpointer = (k,j,left_idx), (i-k,j+k,right_idx)
                         #backpointer contains the coordinates in probs_table, and the idx in the
                         #beam, of the two locations that the current one could be split into
-                        backpointer = (k,j,left_idx), (i-k,j+k,right_idx)
                         pn = {'sem_cat':combined,'syn_cat':combined,'lf':lf,'backpointer':backpointer,'rule':rule,'prob':prob,'words':words[j:j+i]}
                         possible_nexts.append(pn)
-            probs_table[i-1,j] = sorted(possible_nexts,key=lambda x:x['prob'])[-beam_size:]
+            if i == N:
+                for pn in possible_nexts:
+                    pn['prob'] = pn['prob']*self.root_sem_cat_memory.prob(pn['syn_cat'])
+            to_add =sorted(possible_nexts,key=lambda x:x['prob'])[-beam_size:]
+            probs_table[i-1,j] = to_add
 
         for a in range(2,N+1):
             for b in range(N-a+1):
@@ -454,6 +478,8 @@ if __name__ == "__main__":
 
     if ARGS.test_run:
         ARGS.expname = 'tmp'
+        if ARGS.num_dpoints == -1:
+            ARGS.num_dpoints = 10
     elif ARGS.expname is None:
         expname = f'{ARGS.num_epochs}_{ARGS.max_sent_len}'
     else:
