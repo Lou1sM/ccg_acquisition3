@@ -261,6 +261,9 @@ class LanguageAcquirer():
         root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,
                        self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=False)
         root.propagate_above_probs(1)
+        #print(words)
+        #if len(words) == 4 and words[0] == 'does':
+        #    breakpoint()
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 if node.is_fwd:
@@ -405,6 +408,8 @@ class LanguageAcquirer():
         for a in range(2,N+1):
             for b in range(N-a+1):
                 add_prob_of_span(a,b)
+        if len(probs_table[N-1,0]) == 0:
+            return 'No parse found'
         frontier = [probs_table[N-1,0][-1]]
 
         all_frontiers = []

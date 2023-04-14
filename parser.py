@@ -59,7 +59,8 @@ class LogicalForm:
         elif bool(re.match(r'^Q\(.*\)$',defining_string)):
             self.node_type = 'Q'
             self.string = 'Q'
-            self.children = [self.spawn_child(cstr,i) for i,cstr in enumerate(split_respecting_brackets(defining_string[2:-1]))]
+            #self.children = [self.spawn_child(cstr,i) for i,cstr in enumerate(split_respecting_brackets(defining_string[2:-1]))]
+            self.children = [self.spawn_child(defining_string[2:-1],0)]
             self.is_leaf = False
         elif ' ' in defining_string:
             self.string = ''
@@ -92,7 +93,8 @@ class LogicalForm:
             if not self.subtree_string() == defining_string[1:-1]:
                 breakpoint()
         else:
-            assert self.subtree_string() == defining_string
+            if not self.subtree_string() == defining_string:
+                breakpoint()
 
         self.is_semantic_leaf = self.is_leaf # is_leaf is sufficient for is_semantic_leaf
         self.set_cats_from_string()
@@ -118,7 +120,7 @@ class LogicalForm:
             return self.possible_app_splits
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','noun','quant']]
         for removee_idxs in all_sublists(possible_removee_idxs):
-            if self.lf_str == 'Q(jump kansas)' and removee_idxs == [1,2]:
+            if self.lf_str == 'Q(buy chicago montgomery)' and removee_idxs == [2,4]:
                 breakpoint()
             n_removees = len(removee_idxs)
             if n_removees == 0: continue
@@ -165,7 +167,7 @@ class LogicalForm:
             f = f.lambda_abstract(g_sub_var_num)
             self.add_split(f,g,'app')
             # if self is a lambda and had it's bound var removed and put in g then try cmp
-            if self.node_type == 'lmbda' and f.node_type == 'lmbda' and cat_components(self.sem_cat,allow_atomic=True)[-1] == cat_components(f.sem_cat,allow_atomic=True)[-1]:
+            if self.node_type == 'lmbda' and f.node_type == 'lmbda' and cat_components(self.sem_cat,allow_atomic=True)[-1] == cat_components(f.sem_cat,allow_atomic=True)[-1] and cat_components(f.sem_cat,allow_atomic=True)[-1]!='X':
                 #assert g.num_lambda_binders > n_removees
                 #f_cmp_string = f"lambda ${g.new_var_num}.{lambda_binder}${g.new_var_num} {maybe_brac(rest,sep=' ')}"
                 f_cmp_string = logical_type_raise(g.lf_str)
@@ -188,7 +190,7 @@ class LogicalForm:
     def add_split(self,f,g,split_type):
         f.parent = g.parent = self
         g.set_cats_from_string()
-        if g.sem_cat != 'N' and len(re.findall(r'[\\/\|]',g.sem_cat)) != g.num_lambda_binders:
+        if g.sem_cat not in ['X','N'] and len(re.findall(r'[\\/\|]',g.sem_cat)) != g.num_lambda_binders:
             return
         if not g.type_raised_consistent():
             return
@@ -208,12 +210,17 @@ class LogicalForm:
             f.sem_cat = 'X'
             assert not (g.sem_cat_is_set and is_atomic(g.sem_cat))
             to_add_to = self.possible_cmp_splits
-        assert combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True)== self.subtree_string(alpha_normalized=True)
-        f.infer_splits()
+        if not combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True)== self.subtree_string(alpha_normalized=True):
+            breakpoint()
         g.infer_splits()
+        if self.sem_cat_is_set and g.sem_cat_is_set:
+            self.propagate_sem_cat_leftward(f,g,split_type)
+            if not f.type_raised_consistent():
+                return
+        f.infer_splits()
         if g.sem_cat_is_set:
             if f.sem_cat_is_set:
-                assert split_type == 'app'
+                #assert split_type == 'app' don't know why I had this in
                 hits = re.findall(fr'[\\/\|]\(?{re.escape(g.sem_cat)}\)?$',re.escape(f.sem_cat))
                 assert len(hits) < 2
                 for hit in hits:
@@ -222,10 +229,6 @@ class LogicalForm:
                     self.sem_cat = new_inferred_sem_cat
                     if not self.type_raised_consistent():
                         return
-            if self.sem_cat_is_set:
-                self.propagate_sem_cat_leftward(f,g,split_type)
-                if not f.type_raised_consistent():
-                    return
         assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
         if (f,g) in to_add_to:
             breakpoint()
@@ -271,6 +274,7 @@ class LogicalForm:
 
     @property
     def lf_str(self): return self.subtree_string()
+
     @property
     def lf_str_a(self): return self.subtree_string(alpha_normalized=True)
 
@@ -342,7 +346,13 @@ class LogicalForm:
                 x = f'{self.string}\n\t{subtree_string}\n'
             else:
                 x = f'{self.string}.{subtree_string}'
-        elif self.node_type in ['composite','dconst','Q']:
+        elif self.node_type == 'Q':
+            assert len(self.children) == 1
+            # debraccing only happens in subtree_string() so child already bracced here
+            x = self.children[0].subtree_string_(show_treelike,as_shell,recompute=recompute)
+            bracced_if_var = f'({x})' if x.startswith('$') else x
+            return 'Q' + bracced_if_var
+        elif self.node_type in ['composite','dconst']:
             child_trees = [maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']) for c in self.children]
             if show_treelike:
                 subtree_string = '\n\t'.join([c.replace('\n\t','\n\t\t') for c in child_trees])
@@ -366,9 +376,8 @@ class LogicalForm:
         #    x = self.string
 
         assert as_shell or 'PLACE' not in x
+        assert not x.startswith('.')
 
-        if x.startswith('.'):
-            breakpoint()
         return x
 
     def copy(self):

@@ -46,7 +46,7 @@ def make_sentence(is_q):
         VP = f'{verb_words} {obj_words}'
         declarative_lf = f'{verb} {subj_lf} {obj_lf}'
     words = f'does {subj_words} {VP}' if is_q else f'{subj_words} {VP}'
-    lf = f'Q({declarative_lf})' if is_q else declarative_lf
+    lf = f'Q ({declarative_lf})' if is_q else declarative_lf
     return {'words':words.replace('_',' ').split(), 'lf':lf}
 
 def make_relative():

@@ -44,8 +44,7 @@ def combine_lfs(f_str,g_str,comb_type,normalize=True):
         unnormed = get_cmp_of_lfs(f_str,g_str)
     else:
         breakpoint()
-    if '$$' in unnormed:
-        breakpoint()
+    assert '$$' not in unnormed
     return alpha_normalize(beta_normalize(unnormed)) if normalize else unnormed
 
 def logical_type_raise(lf_str):
@@ -135,7 +134,7 @@ def beta_normalize(m):
     assert 'lambda (' not in left
     right_ = splits[-1]
     right = beta_normalize(right_)
-    if not re.match(r'^[\w\$]*$',right):
+    if not re.match(r'^[\w\$]*$',right) and not is_bracketed(right):
         right = '('+right+')'
 
     if left.startswith('lambda'):
@@ -143,7 +142,8 @@ def beta_normalize(m):
         assert re.match(r'lambda \$\d{1,2}',lambda_binder)
         var_name = lambda_binder[7:]
         assert re.match(r'\$\d',var_name)
-        combined = re.sub(re.escape(var_name),right,rest)
+        combined = re.sub(re.escape(f'({var_name})'),right,rest) # to avoid doubly-bracketted
+        combined = re.sub(re.escape(var_name),right,combined)
         return beta_normalize(combined)
     else:
         return ' '.join([left,right])
