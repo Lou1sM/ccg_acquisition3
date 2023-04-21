@@ -331,13 +331,13 @@ def get_combination(left_cat,right_cat):
     """Inputs can be either syncats or semcats"""
     if is_atomic(left_cat) and is_atomic(right_cat):
         return None, None
-    elif left_cat.endswith('('+right_cat+')'):
+    elif re.search(fr'[/|]\({re.escape(right_cat)}\)$',left_cat):
         return left_cat[:-len(right_cat)-3],'fwd_app'
-    elif left_cat.endswith(right_cat) and is_atomic(right_cat):
+    elif re.search(fr'[/|]{re.escape(right_cat)}$',left_cat) and is_atomic(right_cat):
         return left_cat[:-len(right_cat)-1],'fwd_app'
-    elif right_cat.endswith('('+left_cat+')'):
+    elif re.search(fr'[\\|]\({re.escape(left_cat)}\)$',right_cat):
         return right_cat[:-len(left_cat)-3],'bck_app'
-    elif right_cat.endswith(left_cat) and is_atomic(left_cat):
+    elif re.search(fr'[\\|]{re.escape(left_cat)}$',right_cat) and is_atomic(left_cat):
         return right_cat[:-len(left_cat)-1],'bck_app'
     elif is_atomic(left_cat) or is_atomic(right_cat): # can't do composition then
         return None, None
