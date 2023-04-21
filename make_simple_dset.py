@@ -4,8 +4,6 @@ import argparse
 
 ARGS = argparse.ArgumentParser()
 ARGS.add_argument("--num_dpoints", type=int, default=1000)
-ARGS.add_argument("--spaces", action="store_true")
-ARGS.add_argument("--use_nouns", action="store_true")
 ARGS.add_argument("--with_questions", action="store_true")
 ARGS = ARGS.parse_args()
 
@@ -13,6 +11,7 @@ with open('data/preprocessed_geoqueries.json') as f:
     d = json.load(f)
 
 nps = d['np_list']
+breakpoint()
 
 transitives = ['like', 'buy', 'has', 'address', 'border', 'hate', 'want', 'throw', 'traverse', 'devour', 'kick', 'love', 'enrich','deracinate']
 
@@ -28,6 +27,7 @@ def NP_with_determiner():
     det = np.random.choice(['the','a'])
     noun = np.random.choice(nouns)
     lf = f'({det} (lambda $0.{noun} $0))'
+    #lf = f'({det} {noun})'
     return f'{det} {noun}', lf
 
 def name_NP():

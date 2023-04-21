@@ -168,10 +168,8 @@ def is_direct_congruent(sc1,sc2):
 def num_nps(sem_cat):
     if sem_cat == 'NP':
         return 1
-    elif sem_cat in ['Sq','S']:
+    elif sem_cat in ['Sq','S','N']:
         return 0
-    elif sem_cat == 'N':
-        return -1
     else:
         splits = split_respecting_brackets(sem_cat,sep=['\\','/','|'],debracket=True)
         if not splits[0] != sem_cat:
@@ -263,6 +261,11 @@ def normalize_dict(d):
         assert isinstance(d,dict)
         norm = sum(d.values())
         return {k:v/norm for k,v in d.items()}
+
+def num_lambda_binders(s):
+    maybe_lambda_list = split_respecting_brackets(s,sep='.')
+    assert all([x.startswith('lambda') for x in maybe_lambda_list[:-1]])
+    return len(maybe_lambda_list)-1
 
 def translate_by_unify(x,y):
     """Equate corresponding subexpressions in x and y to form a translation between subexpressions"""
@@ -443,4 +446,3 @@ def parses_of_syn_cats(self,syn_cats):
     for _ in range(len(syn_cats)-1):
         frontiers = [current+[f] for current in frontiers for f in possible_next_frontiers(current[-1])]
     return frontiers
-
