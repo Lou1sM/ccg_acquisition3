@@ -1,4 +1,6 @@
 import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
 import math
 from pprint import pprint
 from copy import copy
@@ -369,7 +371,8 @@ class LanguageAcquirer():
             lf_probs = self.word_to_lf_probs.loc[words]
         except KeyError: # words has never been observed as a leaf
             assert words not in self.mwe_vocab
-            print(f'{words} not seens before as a leaf')
+            if ' ' not in words:
+                print(f'\'{words}\' not seen before as a leaf')
             return []
         def _arg_and_argmax(df):
             return [(k,v,df.loc[k,v]) for k,v in df.idxmax(axis=1).items() if df.loc[k,v]>0]
@@ -437,68 +440,84 @@ class LanguageAcquirer():
             return 'No parse found'
 
         def show_parse(num):
-            frontier = [probs_table[N-1,0][num]]
-
-            all_frontiers = []
+            running_bfs_idx = 0
+            syntax_tree_level = [dict(probs_table[N-1,0][num],idx='1')]
+            leaves = []
+            all_syntax_tree_levels = []
             for i in range(N):
-                new_frontier = []
-                for item in frontier:
+                new_syntax_tree_level = []
+                for item in syntax_tree_level:
                     if item['rule'] == 'leaf':
-                        #assert item['backpointer'] is None
-                        #new_frontier.append(item)
+                        item['split_prob'] = self.syntax_learner.prob('leaf',item['syn_cat'])
+                        item['shell_lf_prob'] = self.shell_meaning_learner.prob(item['shell_lf'],item['syn_cat'])
+                        item['lf_prob'] = self.meaning_learner.prob(item['lf'],item['shell_lf'])
+                        item['word_prob'] = self.word_learner.prob(item['words'],item['lf'])
+                        leaves.append(item)
                         continue
                     backpointer = item['backpointer']
                     (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = backpointer
                     left_split = probs_table[left_len-1,left_pos][left_idx]
                     right_split = probs_table[right_len-1,right_pos][right_idx]
-                    new_frontier.append(left_split)
-                    new_frontier.append(right_split)
-                all_frontiers.append(frontier)
-                if all([x['rule']=='leaf' for x in frontier]): # parse is already at all leaves
+                    combined = left_split['syn_cat'] + ' + ' + right_split['syn_cat']
+                    item['split_prob'] = self.syntax_learner.prob(combined,item['syn_cat'])
+                    new_syntax_tree_level.append(dict(left_split,idx=item['idx'][:-1] + '01'))
+                    new_syntax_tree_level.append(dict(right_split,idx=item['idx'][:-1] + '21'))
+                    running_bfs_idx += 2
+                all_syntax_tree_levels.append(syntax_tree_level)
+                if all([x['rule']=='leaf' for x in syntax_tree_level]): # parse is already at all leaves
                     break
-                frontier = copy(new_frontier)
+                syntax_tree_level = copy(new_syntax_tree_level)
             if ARGS.db_parse:
                 print(probs_table)
-                pprint(all_frontiers)
-            return all_frontiers
+                pprint(all_syntax_tree_levels)
+            return all_syntax_tree_levels, leaves
 
-        all_frontiers = show_parse(-1)
+        all_syntax_tree_levels, leaves = show_parse(-1)
         if ARGS.db_parse:
             breakpoint()
 
-        import networkx as nx
-        import matplotlib.pyplot as plt
-
         G=nx.Graph()
-        num_levels = len(all_frontiers) + 3
-        all_words = all_frontiers[0][0]['words'].split()
+        all_words = all_syntax_tree_levels[0][0]['words'].split()
         def _wp(w):
             return all_words.index(w) - (len(all_words)-1)/2
         def _wps(words):
             return sum([_wp(w) for w in words.split()])/len(words.split())
-        for j,frontier in enumerate(all_frontiers):
-            num_columns = len(frontier) + 2
-            uncorrected = [_wps(n['words']) for n in frontier]
-            hors_corrected = [x-sum(uncorrected) for x in uncorrected]
-            for i,node in enumerate(frontier):
-                vert_pos = 1 - (j/num_levels)
-                hor_pos = (i+1)/num_columns
-                hor_pos = hors_corrected[i]
-                G.add_node(len(G.nodes()),pos=(hor_pos,vert_pos),label=node['syn_cat'],split_prob=node['prob'])
+        for j,syntax_tree_level in enumerate(all_syntax_tree_levels):
+            what_avg_should_be = _wps(' '.join([n['words'] for n in syntax_tree_level]))
+            wrong_avg = sum([_wps(n['words']) for n in syntax_tree_level])/len(syntax_tree_level)
+            correction = what_avg_should_be - wrong_avg
+            for i,node in enumerate(syntax_tree_level):
+                hor_pos = _wps(node['words'])
+                if node['rule'] != 'leaf':
+                    hor_pos += correction
+                G.add_node(node['idx'],pos=(hor_pos,-j),label=f"{node['syn_cat']}\n{node['split_prob']:.3f}",split_prob=node['prob'])
+                if node['idx'] != '1': # root
+                    G.add_edge(node['idx'],node['idx'][:-2]+'1')
+
+        G.add_node('root',pos=(-1,0),label='ROOT')
+        root_weight = self.root_sem_cat_memory.prob(all_syntax_tree_levels[0][0]['syn_cat'])
+        G.add_edge('root','1',weight=round(root_weight,3))
         num_syntax_nodes = len(G.nodes())
-        edge_labels={k:round(v,2) for k,v in nx.get_edge_attributes(G,'weight').items()}
-        node_labels = {i:G.nodes()[i]['label'] for i in range(len(G.nodes()))} # nodes() doesn't work as iterator for some reason
+        num_leaves = len(leaves)
+        posses_so_far = nx.get_node_attributes(G,'pos')
+        for i,node in enumerate(leaves):
+            hor_pos = posses_so_far[node['idx']][0]
+            G.add_node(num_syntax_nodes+i,pos=(hor_pos,-num_leaves),label=node['shell_lf'])
+            G.add_edge(num_syntax_nodes+i,node['idx'],weight=round(node['shell_lf_prob'],3))
+            G.add_node(num_leaves+num_syntax_nodes+i,pos=(hor_pos,-num_leaves-1),label=node['lf'])
+            G.add_edge(num_leaves+num_syntax_nodes+i,num_syntax_nodes+i,weight=round(node['lf_prob'],3))
+            G.add_node(2*num_leaves+num_syntax_nodes+i,pos=(hor_pos,-num_leaves-2),label=node['words'])
+            G.add_edge(2*num_leaves+num_syntax_nodes+i,num_leaves+num_syntax_nodes+i,weight=round(node['word_prob'],3))
+
+        edge_labels = {k:round(v,2) for k,v in nx.get_edge_attributes(G,'weight').items()}
+        node_labels = nx.get_node_attributes(G,'label')
         pos = nx.get_node_attributes(G,'pos')
         nx.draw(G, pos, labels=node_labels, node_color='pink')
+        edge_labels = nx.get_edge_attributes(G,'weight')
         nx.draw_networkx_edge_labels(G,pos,edge_labels=edge_labels,rotate=False)
         plt.show()
-        breakpoint()
 
-        #cmp_derivs = [x for x in probs_table[-1][0] if x['rule'] == 'fwd_cmp']
-        #if len(cmp_derivs) > 0:
-            #assert len(cmp_derivs) == 1
-            #print(cmp_derivs[0])
-        return all_frontiers[-1]
+        return leaves
 
     def prob_of_split(self,x,is_map): # slow, just use for pdb
         if x['left'].is_fwd:
