@@ -40,13 +40,6 @@ class LogicalForm:
                 self.sem_cat = 'S'
 
         if bool(re.match(r'^lambda \$\d',defining_string)):
-            ss = re.search(r'(?<=lambda \$\d\.)([a-z])*(?= \$\d{1,2}$)',defining_string)
-            if ss is not None and self.base_lexicon[ss.group()] == 'N':
-                self.children = []
-                self.is_leaf = True
-                self.node_type = 'noun'
-                self.string = defining_string
-            else:
                 lambda_string, _, remaining_string = defining_string.partition('.')
                 variable_index = lambda_string[-2:]
                 self.is_leaf = False
@@ -58,10 +51,14 @@ class LogicalForm:
                     if d.node_type == 'unbound_var' and d.string == variable_index:
                         d.binder = self
                         d.node_type = 'bound_var'
+        elif self.base_lexicon.get(defining_string,None) == 'N':
+            self.children = []
+            self.is_leaf = True
+            self.node_type = 'noun'
+            self.string = defining_string
         elif bool(re.match(r'^Q \(.*\)$',defining_string)):
             self.node_type = 'Q'
             self.string = 'Q'
-            #self.children = [self.spawn_child(cstr,i) for i,cstr in enumerate(split_respecting_brackets(defining_string[2:-1]))]
             self.children = [self.spawn_child(defining_string[3:-1],0)]
             self.is_leaf = False
         elif ' ' in defining_string:

@@ -27,8 +27,8 @@ def coin_flip(p=0.5):
 def NP_with_determiner():
     det = np.random.choice(['the','a'])
     noun = np.random.choice(nouns)
-    lf = f'({det} (lambda $0.{noun} $0))'
-    #lf = f'({det} {noun})'
+    #lf = f'({det} (lambda $0.{noun} $0))'
+    lf = f'({det} {noun})'
     return f'{det} {noun}', lf
 
 def name_NP():

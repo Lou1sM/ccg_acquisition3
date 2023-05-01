@@ -287,15 +287,16 @@ class LanguageAcquirer():
             return lf
 
     def train_one_step(self,lf_str,words):
-        root = self.make_parse_node(lf_str,words)
+        root = self.make_parse_node(lf_str,words) # words is a list
         prob_cache = {}
         root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                        self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=False)
         root.propagate_above_probs(1)
-        #print(words)
-        if len(words) == 4 and words[0] == 'does':
+        #if len(words) == 4 and words[0] == 'does':
+        #if ' '.join(words) == 'the mountain deracinates seattle':
+        #if 'deracinate' in ' '.join(words):
             #breakpoint()
-            root.logical_form.subtree_string_(as_shell=True,recompute=True,show_treelike=False)
+            #root.logical_form.subtree_string_(as_shell=True,recompute=True,show_treelike=False)
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 if node.is_fwd:
@@ -387,32 +388,6 @@ class LanguageAcquirer():
         beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
         return [dict(b,words=words,rule='leaf',backpointer=None) for b in beam]
 
-        try:
-            lf_probs = self.word_to_lf_probs.loc[words]
-        except KeyError: # words has never been observed as a leaf
-            assert words not in self.mwe_vocab
-            if ' ' not in words:
-                print(f'\'{words}\' not seen before as a leaf')
-            return []
-        def _arg_and_argmax(df):
-            return [(k,v,df.loc[k,v]) for k,v in df.idxmax(axis=1).items() if df.loc[k,v]>0]
-        assert all([self.wordl.prob(words,k)==v for k,v in lf_probs.items()])
-        beam = lf_probs.nlargest(beam_size)
-        next_lookup = self.lf_to_lf_shell_probs.loc[list(beam.keys())].T*beam
-        beam = _arg_and_argmax(next_lookup)
-        breakpoint()
-        beam = sorted(beam,key=lambda x:x[-1])[-beam_size:] # now list of tuples
-        next_lookup = self.lf_shell_to_sem_probs.loc[[b[0] for b in beam]].T*np.array([b[-1] for b in beam])
-        beam_ = _arg_and_argmax(next_lookup)
-        beam_dict = {x[0]:(x[1],x[2]) for x in beam}
-        beam = [(sc,lf_shell,beam_dict[lf_shell][0],p*beam_dict[lf_shell][1]*self.syntaxl.prob('leaf',sc)) for sc,lf_shell,p in beam_]
-        beam = sorted(beam,key=lambda x:x[-1])[-beam_size:]
-        beam = [(syn,*b) for b in beam for syn in possible_syn_cats(b[0])]
-        options = [{'prob':b[4],'words':words,'syn_cat':b[0],'sem_cat':b[1],'lf':b[3],'shell_lf':b[2],'rule':'leaf','backpointer':None} for b in beam[-beam_size:]]
-        for opt in options:
-            assert opt['prob'] == self.syntaxl.prob('leaf',opt['sem_cat'])*self.shmeaningl.prob(opt['shell_lfs'],opt['sem_cat'])*self.meaningl.prob(opt['lf'],opt['shell_lf'])*self.wordl.prob(opt['words'],opt['lf'])
-        return options
-
     def parse(self,words):
         N = len(words)
         beam_size = 50
@@ -467,7 +442,8 @@ class LanguageAcquirer():
             return 'No parse found'
 
         def show_parse(num):
-            syntax_tree_level = [dict(probs_table[N-1,0][num],idx='1')]
+            syntax_tree_level = [dict(probs_table[N-1,0][num],idx='1',hor_pos=0)]
+            #syntax_tree_level[0]['hor_pos'] = len(syntax_tree_level[0]['words'].split())/2
             all_syntax_tree_levels = []
             for i in range(N):
                 new_syntax_tree_level = []
@@ -478,13 +454,18 @@ class LanguageAcquirer():
                     (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = backpointer
                     left_split = probs_table[left_len-1,left_pos][left_idx]
                     right_split = probs_table[right_len-1,right_pos][right_idx]
+                    lsync, rsync = infer_slash(left_split['sem_cat'],right_split['sem_cat'],item['syn_cat'],item['rule'])
+                    left_split = dict(left_split,idx=item['idx'][:-1] + '01',syn_cat=lsync,
+                                        hor_pos=left_pos+(left_len-1)/2 - (N-1)/2)
+                    right_split = dict(right_split,idx=item['idx'][:-1] + '21', syn_cat=rsync,
+                                        hor_pos=right_pos+(right_len-1)/2 - (N-1)/2)
+                    assert 'syn_cat' in left_split.keys() and 'syn_cat' in right_split.keys()
+                    if left_split['hor_pos'] == 0:
+                        print(left_split['words'])
                     item['left_child'] = left_split
                     item['right_child'] = right_split
-                    lsync, rsync = infer_slash(left_split['sem_cat'],right_split['sem_cat'],item['syn_cat'],item['rule'])
-                    left_split['syn_cat'] = lsync
-                    right_split['syn_cat'] = rsync
-                    new_syntax_tree_level.append(dict(left_split,idx=item['idx'][:-1] + '01'))
-                    new_syntax_tree_level.append(dict(right_split,idx=item['idx'][:-1] + '21'))
+                    new_syntax_tree_level.append(left_split)
+                    new_syntax_tree_level.append(right_split)
                 all_syntax_tree_levels.append(syntax_tree_level)
                 if all([x['rule']=='leaf' for x in syntax_tree_level]):
                     break
@@ -498,6 +479,7 @@ class LanguageAcquirer():
         self.draw_graph(favourite_all_syntax_tree_levels)
 
         if ARGS.db_parse:
+            #self.make_parse_node('Q (talk (a lake))','does a lake talk'.split()).possible_split
             breakpoint()
 
     def draw_graph(self,all_syntax_tree_levels,is_gt=False):
@@ -505,6 +487,11 @@ class LanguageAcquirer():
         leaves.sort(key=lambda x:x['idx'])
         G=nx.Graph()
         all_words = all_syntax_tree_levels[0][0]['words'].split()
+        for i in range(len(all_words)):
+            if all_words.count(all_words[i]) > 1:
+                matching_idxs = [idx for idx,w in enumerate(words) if w == all_words[i]]
+                for suffix,midx in matching_idxs:
+                    all_words[midx] = all_words[midx] + suffix
 
         def _wp(w):
             return all_words.index(w) - (len(all_words)-1)/2
@@ -513,18 +500,20 @@ class LanguageAcquirer():
             return sum([_wp(w) for w in words.split()])/len(words.split())
 
         for j,syntax_tree_level in enumerate(all_syntax_tree_levels):
-            what_avg_should_be = _wps(' '.join([n['words'] for n in syntax_tree_level]))
             wrong_avg = sum([_wps(n['words']) for n in syntax_tree_level])/len(syntax_tree_level)
+            what_avg_should_be = sum([x['hor_pos']*len(x['words']) for x in syntax_tree_level])/len(syntax_tree_level)**2
             correction = what_avg_should_be - wrong_avg
             for i,node in enumerate(syntax_tree_level):
-                hor_pos = _wps(node['words'])
-                if len(node['words'].split()) > 1:
+                hor_pos = node['hor_pos']
+                if node['rule'] != 'leaf': # keep leaves exactly on their bin
                     hor_pos += correction
                 if node['rule'] == 'leaf':
                     combined = 'leaf'
                 else:
                     combined = node['left_child']['syn_cat']+' + '+node['right_child']['syn_cat']
                 split_prob = self.syntaxl.prob(combined,node['syn_cat'])
+                if any([x[1]['pos'] ==(node['hor_pos'],-j) for x in G.nodes(data=True)]):
+                    breakpoint()
                 G.add_node(node['idx'],pos=(hor_pos,-j),label=f"{node['syn_cat']}\n{split_prob:.3f}")
                 if node['idx'] != '1': # root
                     G.add_edge(node['idx'],node['idx'][:-2]+'1')
@@ -543,23 +532,23 @@ class LanguageAcquirer():
             G.add_edge(treesize+i,node['idx'],weight=round(shell_lf_prob,3))
 
             condensed_lf = node['lf'].replace('lambda ','L')
-            G.add_node(n_leaves+treesize+i, pos=(hor_pos,-n_leaves-1), label=condensed_lf)
+            G.add_node(n_leaves+treesize+i, pos=(node['hor_pos'],-n_leaves-1), label=condensed_lf)
             lf_prob = self.meaningl.prob(node['lf'], node['shell_lf'])
             G.add_edge(n_leaves+treesize+i, treesize+i, weight=round(lf_prob,3))
 
-            G.add_node(2*n_leaves+treesize+i, pos=(hor_pos,-n_leaves-2), label=node['words'])
+            G.add_node(2*n_leaves+treesize+i, pos=(node['hor_pos'],-n_leaves-2), label=node['words'])
             word_prob = self.wordl.prob(node['words'],node['lf'])
             G.add_edge(2*n_leaves+treesize+i, n_leaves+treesize+i, weight=round(word_prob,3))
 
+        fname = '_'.join([l['words'].replace(' ','_') for l in leaves])
         edge_labels = {k:round(v,2) for k,v in nx.get_edge_attributes(G,'weight').items()}
         node_labels = nx.get_node_attributes(G,'label')
         pos = nx.get_node_attributes(G,'pos')
         nx.draw(G, pos, labels=node_labels, node_color='pink')
         edge_labels = nx.get_edge_attributes(G,'weight')
         nx.draw_networkx_edge_labels(G,pos,edge_labels=edge_labels,rotate=False)
-        fname = '_'.join([l['words'].replace(' ','_') for l in leaves])
         if is_gt:
-            fname = fname + 'GT' if is_gt else '_'.join(words)
+            fname = fname + 'GT'
             plt.title('GT')
         else:
             plt.title('PRED')
@@ -567,25 +556,6 @@ class LanguageAcquirer():
         plt.clf()
         if ARGS.show_graphs:
             os.system(f'/usr/bin/xdg-open plotted_graphs/{fname}.png')
-
-    def prob_of_split(self,x,is_map): # slow, just use for pdb
-        if x['left'].is_fwd:
-            f = x['left'].syn_cat
-            g = x['right'].syn_cat
-        else:
-            f = x['right'].syn_cat
-            g = x['left'].syn_cat
-        if '\\' in g or '/' in g:
-            parent_syn_cat = f[:-len(g)+3] # brackets
-        else:
-            parent_syn_cat = f[:-len(g)+1]
-        split_prob = self.syntaxl.prob(g + ' + ' + f,parent_syn_cat)
-        prob_cache = {}
-        left_prob = x['left'].probs(self.syntaxl,self.shmeaningl,
-                    self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=is_map)
-        right_prob = x['right'].probs(self.syntaxl,self.shmeaningl,
-                    self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=is_map)
-        return split_prob*left_prob*right_prob
 
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
@@ -641,8 +611,8 @@ if __name__ == "__main__":
     train_data = all_data[:-len(all_data)//5]
     test_data = train_data if ARGS.test_run else all_data[-len(all_data)//5:]
     if 'questions' in ARGS.dset:
-        univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a (lambda $0.lake $0)))'}
-        train_data.append(univ)
+        univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a lake))'}
+        train_data = train_data[:10] + [univ] + train_data[10:]
         test_data = [univ] + test_data
     start_time = time()
     for epoch_num in range(ARGS.n_epochs):
@@ -683,8 +653,8 @@ if __name__ == "__main__":
     for dpoint in test_data[:ARGS.n_test]:
         language_acquirer.parse(dpoint['words'])
     if ARGS.test_gts:
-        for gt in gts:
-            language_acquirer.parse(gt['1']['words'])
+        for sent,gt in gts.items():
+            language_acquirer.parse(gt[0][0]['words'].split())
             language_acquirer.draw_graph(gt,is_gt=True)
     print(language_acquirer.syntaxl.memory['S/NP'])
     if ARGS.db_after:
