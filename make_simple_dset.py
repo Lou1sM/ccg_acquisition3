@@ -1,4 +1,5 @@
 import json
+import os
 import numpy as np
 import argparse
 
@@ -10,7 +11,7 @@ ARGS = ARGS.parse_args()
 with open('data/preprocessed_geoqueries.json') as f:
     d = json.load(f)
 
-nps = d['np_list']
+nps = d['np_list'] + ['you']
 breakpoint()
 
 transitives = ['like', 'buy', 'has', 'address', 'border', 'hate', 'want', 'throw', 'traverse', 'devour', 'kick', 'love', 'enrich','deracinate']
@@ -61,8 +62,10 @@ def make_relative():
 dpoints = [make_sentence(coin_flip(0.5 if ARGS.with_questions else 0)) for _ in range(ARGS.num_dpoints)]
 processed_dset = {'np_list':nps, 'nouns':nouns, 'intransitive_verbs':list(intransitives),
                     'transitive_verbs': list(transitives), 'data':dpoints}
-breakpoint()
 print(processed_dset)
 fpath = f'data/determiners_questions{ARGS.num_dpoints}.json' if ARGS.with_questions else f'data/determiners{ARGS.num_dpoints}.json'
+if os.path.exists(fpath):
+    fpath += '.1'
+    print(f'path already exists, renaming to {fpath}')
 with open(fpath,'w') as f:
     json.dump(processed_dset,f)
