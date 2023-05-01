@@ -158,14 +158,14 @@ def concat_lfs(lf_str1,lf_str2):
     return '(' + lf_str1 + ') (' + lf_str2 + ')'
 
 def is_congruent(sc1,sc2):
-    return sc1 == 'X' or sc2 == 'X' or num_nps(sc1) == num_nps(sc2)
+    return sc1 == 'X' or sc2 == 'X' or n_nps(sc1) == n_nps(sc2)
 
 def is_direct_congruent(sc1,sc2):
     sc1 = re.sub(r'[\\/]','|',sc1)
     sc2 = re.sub(r'[\\/]','|',sc2)
     return sc1 == sc2
 
-def num_nps(sem_cat):
+def n_nps(sem_cat):
     if sem_cat == 'NP':
         return 1
     elif sem_cat in ['Sq','S','N']:
@@ -174,7 +174,7 @@ def num_nps(sem_cat):
         splits = split_respecting_brackets(sem_cat,sep=['\\','/','|'],debracket=True)
         if not splits[0] != sem_cat:
             breakpoint()
-        return num_nps(splits[0]) - sum([num_nps(sc) for sc in splits[1:]])
+        return n_nps(splits[0]) - sum([n_nps(sc) for sc in splits[1:]])
 
 def is_balanced_nums_brackets(s):
     return len(re.findall(r'\(',s)) == len(re.findall(r'\)',s))
@@ -187,15 +187,15 @@ def outermost_first_bracketed_chunk(s):
     if '(' not in s:
         assert ')' not in s
         return s, ''
-    num_open_brackets = 0
+    n_open_brackets = 0
     has_been_bracketed = False
     for i,c in enumerate(s):
         if c == '(':
-            num_open_brackets += 1
+            n_open_brackets += 1
             has_been_bracketed = True
         elif c == ')':
-            num_open_brackets -= 1
-        if num_open_brackets == 0 and has_been_bracketed:
+            n_open_brackets -= 1
+        if n_open_brackets == 0 and has_been_bracketed:
             assert is_balanced_nums_brackets(s[:i+1])
             assert is_balanced_nums_brackets(s[i+1:])
             return s[:i+1], s[i+1:]
@@ -205,7 +205,7 @@ def split_respecting_brackets(s,sep=' ',debracket=False):
     """Only make a split when there are no open brackets."""
     if debracket:
         s = maybe_debrac(s)
-    num_open_brackets = 0
+    n_open_brackets = 0
     split_points = [-1]
     if isinstance(sep,str):
         sep = [sep]
@@ -213,12 +213,12 @@ def split_respecting_brackets(s,sep=' ',debracket=False):
         assert isinstance(sep,list)
 
     for i,c in enumerate(s):
-        if c in sep and num_open_brackets == 0:
+        if c in sep and n_open_brackets == 0:
             split_points.append(i)
         elif c == '(':
-            num_open_brackets += 1
+            n_open_brackets += 1
         elif c == ')':
-            num_open_brackets -= 1
+            n_open_brackets -= 1
     split_points.append(len(s))
     splits = [s[split_points[i]+1:split_points[i+1]] for i in range(len(split_points)-1)]
     return splits
@@ -262,7 +262,7 @@ def normalize_dict(d):
         norm = sum(d.values())
         return {k:v/norm for k,v in d.items()}
 
-def num_lambda_binders(s):
+def n_lambda_binders(s):
     maybe_lambda_list = split_respecting_brackets(s,sep='.')
     assert all([x.startswith('lambda') for x in maybe_lambda_list[:-1]])
     return len(maybe_lambda_list)-1
@@ -273,15 +273,15 @@ def translate_by_unify(x,y):
     x_list = re.split(r'[ ,().]',x)
     y_list = re.split(r'[ ,().]',y)
     assert len(x_list) == len(y_list)
-    new_var_num_diff = 'none'
+    new_var_n_diff = 'none'
     for x_term,y_term in zip(x_list,y_list):
         if 'lambda' not in x_term:
             assert 'lambda' not in y_term
             if '$' in x_term:
                 assert '$' in y_term
-                new_new_var_num_diff = int(y_term[1:]) - int(x_term[1:])
-                assert new_var_num_diff in ['none',new_new_var_num_diff]
-                new_var_num_diff = new_new_var_num_diff
+                new_new_var_n_diff = int(y_term[1:]) - int(x_term[1:])
+                assert new_var_n_diff in ['none',new_new_var_n_diff]
+                new_var_n_diff = new_new_var_n_diff
             if x_term!=y_term:
                 translation[x_term] = y_term
     return translation
@@ -294,10 +294,10 @@ def translate(s,trans_dict):
     if var_trans_sources != []:
         max_var_in_source_language = max(var_trans_sources, key=lambda x: int(x[1:]))
         max_var_in_target_language = max(var_trans_targets, key=lambda x: int(x[1:]))
-        new_var_num_diff = int(max_var_in_target_language[1:])-int(max_var_in_source_language[1:])
+        new_var_n_diff = int(max_var_in_target_language[1:])-int(max_var_in_source_language[1:])
         for var in re.findall(r'\$\d',s):
             if var not in trans_dict:
-                trans_dict[var] = f'${int(var[1:])+new_var_num_diff}'
+                trans_dict[var] = f'${int(var[1:])+new_var_n_diff}'
     trans_dict1 = {k:v[0]+'£'+''.join(v[1:]) for k,v in trans_dict.items()}
     trans_dict2 = {k[0]+'£'+''.join(k[1:]):k for k in trans_dict.values()}
     for old,new in trans_dict1.items():
@@ -332,13 +332,13 @@ def get_combination(left_cat,right_cat):
     if is_atomic(left_cat) and is_atomic(right_cat):
         return None, None
     elif re.search(fr'[/|]\({re.escape(right_cat)}\)$',left_cat):
-        return left_cat[:-len(right_cat)-3],'fwd_app'
+        combined, rule = left_cat[:-len(right_cat)-3],'fwd_app'
     elif re.search(fr'[/|]{re.escape(right_cat)}$',left_cat) and is_atomic(right_cat):
-        return left_cat[:-len(right_cat)-1],'fwd_app'
+        combined, rule = left_cat[:-len(right_cat)-1],'fwd_app'
     elif re.search(fr'[\\|]\({re.escape(left_cat)}\)$',right_cat):
-        return right_cat[:-len(left_cat)-3],'bck_app'
+        combined, rule = right_cat[:-len(left_cat)-3],'bck_app'
     elif re.search(fr'[\\|]{re.escape(left_cat)}$',right_cat) and is_atomic(left_cat):
-        return right_cat[:-len(left_cat)-1],'bck_app'
+        combined, rule = right_cat[:-len(left_cat)-1],'bck_app'
     elif is_atomic(left_cat) or is_atomic(right_cat): # can't do composition then
         return None, None
     else:
@@ -347,11 +347,45 @@ def get_combination(left_cat,right_cat):
         if left_slash != right_slash and '|' not in [left_slash ,right_slash]: # skip crossed composition
             return None, None
         elif maybe_debrac(left_in) == maybe_debrac(right_out):
-            return ''.join((left_out, left_slash, right_in)), 'fwd_cmp'
+            combined, rule = ''.join((left_out, left_slash, right_in)), 'fwd_cmp'
         elif left_out == right_in:
-            return ''.join((right_out, right_slash, left_in)), 'bck_cmp'
+            combined, rule = ''.join((right_out, right_slash, left_in)), 'bck_cmp'
         else:
             return None,None
+    if combined in ['S|N','S|N|NP']:
+        return None, None
+    else:
+        return combined, rule
+
+def infer_slash(lcat,rcat,parent_cat,rule):
+    if rule == 'fwd_app':
+        if is_atomic(rcat):
+            assert is_direct_congruent(lcat[:-len(rcat)-1],parent_cat)
+        else:
+            assert is_direct_congruent(lcat[:-len(rcat)-3],parent_cat)
+        out_lcat = parent_cat + '/' + rcat
+        out_rcat = rcat
+    elif rule == 'bck_app':
+        if is_atomic(lcat):
+            assert is_direct_congruent(rcat[:-len(lcat)-1],parent_cat)
+        else:
+            assert is_direct_congruent(rcat[:-len(lcat)-3],parent_cat)
+        out_rcat = rcat[:-len(lcat)-1] + '\\' + lcat
+        out_lcat = lcat
+    else:
+        left_out, left_slash, left_in = cat_components(lcat)
+        right_out, right_slash, right_in = cat_components(rcat)
+        assert left_slash == right_slash
+    if rule == 'fwd_cmp':
+        out_lcat = left_out + '/' + right_in
+        out_rcat = rcat
+    elif rule == 'bck_cmp':
+        out_rcat = right_out + '\\' + left_in
+        out_lcat = lcat
+
+    elif '\\' not in out_lcat and '/' not in out_lcat and '\\' not in out_rcat and '/' not in out_rcat:
+        breakpoint()
+    return out_lcat, out_rcat
 
 def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
     pout,pslash,pin = cat_components(parent_cat)

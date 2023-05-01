@@ -1,4 +1,6 @@
 import numpy as np
+from gt_parse_graphs import gts
+import os
 import networkx as nx
 import matplotlib.pyplot as plt
 import math
@@ -7,7 +9,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise, split_respecting_brackets, num_lambda_binders, possible_syn_cats
+from utils import file_print, get_combination, is_direct_congruent, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise, split_respecting_brackets, n_lambda_binders, possible_syn_cats, infer_slash
 from time import time
 import argparse
 from abc import ABC
@@ -120,11 +122,10 @@ class BaseDirichletProcessLearner(ABC):
 
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        if x == 'NP + S/NP\\NP':
-            print('observing weird SVO')
-            return 0
-        num_slashes = len(re.findall(r'[\\/\|]',x))
-        return (0.5555)*0.9**(num_slashes+1) # Omri 2017 had 0.2
+        assert x != 'NP + S/NP\\NP'
+        #n_slashes = len(re.findall(r'[\\/\|]',x))
+        #return (0.5555)*0.9**(n_slashes+1) # Omri 2017 had 0.2
+        return 1
 
     def observe(self,y,x,weight):
         if y == 'leaf':
@@ -135,6 +136,8 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def prob(self,y,x):
         if y != 'leaf':
             outcat, _ = get_combination(*y.split(' + '))
+            if outcat is None: #only time this should happen is during inference with crossed cmp
+                return 0
             if not is_direct_congruent(outcat,x):
                 return 0
         base_prob = self.base_distribution(y)
@@ -148,13 +151,13 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
 
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        num_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
-        num_constants = float('const' in x)+float('quant' in x)
+        n_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
+        n_constants = float('const' in x)+float('quant' in x)
         norm_factor = (np.e+1)/(np.e**2 - np.e - 1)
-        return norm_factor * np.e**(-2*num_vars - num_constants)
+        return norm_factor * np.e**(-2*n_vars - n_constants)
 
     def prob(self,y,x):
-        if len(split_respecting_brackets(x,sep=['/','\\','|'])) != num_lambda_binders(y)+1:
+        if len(split_respecting_brackets(x,sep=['/','\\','|'])) != n_lambda_binders(y)+1:
             return 0
         base_prob = self.base_distribution(y)
         if x not in self.memory:
@@ -164,23 +167,23 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
 
 class MeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        num_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
-        num_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
+        n_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
+        n_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
         norm_factor = (np.e+1)/(np.e**2 - np.e - 1)
-        return norm_factor * np.e**(-2*num_vars - num_constants)
+        return norm_factor * np.e**(-2*n_vars - n_constants)
 
 class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution(self,x):
         assert len(x) > 0
-        return 28**(-len(x)//2-1) # kinda approximate num phonetic chunks
+        return 28**-math.ceil(len(x)/2) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
     def __init__(self,base_lexicon):
         self.base_lexicon = base_lexicon
-        self.syntax_learner = CCGDirichletProcessLearner(10)
-        self.shell_meaning_learner = ShellMeaningDirichletProcessLearner(1)
-        self.meaning_learner = MeaningDirichletProcessLearner(1)
-        self.word_learner = WordSpanDirichletProcessLearner(0.25)
+        self.syntaxl = CCGDirichletProcessLearner(10)
+        self.shmeaningl = ShellMeaningDirichletProcessLearner(1)
+        self.meaningl = MeaningDirichletProcessLearner(1)
+        self.wordl = WordSpanDirichletProcessLearner(0.25)
         self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
         self.lf_parts_cache = {'splits':{},'cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
@@ -188,41 +191,41 @@ class LanguageAcquirer():
 
     @property
     def lf_vocab(self):
-        return self.word_learner.memory.keys()
+        return self.wordl.memory.keys()
 
     @property
     def shell_lf_vocab(self):
-        return self.meaning_learner.memory.keys()
+        return self.meaningl.memory.keys()
 
     @property
     def sem_cat_vocab(self):
-        return self.shell_meaning_learner.memory.keys()
+        return self.shmeaningl.memory.keys()
 
     @property
     def syn_cat_vocab(self):
-        return self.syntax_learner.memory.keys()
+        return self.syntaxl.memory.keys()
 
     @property
     def splits_vocab(self):
-        return list(set([w for x in self.syntax_learner.memory.values() for w in x.keys() if w!='count']))
+        return list(set([w for x in self.syntaxl.memory.values() for w in x.keys() if w!='count']))
 
     @property
     def mwe_vocab(self):
-        return list(set([w for x in self.word_learner.memory.values() for w in x.keys() if w!='count']))
+        return list(set([w for x in self.wordl.memory.values() for w in x.keys() if w!='count']))
 
     @property
     def vocab(self):
-        return list(set([w for x in self.word_learner.memory.values()
+        return list(set([w for x in self.wordl.memory.values()
                         for w in x.keys() if ' ' not in w]))
 
     def load_from(self,fpath):
         distributions_fpath = join(fpath,'distributions.json')
         with open(distributions_fpath) as f:
             to_load = json.load(f)
-        self.syntax_learner.set_from_dict(to_load['syntax'])
-        self.shell_meaning_learner.set_from_dict(to_load['shell_meaning'])
-        self.meaning_learner.set_from_dict(to_load['meaning'])
-        self.word_learner.set_from_dict(to_load['word'])
+        self.syntaxl.set_from_dict(to_load['syntax'])
+        self.shmeaningl.set_from_dict(to_load['shmeaningl'])
+        self.meaningl.set_from_dict(to_load['meaning'])
+        self.wordl.set_from_dict(to_load['word'])
 
         self.word_to_lf_probs = pd.read_pickle(join(fpath,'word_to_lf_probs.pkl'))
         self.lf_to_lf_shell_probs = pd.read_pickle(join(fpath,'lf_to_lf_shell_probs.pkl'))
@@ -230,14 +233,14 @@ class LanguageAcquirer():
         self.word_to_sem_probs = pd.read_pickle(join(fpath,'word_to_sem_probs.pkl'))
 
     def save_to(self,fpath):
-        to_dump = {'syntax': {'memory':self.syntax_learner.memory,
-                   'base_distribution_cache':self.syntax_learner.base_distribution_cache},
-                  'shell_meaning': {'memory':self.shell_meaning_learner.memory,
-                   'base_distribution_cache':self.shell_meaning_learner.base_distribution_cache},
-                  'meaning': {'memory':self.meaning_learner.memory,
-                   'base_distribution_cache':self.meaning_learner.base_distribution_cache},
-                  'word': {'memory':self.word_learner.memory,
-                   'base_distribution_cache':self.word_learner.base_distribution_cache}}
+        to_dump = {'syntax': {'memory':self.syntaxl.memory,
+                   'base_distribution_cache':self.syntaxl.base_distribution_cache},
+                  'shmeaningl': {'memory':self.shmeaningl.memory,
+                   'base_distribution_cache':self.shmeaningl.base_distribution_cache},
+                  'meaning': {'memory':self.meaningl.memory,
+                   'base_distribution_cache':self.meaningl.base_distribution_cache},
+                  'word': {'memory':self.wordl.memory,
+                   'base_distribution_cache':self.wordl.base_distribution_cache}}
 
         distributions_fpath = join(fpath,'distributions.json')
         with open(distributions_fpath,'w') as f:
@@ -248,13 +251,13 @@ class LanguageAcquirer():
         self.lf_shell_to_sem_probs.to_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
 
     def flush_buffers(self):
-        self.syntax_learner.flush_buffer()
-        self.shell_meaning_learner.flush_buffer()
-        self.meaning_learner.flush_buffer()
-        self.word_learner.flush_buffer()
+        self.syntaxl.flush_buffer()
+        self.shmeaningl.flush_buffer()
+        self.meaningl.flush_buffer()
+        self.wordl.flush_buffer()
 
     def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
-        distr = self.word_learner.inverse_distribution(word)
+        distr = self.wordl.inverse_distribution(word)
         probs = sorted(distr.items(), key=lambda x:x[1])[-15:]
         print(f'\nLearned Meaning for \'{word}\'')
         print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs]))
@@ -270,7 +273,7 @@ class LanguageAcquirer():
 
     def show_splits(self,syn_cat,f):
         file_print(f'Learned splits for category {syn_cat}',f)
-        counts = self.syntax_learner.memory[syn_cat]
+        counts = self.syntaxl.memory[syn_cat]
         norm = counts['count']
         probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='count'}
         file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
@@ -286,13 +289,13 @@ class LanguageAcquirer():
     def train_one_step(self,lf_str,words):
         root = self.make_parse_node(lf_str,words)
         prob_cache = {}
-        root_prob = root.propagate_below_probs(self.syntax_learner,self.shell_meaning_learner,
-                       self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=False)
+        root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
+                       self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=False)
         root.propagate_above_probs(1)
         #print(words)
-        #if len(words) == 4 and words[0] == 'does':
+        if len(words) == 4 and words[0] == 'does':
             #breakpoint()
-            #root.logical_form.subtree_string_(as_shell=True,recompute=True,show_treelike=False)
+            root.logical_form.subtree_string_(as_shell=True,recompute=True,show_treelike=False)
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 if node.is_fwd:
@@ -300,15 +303,18 @@ class LanguageAcquirer():
                 else:
                     syntax_split = node.sibling.syn_cat + ' + ' + node.syn_cat
                 update_weight = node.below_prob * node.above_prob / root_prob # for conditional
-                self.syntax_learner.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
+                self.syntaxl.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
             assert leaf_prob > 0
             lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cat, syn_cat = node.info_if_leaf()
-            self.syntax_learner.buffer.append(('leaf',syn_cat,leaf_prob))
-            self.shell_meaning_learner.buffer.append((shell_lf,sem_cat,leaf_prob))
-            self.meaning_learner.buffer.append((lf,shell_lf,leaf_prob))
-            self.word_learner.buffer.append((word_str,lf,leaf_prob))
+            self.syntaxl.buffer.append(('leaf',syn_cat,leaf_prob))
+            #if shell_lf == 'lambda $0.quant $0' and sem_cat == 'NP|N':
+                #breakpoint()
+            self.shmeaningl.buffer.append((shell_lf,sem_cat,leaf_prob))
+            self.meaningl.buffer.append((lf,shell_lf,leaf_prob))
+            self.wordl.buffer.append((word_str,lf,leaf_prob))
+        #print(words,sum([x[2] for x in self.wordl.buffer]))
         self.flush_buffers()
 
     def test_NPs(self):
@@ -336,16 +342,16 @@ class LanguageAcquirer():
 
     def generate_words(self,syn_cat):
         while True:
-            split = self.syntax_learner.conditional_sample(syn_cat)
+            split = self.syntaxl.conditional_sample(syn_cat)
             if split == 'leaf':
                 break
-            if all([s in self.syntax_learner.memory for s in split.split(' + ') ]):
+            if all([s in self.syntaxl.memory for s in split.split(' + ') ]):
                 break
         sem_cat = re.sub(r'[\\/]','|',syn_cat)
         if split=='leaf':
-            shell_lf = self.shell_meaning_learner.conditional_sample(sem_cat)
-            lf = self.meaning_learner.conditional_sample(shell_lf)
-            return self.word_learner.conditional_sample(lf)
+            shell_lf = self.shmeaningl.conditional_sample(sem_cat)
+            lf = self.meaningl.conditional_sample(shell_lf)
+            return self.wordl.conditional_sample(lf)
         else:
             f,g = split.split(' + ')
             return f'{self.generate_words(f)} {self.generate_words(g)}'
@@ -361,12 +367,26 @@ class LanguageAcquirer():
         return parse_root
 
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
-        self.word_to_lf_probs = pd.DataFrame([{y:self.word_learner.prob(x,y) for y in self.lf_vocab} for x in self.mwe_vocab],index=self.mwe_vocab)
+        self.word_to_lf_probs = pd.DataFrame([{y:self.wordl.prob(x,y) for y in self.lf_vocab} for x in self.mwe_vocab],index=self.mwe_vocab)
 
-        self.lf_to_lf_shell_probs = pd.DataFrame([{y:self.meaning_learner.prob(x,y) for y in self.shell_lf_vocab} for x in self.lf_vocab],index=self.lf_vocab)
-        self.lf_shell_to_sem_probs = pd.DataFrame([{y:self.shell_meaning_learner.prob(x,y) for y in self.sem_cat_vocab} for x in self.shell_lf_vocab],index=self.shell_lf_vocab)
+        self.lf_to_lf_shell_probs = pd.DataFrame([{y:self.meaningl.prob(x,y) for y in self.shell_lf_vocab} for x in self.lf_vocab],index=self.lf_vocab)
+        self.lf_shell_to_sem_probs = pd.DataFrame([{y:self.shmeaningl.prob(x,y) for y in self.sem_cat_vocab} for x in self.shell_lf_vocab],index=self.shell_lf_vocab)
 
     def leaf_probs_of_word_span(self,words,beam_size):
+        if words not in self.mwe_vocab and ' ' not in words:
+            print(f'\'{words}\' not seen before as a leaf')
+        beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)} for lf in self.lf_vocab]
+        beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
+        beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf))
+            for shell_lf in self.shell_lf_vocab for b in beam]
+        beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
+        beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat))
+            for sem_cat in self.sem_cat_vocab for b in beam]
+        beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
+        beam = [dict(b,prob=b['prob']*self.syntaxl.prob('leaf',b['sem_cat'])) for b in beam]
+        beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
+        return [dict(b,words=words,rule='leaf',backpointer=None) for b in beam]
+
         try:
             lf_probs = self.word_to_lf_probs.loc[words]
         except KeyError: # words has never been observed as a leaf
@@ -376,22 +396,26 @@ class LanguageAcquirer():
             return []
         def _arg_and_argmax(df):
             return [(k,v,df.loc[k,v]) for k,v in df.idxmax(axis=1).items() if df.loc[k,v]>0]
+        assert all([self.wordl.prob(words,k)==v for k,v in lf_probs.items()])
         beam = lf_probs.nlargest(beam_size)
         next_lookup = self.lf_to_lf_shell_probs.loc[list(beam.keys())].T*beam
         beam = _arg_and_argmax(next_lookup)
+        breakpoint()
         beam = sorted(beam,key=lambda x:x[-1])[-beam_size:] # now list of tuples
         next_lookup = self.lf_shell_to_sem_probs.loc[[b[0] for b in beam]].T*np.array([b[-1] for b in beam])
         beam_ = _arg_and_argmax(next_lookup)
         beam_dict = {x[0]:(x[1],x[2]) for x in beam}
-        beam = [(sc,lf_shell,beam_dict[lf_shell][0],p*beam_dict[lf_shell][1]) for sc,lf_shell,p in beam_]
+        beam = [(sc,lf_shell,beam_dict[lf_shell][0],p*beam_dict[lf_shell][1]*self.syntaxl.prob('leaf',sc)) for sc,lf_shell,p in beam_]
         beam = sorted(beam,key=lambda x:x[-1])[-beam_size:]
-        beam = [(syn,*b[1:]) for b in beam for syn in possible_syn_cats(b[0])]
-        options = [{'prob':b[3],'words':words,'syn_cat':b[0],'lf':b[2],'shell_lf':b[1],'rule':'leaf','backpointer':None} for b in beam[-beam_size:]]
+        beam = [(syn,*b) for b in beam for syn in possible_syn_cats(b[0])]
+        options = [{'prob':b[4],'words':words,'syn_cat':b[0],'sem_cat':b[1],'lf':b[3],'shell_lf':b[2],'rule':'leaf','backpointer':None} for b in beam[-beam_size:]]
+        for opt in options:
+            assert opt['prob'] == self.syntaxl.prob('leaf',opt['sem_cat'])*self.shmeaningl.prob(opt['shell_lfs'],opt['sem_cat'])*self.meaningl.prob(opt['lf'],opt['shell_lf'])*self.wordl.prob(opt['words'],opt['lf'])
         return options
 
     def parse(self,words):
         N = len(words)
-        beam_size = 5
+        beam_size = 50
         probs_table = np.empty((N,N),dtype='object') #(i,j) will be a dict of len(beam_size) saying probs of top syn_cats
         for i in range(N):
             probs_table[0,i] = self.leaf_probs_of_word_span(words[i],beam_size)
@@ -403,11 +427,11 @@ class LanguageAcquirer():
                 right_chunk_probs = probs_table[i-k-1,j+k] # total len is always i, -1s bc 0-index
                 for left_idx, left_option in enumerate(left_chunk_probs):
                     for right_idx, right_option in enumerate(right_chunk_probs):
-                        lsyn_cat, rsyn_cat = left_option['syn_cat'], right_option['syn_cat']
-                        should_type_raise, outcat = is_fit_by_type_raise(lsyn_cat,rsyn_cat)
-                        if should_type_raise:
-                            lsyn_cat = type_raise(lsyn_cat,'fwd',outcat)
-                        combined,rule = get_combination(lsyn_cat,rsyn_cat)
+                        l_cat, r_cat = left_option['sem_cat'], right_option['sem_cat']
+                        #should_type_raise, outcat = is_fit_by_type_raise(lsyn_cat,rsyn_cat)
+                        #if should_type_raise:
+                            #lsyn_cat = type_raise(lsyn_cat,'fwd',outcat)
+                        combined,rule = get_combination(l_cat,r_cat)
                         if combined is None:
                             continue
                         direction,comb_type = rule.split('_')
@@ -420,15 +444,18 @@ class LanguageAcquirer():
                         if comb_type == 'cmp':
                             f = logical_type_raise(f)
                         lf = combine_lfs(f,g,comb_type)
-                        split = lsyn_cat + ' + ' + rsyn_cat
-                        prob = left_option['prob']*right_option['prob']*self.syntax_learner.prob(split,combined)
-                        backpointer = (k,j,left_idx), (i-k,j+k,right_idx)
-                        #backpointer contains the coordinates in probs_table, and the idx in the
-                        #beam, of the two locations that the current one could be split into
-                        pn = {'sem_cat':combined,'syn_cat':combined,'lf':lf,'backpointer':backpointer,'rule':rule,'prob':prob,'words':' '.join(words[j:j+i])}
-                        possible_nexts.append(pn)
+                        for csync in possible_syn_cats(combined):
+                            lsync, rsync = infer_slash(left_option['sem_cat'],right_option['sem_cat'],csync,rule)
+                            split = lsync + ' + ' + rsync
+                            prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,csync)
+                            backpointer = (k,j,left_idx), (i-k,j+k,right_idx)
+                            #backpointer contains the coordinates in probs_table, and the idx in the
+                            #beam, of the two locations that the current one could be split into
+                            pn = {'sem_cat':combined,'lf':lf,'backpointer':backpointer,'rule':rule,'prob':prob,'words':' '.join(words[j:j+i]),'syn_cat':csync}
+                            possible_nexts.append(pn)
             if i == N:
                 for pn in possible_nexts:
+                    pn['syn_cat'] = pn['sem_cat']
                     pn['prob'] = pn['prob']*self.root_sem_cat_memory.prob(pn['syn_cat'])
             to_add =sorted(possible_nexts,key=lambda x:x['prob'])[-beam_size:]
             probs_table[i-1,j] = to_add
@@ -440,74 +467,89 @@ class LanguageAcquirer():
             return 'No parse found'
 
         def show_parse(num):
-            running_bfs_idx = 0
             syntax_tree_level = [dict(probs_table[N-1,0][num],idx='1')]
-            leaves = []
             all_syntax_tree_levels = []
             for i in range(N):
                 new_syntax_tree_level = []
                 for item in syntax_tree_level:
                     if item['rule'] == 'leaf':
-                        item['split_prob'] = self.syntax_learner.prob('leaf',item['syn_cat'])
-                        item['shell_lf_prob'] = self.shell_meaning_learner.prob(item['shell_lf'],item['syn_cat'])
-                        item['lf_prob'] = self.meaning_learner.prob(item['lf'],item['shell_lf'])
-                        item['word_prob'] = self.word_learner.prob(item['words'],item['lf'])
-                        leaves.append(item)
                         continue
                     backpointer = item['backpointer']
                     (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = backpointer
                     left_split = probs_table[left_len-1,left_pos][left_idx]
                     right_split = probs_table[right_len-1,right_pos][right_idx]
-                    combined = left_split['syn_cat'] + ' + ' + right_split['syn_cat']
-                    item['split_prob'] = self.syntax_learner.prob(combined,item['syn_cat'])
+                    item['left_child'] = left_split
+                    item['right_child'] = right_split
+                    lsync, rsync = infer_slash(left_split['sem_cat'],right_split['sem_cat'],item['syn_cat'],item['rule'])
+                    left_split['syn_cat'] = lsync
+                    right_split['syn_cat'] = rsync
                     new_syntax_tree_level.append(dict(left_split,idx=item['idx'][:-1] + '01'))
                     new_syntax_tree_level.append(dict(right_split,idx=item['idx'][:-1] + '21'))
-                    running_bfs_idx += 2
                 all_syntax_tree_levels.append(syntax_tree_level)
-                if all([x['rule']=='leaf' for x in syntax_tree_level]): # parse is already at all leaves
+                if all([x['rule']=='leaf' for x in syntax_tree_level]):
                     break
                 syntax_tree_level = copy(new_syntax_tree_level)
             if ARGS.db_parse:
                 print(probs_table)
                 pprint(all_syntax_tree_levels)
-            return all_syntax_tree_levels, leaves
+            return all_syntax_tree_levels
 
-        all_syntax_tree_levels, leaves = show_parse(-1)
+        favourite_all_syntax_tree_levels = show_parse(-1)
+        self.draw_graph(favourite_all_syntax_tree_levels)
+
         if ARGS.db_parse:
             breakpoint()
 
+    def draw_graph(self,all_syntax_tree_levels,is_gt=False):
+        leaves = [n for level in all_syntax_tree_levels for n in level if n['rule']=='leaf']
+        leaves.sort(key=lambda x:x['idx'])
         G=nx.Graph()
         all_words = all_syntax_tree_levels[0][0]['words'].split()
+
         def _wp(w):
             return all_words.index(w) - (len(all_words)-1)/2
+
         def _wps(words):
             return sum([_wp(w) for w in words.split()])/len(words.split())
+
         for j,syntax_tree_level in enumerate(all_syntax_tree_levels):
             what_avg_should_be = _wps(' '.join([n['words'] for n in syntax_tree_level]))
             wrong_avg = sum([_wps(n['words']) for n in syntax_tree_level])/len(syntax_tree_level)
             correction = what_avg_should_be - wrong_avg
             for i,node in enumerate(syntax_tree_level):
                 hor_pos = _wps(node['words'])
-                if node['rule'] != 'leaf':
+                if len(node['words'].split()) > 1:
                     hor_pos += correction
-                G.add_node(node['idx'],pos=(hor_pos,-j),label=f"{node['syn_cat']}\n{node['split_prob']:.3f}",split_prob=node['prob'])
+                if node['rule'] == 'leaf':
+                    combined = 'leaf'
+                else:
+                    combined = node['left_child']['syn_cat']+' + '+node['right_child']['syn_cat']
+                split_prob = self.syntaxl.prob(combined,node['syn_cat'])
+                G.add_node(node['idx'],pos=(hor_pos,-j),label=f"{node['syn_cat']}\n{split_prob:.3f}")
                 if node['idx'] != '1': # root
                     G.add_edge(node['idx'],node['idx'][:-2]+'1')
 
         G.add_node('root',pos=(-1,0),label='ROOT')
         root_weight = self.root_sem_cat_memory.prob(all_syntax_tree_levels[0][0]['syn_cat'])
         G.add_edge('root','1',weight=round(root_weight,3))
-        num_syntax_nodes = len(G.nodes())
-        num_leaves = len(leaves)
+        treesize = len(G.nodes())
+        n_leaves = len(leaves)
         posses_so_far = nx.get_node_attributes(G,'pos')
         for i,node in enumerate(leaves):
             hor_pos = posses_so_far[node['idx']][0]
-            G.add_node(num_syntax_nodes+i,pos=(hor_pos,-num_leaves),label=node['shell_lf'])
-            G.add_edge(num_syntax_nodes+i,node['idx'],weight=round(node['shell_lf_prob'],3))
-            G.add_node(num_leaves+num_syntax_nodes+i,pos=(hor_pos,-num_leaves-1),label=node['lf'])
-            G.add_edge(num_leaves+num_syntax_nodes+i,num_syntax_nodes+i,weight=round(node['lf_prob'],3))
-            G.add_node(2*num_leaves+num_syntax_nodes+i,pos=(hor_pos,-num_leaves-2),label=node['words'])
-            G.add_edge(2*num_leaves+num_syntax_nodes+i,num_leaves+num_syntax_nodes+i,weight=round(node['word_prob'],3))
+            condensed_shell_lf = node['shell_lf'].replace('lambda ','L')
+            G.add_node(treesize+i,pos=(hor_pos,-n_leaves),label=condensed_shell_lf)
+            shell_lf_prob = self.shmeaningl.prob(node['shell_lf'],node['sem_cat'])
+            G.add_edge(treesize+i,node['idx'],weight=round(shell_lf_prob,3))
+
+            condensed_lf = node['lf'].replace('lambda ','L')
+            G.add_node(n_leaves+treesize+i, pos=(hor_pos,-n_leaves-1), label=condensed_lf)
+            lf_prob = self.meaningl.prob(node['lf'], node['shell_lf'])
+            G.add_edge(n_leaves+treesize+i, treesize+i, weight=round(lf_prob,3))
+
+            G.add_node(2*n_leaves+treesize+i, pos=(hor_pos,-n_leaves-2), label=node['words'])
+            word_prob = self.wordl.prob(node['words'],node['lf'])
+            G.add_edge(2*n_leaves+treesize+i, n_leaves+treesize+i, weight=round(word_prob,3))
 
         edge_labels = {k:round(v,2) for k,v in nx.get_edge_attributes(G,'weight').items()}
         node_labels = nx.get_node_attributes(G,'label')
@@ -515,9 +557,16 @@ class LanguageAcquirer():
         nx.draw(G, pos, labels=node_labels, node_color='pink')
         edge_labels = nx.get_edge_attributes(G,'weight')
         nx.draw_networkx_edge_labels(G,pos,edge_labels=edge_labels,rotate=False)
-        plt.show()
-
-        return leaves
+        fname = '_'.join([l['words'].replace(' ','_') for l in leaves])
+        if is_gt:
+            fname = fname + 'GT' if is_gt else '_'.join(words)
+            plt.title('GT')
+        else:
+            plt.title('PRED')
+        plt.savefig(f'plotted_graphs/{fname}.png')
+        plt.clf()
+        if ARGS.show_graphs:
+            os.system(f'/usr/bin/xdg-open plotted_graphs/{fname}.png')
 
     def prob_of_split(self,x,is_map): # slow, just use for pdb
         if x['left'].is_fwd:
@@ -530,29 +579,32 @@ class LanguageAcquirer():
             parent_syn_cat = f[:-len(g)+3] # brackets
         else:
             parent_syn_cat = f[:-len(g)+1]
-        split_prob = self.syntax_learner.prob(g + ' + ' + f,parent_syn_cat)
+        split_prob = self.syntaxl.prob(g + ' + ' + f,parent_syn_cat)
         prob_cache = {}
-        left_prob = x['left'].probs(self.syntax_learner,self.shell_meaning_learner,
-                    self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=is_map)
-        right_prob = x['right'].probs(self.syntax_learner,self.shell_meaning_learner,
-                    self.meaning_learner,self.word_learner,prob_cache,split_prob=1,is_map=is_map)
+        left_prob = x['left'].probs(self.syntaxl,self.shmeaningl,
+                    self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=is_map)
+        right_prob = x['right'].probs(self.syntaxl,self.shmeaningl,
+                    self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=is_map)
         return split_prob*left_prob*right_prob
 
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("--expname", type=str,default='tmp')
     ARGS.add_argument("--reload_from", type=str)
-    ARGS.add_argument("--num_dpoints", type=int, default=-1)
+    ARGS.add_argument("--n_test", type=int,default=5)
+    ARGS.add_argument("--n_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
     ARGS.add_argument("--max_sent_len", type=int, default=9)
-    ARGS.add_argument("--num_epochs", type=int, default=1)
-    ARGS.add_argument("--num_generate", type=int, default=0)
+    ARGS.add_argument("--n_epochs", type=int, default=1)
+    ARGS.add_argument("--n_generate", type=int, default=0)
     ARGS.add_argument("-tt","--short_test_run", action="store_true")
     ARGS.add_argument("-t","--test_run", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
+    ARGS.add_argument("--show_graphs", action="store_true")
     ARGS.add_argument("--db_parse", action="store_true")
     ARGS.add_argument("--db_after", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
+    ARGS.add_argument("--test_gts", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='determiners_questions1000')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
@@ -562,14 +614,14 @@ if __name__ == "__main__":
 
     if ARGS.test_run:
         ARGS.expname = 'tmp'
-        if ARGS.num_dpoints == -1:
-            ARGS.num_dpoints = 10
+        if ARGS.n_dpoints == -1:
+            ARGS.n_dpoints = 10
     elif ARGS.expname is None:
-        expname = f'{ARGS.num_epochs}_{ARGS.max_sent_len}'
+        expname = f'{ARGS.n_epochs}_{ARGS.max_sent_len}'
     else:
         expname = ARGS.expname
     if ARGS.short_test_run:
-        ARGS.num_dpoints = 30
+        ARGS.n_dpoints = 30
     set_experiment_dir(f'experiments/{ARGS.expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
     with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
 
@@ -583,13 +635,17 @@ if __name__ == "__main__":
     if ARGS.reload_from is not None:
         language_acquirer.load_from(f'experiments/{ARGS.reload_from}')
     if ARGS.shuffle: np.random.shuffle(d['data'])
-    NDPS = len(d['data']) if ARGS.num_dpoints == -1 else ARGS.num_dpoints
+    NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     f = open(f'experiments/{ARGS.expname}/results.txt','w')
     all_data = d['data'][:NDPS]
     train_data = all_data[:-len(all_data)//5]
     test_data = train_data if ARGS.test_run else all_data[-len(all_data)//5:]
+    if 'questions' in ARGS.dset:
+        univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a (lambda $0.lake $0)))'}
+        train_data.append(univ)
+        test_data = [univ] + test_data
     start_time = time()
-    for epoch_num in range(ARGS.num_epochs):
+    for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
             if i < 10 and epoch_num > 0:
@@ -606,7 +662,7 @@ if __name__ == "__main__":
         print(f"Epoch {epoch_num} time: {time()-epoch_start_time:.3f} per dpoint: {time_per_dpoint:.6f}")
         language_acquirer.show_splits(ARGS.cat_to_sample_from,f)
         final_parses = {}
-        num_correct_parses = 0
+        n_correct_parses = 0
 
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
@@ -614,9 +670,9 @@ if __name__ == "__main__":
     #meaning_acc ,syn_acc = language_acquirer.test_NPs()
     #file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     #file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
-    if ARGS.num_generate > 0:
+    if ARGS.n_generate > 0:
         file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
-    for _ in range(ARGS.num_generate):
+    for _ in range(ARGS.n_generate):
         generated = language_acquirer.generate_words(ARGS.cat_to_sample_from)
         if any([x['words'][:-1]==generated.split() for x in d['data']]):
             file_print(f'{generated}: seen during training',f)
@@ -624,9 +680,13 @@ if __name__ == "__main__":
             file_print(f'{generated}: not seen during training',f)
     file_print(f'Total run time: {time()-start_time:.3f}s',f)
     f.close()
-    for dpoint in test_data[:10]:
-        pprint(language_acquirer.parse(dpoint['words']))
-    print(language_acquirer.syntax_learner.memory['S/NP'])
+    for dpoint in test_data[:ARGS.n_test]:
+        language_acquirer.parse(dpoint['words'])
+    if ARGS.test_gts:
+        for gt in gts:
+            language_acquirer.parse(gt['1']['words'])
+            language_acquirer.draw_graph(gt,is_gt=True)
+    print(language_acquirer.syntaxl.memory['S/NP'])
     if ARGS.db_after:
         breakpoint()
     language_acquirer.save_to(f'experiments/{ARGS.expname}')
