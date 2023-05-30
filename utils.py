@@ -38,6 +38,13 @@ def maybe_de_type_raise(cat):
     return new_cat
 
 def combine_lfs(f_str,g_str,comb_type,normalize=True):
+    increment_g_vars_by = new_var_num(f_str)
+    vars_in_g = re.findall(r'(?<=\$)\d{1,2}',g_str)
+    orig_g_str = alpha_normalize(g_str)
+    if increment_g_vars_by > 0:
+        for v in sorted(set(vars_in_g),reverse=True):
+            g_str = g_str.replace(f'${v}',f'${int(v)+increment_g_vars_by}')
+    assert alpha_normalize(g_str) == orig_g_str
     if comb_type == 'app':
         unnormed = concat_lfs(f_str,g_str)
     elif comb_type == 'cmp':

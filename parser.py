@@ -51,11 +51,6 @@ class LogicalForm:
                     if d.node_type == 'unbound_var' and d.string == variable_index:
                         d.binder = self
                         d.node_type = 'bound_var'
-        elif self.base_lexicon.get(defining_string,None) == 'N':
-            self.children = []
-            self.is_leaf = True
-            self.node_type = 'noun'
-            self.string = defining_string
         elif bool(re.match(r'^Q \(.*\)$',defining_string)):
             self.node_type = 'Q'
             self.string = 'Q'
@@ -86,6 +81,8 @@ class LogicalForm:
                 self.node_type = 'connective'
             elif self.string in ['a','the']:
                 self.node_type = 'quant'
+            elif self.base_lexicon.get(defining_string,None) == 'N':
+                self.node_type = 'noun'
             else:
                 self.node_type = 'const'
         if had_surrounding_brackets:
@@ -205,8 +202,7 @@ class LogicalForm:
             assert g.subtree_string().startswith('lambda')
             f.sem_cat = 'X'
             to_add_to = self.possible_cmp_splits
-        if not combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True)== self.subtree_string(alpha_normalized=True):
-            breakpoint()
+        assert combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True)
         g.infer_splits()
         if self.sem_cat_is_set and g.sem_cat_is_set:
             self.propagate_sem_cat_leftward(f,g,split_type)

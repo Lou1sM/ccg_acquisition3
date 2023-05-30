@@ -1,9 +1,11 @@
 import re
-from utils import split_respecting_brackets, is_bracketed, outermost_first_bracketed_chunk, remove_possible_outer_brackets
+from utils import split_respecting_brackets, is_bracketed, outermost_first_bracketed_chunk, maybe_debrac
 import json
 
 with open('geoqueries880') as f:
     geoquery_data = f.readlines()
+if any(['hamsphire' in x for x in geoquery_data]):
+    breakpoint()
 
 var_name_conversion_dict = {k:f'${i}' for i,k in enumerate('ABCDEFG')}
 intransitives = set([x[0] for x in re.findall(r'(\w+)(?=(\([A-G]\)))',''.join(geoquery_data))])
@@ -40,7 +42,7 @@ def process_line(g_line):
     for vn_old,vn_new in var_name_conversion_dict.items():
         parse_str = re.sub(vn_old,vn_new,parse_str)
     # replace 'const' predicate with constants as names
-    unbracketed = remove_possible_outer_brackets(parse_str)
+    unbracketed = maybe_debrac(parse_str)
     if len(split_respecting_brackets(unbracketed,sep=',')) == 1: # brackets don't mean and because only one thing inside
         parse_str = unbracketed
     parse_str = 'lambda $0.' + parse_str
