@@ -6,6 +6,8 @@ import argparse
 ARGS = argparse.ArgumentParser()
 ARGS.add_argument("--num_dpoints", type=int, default=1000)
 ARGS.add_argument("--with_questions", action="store_true")
+ARGS.add_argument("--overwrite", action="store_true")
+ARGS.add_argument("--print_dset", action="store_true")
 ARGS = ARGS.parse_args()
 
 with open('data/preprocessed_geoqueries.json') as f:
@@ -25,7 +27,7 @@ def coin_flip(p=0.5):
     return np.random.rand()<p
 
 def NP_with_determiner():
-    det = np.random.choice(['the','a'])
+    det = np.random.choice(['the','a','my','your'])
     noun = np.random.choice(nouns)
     #lf = f'({det} (lambda $0.{noun} $0))'
     lf = f'({det} {noun})'
@@ -62,10 +64,12 @@ def make_relative():
 dpoints = [make_sentence(coin_flip(0.5 if ARGS.with_questions else 0)) for _ in range(ARGS.num_dpoints)]
 processed_dset = {'np_list':nps, 'nouns':nouns, 'intransitive_verbs':list(intransitives),
                     'transitive_verbs': list(transitives), 'data':dpoints}
-print(processed_dset)
+if ARGS.print_dset:
+    print(processed_dset)
 fpath = f'data/determiners_questions{ARGS.num_dpoints}.json' if ARGS.with_questions else f'data/determiners{ARGS.num_dpoints}.json'
-if os.path.exists(fpath):
+if os.path.exists(fpath) and not ARGS.overwrite:
     fpath += '.1'
     print(f'path already exists, renaming to {fpath}')
 with open(fpath,'w') as f:
     json.dump(processed_dset,f)
+    print('saved to',fpath)
