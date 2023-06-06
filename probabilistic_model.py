@@ -455,13 +455,11 @@ class LanguageAcquirer():
                     left_split = probs_table[left_len-1,left_pos][left_idx]
                     right_split = probs_table[right_len-1,right_pos][right_idx]
                     lsync, rsync = infer_slash(left_split['sem_cat'],right_split['sem_cat'],item['syn_cat'],item['rule'])
-                    left_split = dict(left_split,idx=item['idx'][:-1] + '01',syn_cat=lsync,
-                                        hor_pos=left_pos+(left_len-1)/2 - (N-1)/2)
-                    right_split = dict(right_split,idx=item['idx'][:-1] + '21', syn_cat=rsync,
-                                        hor_pos=right_pos+(right_len-1)/2 - (N-1)/2)
+                    left_split = dict(left_split,idx=item['idx'][:-1] + '01',syn_cat=lsync)
+                                        #hor_pos=left_pos+(left_len-1)/2 - (N-1)/2)
+                    right_split = dict(right_split,idx=item['idx'][:-1] + '21', syn_cat=rsync)
+                                        #hor_pos=right_pos+(right_len-1)/2 - (N-1)/2)
                     assert 'syn_cat' in left_split.keys() and 'syn_cat' in right_split.keys()
-                    if left_split['hor_pos'] == 0:
-                        print(left_split['words'])
                     item['left_child'] = left_split
                     item['right_child'] = right_split
                     new_syntax_tree_level.append(left_split)
@@ -499,14 +497,18 @@ class LanguageAcquirer():
         def _wps(words):
             return sum([_wp(w) for w in words.split()])/len(words.split())
 
+        for level in all_syntax_tree_levels:
+            for x in level:
+                x['hor_pos'] = _wps(x['words'])
         for j,syntax_tree_level in enumerate(all_syntax_tree_levels):
-            wrong_avg = sum([_wps(n['words']) for n in syntax_tree_level])/len(syntax_tree_level)
-            what_avg_should_be = sum([x['hor_pos']*len(x['words']) for x in syntax_tree_level])/len(syntax_tree_level)**2
+            wrong_avg = sum([x['hor_pos'] for n in syntax_tree_level])/len(syntax_tree_level)
+            what_avg_should_be = _wps(' '.join([x['words'] for x in syntax_tree_level]))
             correction = what_avg_should_be - wrong_avg
             for i,node in enumerate(syntax_tree_level):
                 hor_pos = node['hor_pos']
                 if node['rule'] != 'leaf': # keep leaves exactly on their bin
-                    hor_pos += correction
+                    hor_pos += correction/2
+                    assert hor_pos <= max([x['hor_pos'] for x in leaves])
                 if node['rule'] == 'leaf':
                     combined = 'leaf'
                 else:

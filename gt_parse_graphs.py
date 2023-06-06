@@ -16,13 +16,13 @@ def assemble_nodes_to_tree(nodes):
 gts = {}
 
 nodes = {}
-nodes['1'] = {"idx": "1", "sem_cat": "Sq", "syn_cat": "Sq", "rule": "fwd_app", "shell_lf": "Q (const (quant noun))", "lf": "Q (talk (a (lambda $0.lake $0)))", "words": "does a lake talk"}
+nodes['1'] = {"idx": "1", "sem_cat": "Sq", "syn_cat": "Sq", "rule": "fwd_app", "shell_lf": "Q (const (quant noun))", "lf": "Q (talk (a (lake)))", "words": "does a lake talk"}
 nodes['01'] = {"idx": "01", "sem_cat": "Sq|S", "syn_cat": "Sq/S", "rule": "leaf", "shell_lf": "lambda $0.Q ($0)", "lf": "lambda $0.Q ($0)", "words": "does"}
-nodes['21'] = {"idx": "21", "sem_cat": "S", "syn_cat": "S", "rule": "bck_app", "shell_lf": "const (quant noun)","lf": "talk (a (lambda $0.lake $0))", "words": "a lake talk"}
-nodes['201'] = {"idx": "201", "sem_cat": "NP", "syn_cat": "NP", "rule": "fwp_app", "shell_lf": "quant noun", "lf": "a (lambda $0.lake $0)", "words": "a lake"}
+nodes['21'] = {"idx": "21", "sem_cat": "S", "syn_cat": "S", "rule": "bck_app", "shell_lf": "const (quant noun)","lf": "talk (a (lake))", "words": "a lake talk"}
+nodes['201'] = {"idx": "201", "sem_cat": "NP", "syn_cat": "NP", "rule": "fwp_app", "shell_lf": "quant noun", "lf": "a (lake)", "words": "a lake"}
 nodes['221'] = {"idx": "221", "sem_cat": "S|NP", "syn_cat": "S\\NP", "rule": "leaf", "shell_lf": "lambda $0.const $0", "lf": "lambda $0.talk $0", "words": "talk"}
 nodes['2001'] = {"idx": "2001", "sem_cat": "NP|N", "syn_cat": "NP/N", "rule": "leaf", "shell_lf": "lambda $0.quant $0", "lf": "lambda $0.a $0", "words": "a"}
-nodes['2021'] = {"idx": "2021", "sem_cat": "N", "syn_cat": "N", "rule": "leaf", "shell_lf": "noun", "lf": "lambda $0.lake $0", "words": "lake"}
+nodes['2021'] = {"idx": "2021", "sem_cat": "N", "syn_cat": "N", "rule": "leaf", "shell_lf": "noun", "lf": "lake", "words": "lake"}
 gts['does_a_lake_talk'] = assemble_nodes_to_tree(nodes)
 
 nodes = {}
