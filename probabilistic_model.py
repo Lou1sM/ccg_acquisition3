@@ -435,6 +435,8 @@ class LanguageAcquirer():
             to_add =sorted(possible_nexts,key=lambda x:x['prob'])[-beam_size:]
             probs_table[i-1,j] = to_add
 
+        #if words == 'maryland buys a dog'.split():
+            #breakpoint()
         for a in range(2,N+1):
             for b in range(N-a+1):
                 add_prob_of_span(a,b)
@@ -501,12 +503,14 @@ class LanguageAcquirer():
             for x in level:
                 x['hor_pos'] = _wps(x['words'])
         for j,syntax_tree_level in enumerate(all_syntax_tree_levels):
-            wrong_avg = sum([x['hor_pos'] for n in syntax_tree_level])/len(syntax_tree_level)
-            what_avg_should_be = _wps(' '.join([x['words'] for x in syntax_tree_level]))
+            wrong_avg = sum([x['hor_pos'] for x in syntax_tree_level])/len(syntax_tree_level)
+            words_at_level = ' '.join([x['words'] for x in syntax_tree_level])
+            what_avg_should_be = _wps(words_at_level)
+            #print(f'"{words_at_level}" out of {all_words} wrong: {wrong_avg} right: {what_avg_should_be}')
             correction = what_avg_should_be - wrong_avg
             for i,node in enumerate(syntax_tree_level):
                 hor_pos = node['hor_pos']
-                if node['rule'] != 'leaf': # keep leaves exactly on their bin
+                if node['rule'] != 'leaf' and j != 0: # keep leaves and root exactly on their bin
                     hor_pos += correction/2
                     assert hor_pos <= max([x['hor_pos'] for x in leaves])
                 if node['rule'] == 'leaf':
@@ -598,7 +602,7 @@ if __name__ == "__main__":
     with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
 
     NAMES = d['np_list'] + [str(x) for x in range(1,11)] # because of the numbers in simple dsets
-    NOUNS = d['nouns']
+    NOUNS = d['nouns'] + [x+'-s' for x in d['nouns']] # for pl., quicker than stripping each lookup
     TRANSITIVES = d['transitive_verbs']
     INTRANSITIVES = d['intransitive_verbs']
     base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','N','S|NP','S|NP|NP')) for w in item}
@@ -660,5 +664,6 @@ if __name__ == "__main__":
             language_acquirer.draw_graph(gt,is_gt=True)
     print(language_acquirer.syntaxl.memory['S/NP'])
     if ARGS.db_after:
+        la = language_acquirer
         breakpoint()
     language_acquirer.save_to(f'experiments/{ARGS.expname}')

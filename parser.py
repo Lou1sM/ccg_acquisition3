@@ -79,7 +79,7 @@ class LogicalForm:
                 self.extend_var_descendents(int(self.string[1:]))
             elif self.string == 'AND':
                 self.node_type = 'connective'
-            elif self.string in ['a','the']:
+            elif self.string in ['a','the','my','your']:
                 self.node_type = 'quant'
             elif self.base_lexicon.get(defining_string,None) == 'N':
                 self.node_type = 'noun'
@@ -113,9 +113,9 @@ class LogicalForm:
             self.possible_app_splits = self.caches['splits'][self.lf_str]
             return self.possible_app_splits
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','noun','quant']]
+        breakpoint()
         for removee_idxs in all_sublists(possible_removee_idxs):
             if self.lf_str == 'Q(buy chicago montgomery)' and removee_idxs == [2,4]:
-                breakpoint()
             n_removees = len(removee_idxs)
             if n_removees == 0: continue
             if n_removees == len(possible_removee_idxs) and self.node_type!='Q': continue

@@ -126,8 +126,7 @@ def all_lambda_body_splits(lf):
 
 def beta_normalize(m):
     m = maybe_debrac(m)
-    if not is_wellformed_lf(m):
-        breakpoint()
+    assert is_wellformed_lf(m)
     if m.startswith('lambda'):
         lambda_binder, body, _ = first_lambda_body_split(m)
         return lambda_binder + beta_normalize(body)
@@ -141,7 +140,7 @@ def beta_normalize(m):
     assert 'lambda (' not in left
     right_ = splits[-1]
     right = beta_normalize(right_)
-    if not re.match(r'^[\w\$]*$',right) and not is_bracketed(right):
+    if not re.match(r'^[\w\$\-]*$',right) and not is_bracketed(right):
         right = '('+right+')'
 
     if left.startswith('lambda'):
