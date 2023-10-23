@@ -1,6 +1,8 @@
 import numpy as np
 from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, n_nps, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders
 import re
+import sys; sys.setrecursionlimit(500)
+from config import pos_marking_dict
 
 
 # is_leaf means it's atomic in lambda calculus
@@ -15,13 +17,13 @@ import re
 # Q(.) is like a composite, or composite is like a dummy wrapper around an lf,
 # Q then being an alternative non-dummy wrapper
 
-import sys; sys.setrecursionlimit(500)
 class LogicalForm:
     def __init__(self,defining_string,base_lexicon,idx_in_tree=[],caches=None,parent=None):
         assert isinstance(idx_in_tree,list)
         assert is_wellformed_lf(defining_string)
         had_surrounding_brackets = False
         self.base_lexicon = base_lexicon
+        self.sibling = None
         self.idx_in_tree = idx_in_tree
         self.caches = {'splits':{},'sem_cats':{},'lfs':{}} if caches is None else caches
         self.var_descendents = []
@@ -32,14 +34,19 @@ class LogicalForm:
         self.stored_shell_subtree_string = ''
         self.stored_alpha_normalized_subtree_string = ''
         self.stored_alpha_normalized_shell_subtree_string = ''
+        self.ud_pos = ''
         defining_string = maybe_debrac(defining_string)
+        #if defining_string.strip()=='':
+            #breakpoint()
         if parent == 'START':
             if defining_string.startswith('Q'):
                 self.sem_cat = 'Sq'
+            elif defining_string.startswith('lambda $1_{e}'):
+                self.sem_cat = 'Swhq'
             else:
                 self.sem_cat = 'S'
 
-        if bool(re.match(r'^lambda \$\d',defining_string)):
+        if bool(re.match(r'^lambda \$\d(_\{[er]\})?\.',defining_string)):
                 lambda_string, _, remaining_string = defining_string.partition('.')
                 variable_index = lambda_string[-2:]
                 self.is_leaf = False
@@ -71,6 +78,12 @@ class LogicalForm:
                 self.node_type = 'composite'
             self.is_leaf = False
         else:
+            #if '|' in defining_string:
+            if '|' not in defining_string and not defining_string.startswith('$') and defining_string!='':
+                print(defining_string)
+                #self.ud_pos, self.string = defining_string.split('|')
+            #else:
+                #print(defining_string)
             self.string = defining_string
             self.children = []
             self.is_leaf = True
@@ -79,16 +92,17 @@ class LogicalForm:
                 self.extend_var_descendents(int(self.string[1:]))
             elif self.string == 'AND':
                 self.node_type = 'connective'
-            elif self.string in ['a','the','my','your']:
-                self.node_type = 'quant'
-            elif self.base_lexicon.get(defining_string,None) == 'N':
+            #elif self.string in ['a','the','my','your']:
+            elif pos_marking_dict.get(defining_string,None) == 'N':
                 self.node_type = 'noun'
             else:
                 self.node_type = 'const'
         if had_surrounding_brackets:
-            assert self.subtree_string() == defining_string[1:-1]
-        else:
+            #assert self.subtree_string()==re.match(r'(.*\|)?(.*)',defining_string).group(2)[1:-1]
             assert self.subtree_string() == defining_string
+        else:
+            if not self.subtree_string() == defining_string:
+                breakpoint()
 
         self.is_semantic_leaf = self.is_leaf # is_leaf is sufficient for is_semantic_leaf
         self.set_cats_from_string()
@@ -96,13 +110,16 @@ class LogicalForm:
     def set_cats_from_string(self):
         if self.parent != 'START':
             ss = self.stripped_subtree_string
+            if '|' in ss:
+                pos_marking = ss.split('|')[0]
+                self.sem_cat = pos_marking_dict.get(pos_marking,'X')
             if ss in self.base_lexicon:
                 self.sem_cat = self.base_lexicon[ss]
                 self.is_semantic_leaf = True # but not necessary
-            elif self.node_type == 'dconst':
+            if self.node_type == 'dconst':
                 self.sem_cat = 'NP'
             else:
-                self.sem_cat = 'X'
+                self.sem_cat = pos_marking_dict.get(self.ud_pos,'X')
         assert self.sem_cat!=''
 
     def infer_splits(self):
@@ -113,15 +130,20 @@ class LogicalForm:
             self.possible_app_splits = self.caches['splits'][self.lf_str]
             return self.possible_app_splits
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','noun','quant']]
-        breakpoint()
         for removee_idxs in all_sublists(possible_removee_idxs):
-            if self.lf_str == 'Q(buy chicago montgomery)' and removee_idxs == [2,4]:
             n_removees = len(removee_idxs)
             if n_removees == 0: continue
             if n_removees == len(possible_removee_idxs) and self.node_type!='Q': continue
+            not_removees = [d for i,d in enumerate(self.descendents) if i not in removee_idxs]
             f = self.copy()
             f.parent = self
             to_remove = [f.descendents[i] for i in removee_idxs]
+            #if any([x.node_type in ('const','dconst') and x in not_removees for x in to_remove]):
+            if any([x in not_removees and self.descendents.count(x)==1 for x in to_remove]):
+                breakpoint()
+                continue
+            if any([x.node_type=='dconst' for x in to_remove]):
+                breakpoint()
             assert all([n.node_type in ['const','dconst','noun','quant'] for n in to_remove])
             leftmost = f.descendents[min(removee_idxs)]
             entry_point = leftmost # where to substitute g into f
@@ -152,7 +174,7 @@ class LogicalForm:
             g_sub_var_num = self.new_var_num
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([maybe_brac(n.string,sep=' ') for n in to_present_as_args_to_g])))
             assert entry_point.subtree_string() in self.subtree_string()
-            entry_point.__init__(new_entry_point_in_f_as_str,entry_point.base_lexicon,self.idx_in_tree,entry_point.caches)
+            entry_point.__init__(new_entry_point_in_f_as_str,self.base_lexicon,self.idx_in_tree,entry_point.caches)
             if len(to_present_as_args_to_g) >= 3: # then f will end up with arity 4
                 continue
             if strip_string(f.subtree_string().replace(' AND','')) == '': # exclude just 'AND's
@@ -164,15 +186,16 @@ class LogicalForm:
             if self.node_type == 'lmbda' and f.node_type == 'lmbda' and cat_components(self.sem_cat,allow_atomic=True)[-1] == cat_components(f.sem_cat,allow_atomic=True)[-1] and cat_components(f.sem_cat,allow_atomic=True)[-1]!='X':
                 f_cmp_string = logical_type_raise(g.lf_str)
                 assert f_cmp_string == logical_type_raise(g.lf_str)
-                f_cmp = LogicalForm(f_cmp_string,self.base_lexicon)
+                f_cmp = LogicalForm(f_cmp_string)
                 fparts = split_respecting_brackets(f.subtree_string(),sep='.')
                 # g_cmp is just g reordered, move the part at n_removees position to front
                 # because first var will get chopped off from cmp and need
                 # remainder to be able to receive body of f_cmp just like f received g
                 #assert bool(re.match(r'lambda \$\d{1,2}',fparts[n_removees]))
-                g_cmp_parts = [fparts[f.n_lambda_binders-1]] + fparts[:f.n_lambda_binders-1] + fparts[f.n_lambda_binders:]
+                #g_cmp_parts = [fparts[f.n_lambda_binders-1]] + fparts[:f.n_lambda_binders-1] + fparts[f.n_lambda_binders:]
+                g_cmp_parts = fparts[1:2] + fparts[:1] + fparts[2:]
                 g_cmp_string = '.'.join(g_cmp_parts)
-                g_cmp = LogicalForm(g_cmp_string,self.base_lexicon)
+                g_cmp = LogicalForm(g_cmp_string)
                 if not (g_cmp.sem_cat_is_set and is_atomic(g_cmp.sem_cat)): # g_cmp must have slash
                     self.add_split(f_cmp,g_cmp,'cmp')
         if '|' in self.sem_cat:
@@ -205,29 +228,29 @@ class LogicalForm:
         assert combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True)
         g.infer_splits()
         if self.sem_cat_is_set and g.sem_cat_is_set:
-            self.propagate_sem_cat_leftward(f,g,split_type)
+            self.set_f_sem_cat_from_self_and_g(f,g,split_type)
             if not f.cat_consistent():
                 return
-        f.infer_splits()
-        if g.sem_cat_is_set:
-            if f.sem_cat_is_set:
-                #assert split_type == 'app' don't know why I had this in
-                hits = re.findall(fr'[\\/\|]\(?{re.escape(g.sem_cat)}\)?$',re.escape(f.sem_cat))
-                assert len(hits) < 2
-                for hit in hits:
-                    new_inferred_sem_cat = f.sem_cat[:-len(hit)]
-                    assert self.sem_cat in ['X',new_inferred_sem_cat]
-                    self.sem_cat = new_inferred_sem_cat
-                    if not self.cat_consistent():
-                        return
         if f.sem_cat in ('S|N','S|NP|N'):
             return
+        f.infer_splits()
+        if g.sem_cat_is_set and f.sem_cat_is_set:
+            hits = re.findall(fr'[\\/\|]\(?{re.escape(g.sem_cat)}\)?$',re.escape(f.sem_cat))
+            assert len(hits) < 2
+            for hit in hits:
+                new_inferred_sem_cat = f.sem_cat[:-len(hit)]
+                assert self.sem_cat in ['X',new_inferred_sem_cat]
+                self.sem_cat = new_inferred_sem_cat
+                if not self.cat_consistent():
+                    return
         assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
         if not f.sem_cat_is_set:
             #print(f.lf_str,' + ',g.lf_str)
             return
         if self.sem_cat == 'S' and g.sem_cat == 'N':
             breakpoint()
+        f.sibling = g
+        g.sibling = f
         to_add_to.append((f,g))
 
     def cat_consistent(self):
@@ -236,7 +259,7 @@ class LogicalForm:
         """Return False if sem_cat says type-raised but lf not of type-raised form."""
         return self.sem_cat !='S|(S|NP)' or is_type_raised(self.subtree_string())
 
-    def propagate_sem_cat_leftward(self,f,g,comb_type):
+    def set_f_sem_cat_from_self_and_g(self,f,g,comb_type):
         if comb_type == 'app':
             new_inferred_sem_cat = f'{self.sem_cat}|{maybe_brac(g.sem_cat)}'
         else:
@@ -250,16 +273,16 @@ class LogicalForm:
             return
         for f1,g1 in f.possible_app_splits:
             if g1.sem_cat_is_set and not (is_atomic(g1.sem_cat) and comb_type=='cmp'):
-                f.propagate_sem_cat_leftward(f1,g1,comb_type)
+                f.set_f_sem_cat_from_self_and_g(f1,g1,comb_type)
 
     def spawn_child(self,defining_string,sibling_idx):
         """Careful, this means a child in the tree of one logical form, not a possible split."""
-        return LogicalForm(defining_string,idx_in_tree=self.idx_in_tree+[sibling_idx],base_lexicon=self.base_lexicon,caches=self.caches,parent=self)
+        return LogicalForm(defining_string,self.base_lexicon,idx_in_tree=self.idx_in_tree+[sibling_idx],caches=self.caches,parent=self)
 
     def spawn_self_like(self,defining_string,idx_in_tree=None):
         if idx_in_tree is None:
             idx_in_tree = self.idx_in_tree
-        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,base_lexicon=self.base_lexicon,caches=self.caches,parent=self.parent)
+        new = LogicalForm(defining_string,self.base_lexicon,idx_in_tree=idx_in_tree,caches=self.caches,parent=self.parent)
         new.sem_cat = self.sem_cat
         return new
 
@@ -533,6 +556,7 @@ class ParseNode():
             shell_lf = alpha_normalize(logical_de_type_raise(shell_lf))
             lf = alpha_normalize(logical_de_type_raise(lf))
         return word_str, lf, shell_lf, sem_cat, syn_cat
+        return word_str, lf, shell_lf, sem_cat, syn_cat
 
     def __repr__(self):
         base = (f"ParseNode\n"
@@ -589,9 +613,122 @@ class ParseNode():
 
     def prob_as_leaf(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner):
         word_str, lf, shell_lf, sem_cat, syn_cat = self.info_if_leaf()
+        #word_str, lf, shell_lf, = self.info_if_leaf()
         self.stored_prob_as_leaf = syntax_learner.prob('leaf',syn_cat) * \
                                    shell_meaning_learner.prob(shell_lf,sem_cat) * \
                                    meaning_learner.prob(lf,shell_lf) * \
                                    word_learner.prob(word_str,lf)
                             # will use stored value in train_one_step()
         return self.stored_prob_as_leaf
+
+class UnsupervisedParseNode():
+    def __init__(self,words,node_type,parent=None,sibling=None,syn_cat=None):
+        self.words = words
+        self.possible_splits = []
+        self.parent = parent
+        self.node_type = node_type
+        self.sibling = sibling
+        assert (parent is None) or (node_type != 'ROOT'), \
+            f"you're trying to specify a parent for the root node"
+        assert (parent is not None) or (node_type == 'ROOT'), \
+            f"you're failing to specify a parent for a non-root node"
+        assert (sibling is None) or (node_type != 'ROOT'), \
+            f"you're trying to specify a sibling for the root node"
+        self.syn_cat = syn_cat
+        self.is_leaf = len(self.words) == 1
+        if not self.is_leaf:
+            for split_point in range(1,len(self.words)):
+                left_words = self.words[:split_point]
+                right_words = self.words[split_point:]
+                self.add_app_splits(left_words,right_words)
+                if not is_atomic(self.syn_cat):
+                    self.add_cmp_splits(left_words,right_words)
+
+    def add_cmp_splits(self,left_words,right_words):
+        # just fwd_cmp for now
+        right_child_fwd = ParseNode(right_words,parent=self,node_type='right_fwd_cmp')
+        new_f_syn_cat, new_g_syn_cat = f_cmp_from_parent_and_g(self.syn_cat,right_child_fwd.syn_cat,sem_only=False)
+        if new_f_syn_cat is None:
+            return
+        left_child_fwd = ParseNode(left_words,parent=self,node_type='left_fwd_cmp',syn_cat=new_f_syn_cat)
+        right_child_fwd.syn_cat = new_g_syn_cat
+        self.append_split(left_child_fwd,right_child_fwd,'fwd_cmp')
+
+    def add_app_splits(self,left_words,right_words):
+            # CONVENTION: f-child with the words on the left of sentence is
+            # the 'left' child, even if bck application, left child is g in
+            # that case
+            right_child_fwd = ParseNode(right_words,parent=self,node_type='right_fwd_app')
+            new_syn_cat = f'{self.syn_cat}/{maybe_brac(right_child_fwd.syn_cat)}'
+            left_child_fwd = ParseNode(left_words,parent=self,node_type='left_fwd_app',syn_cat=new_syn_cat)
+            self.append_split(left_child_fwd,right_child_fwd,'fwd_app')
+
+            left_child_bck = ParseNode(left_words,parent=self,node_type='left_bck_app')
+            new_syn_cat = f'{self.syn_cat}\\{maybe_brac(left_child_bck.syn_cat)}'
+            #if new_syn_cat != 'S/NP\\NP':
+            right_child_bck = ParseNode(right_words,parent=self,node_type='right_bck_app',syn_cat=new_syn_cat)
+            self.append_split(left_child_bck,right_child_bck,'bck_app')
+
+    def append_split(self,left,right,combinator):
+        left.siblingify(right)
+        assert left.sibling is not None
+        assert right.sibling is not None
+        self.possible_splits.append({'left':left,'right':right,'combinator':combinator})
+
+    @property
+    def is_g(self):
+        return self.node_type in ['right_fwd_app','left_bck_app','right_fwd_cmp','left_bck_cmp']
+
+    @property
+    def is_fwd(self):
+        return self.node_type in ['right_fwd_app','left_fwd_app','right_fwd_cmp','left_fwd_cmp']
+
+    def __repr__(self):
+        base = (f"ParseNode\n"
+                f"\tWords: {' '.join(self.words)}\n"
+                f"\tSyntactic Category: {self.syn_cat}\n")
+        if hasattr(self,'stored_prob'):
+            base += f'\tProb: {self.stored_prob}\n'
+        return base
+
+    def __eq__(self,other):
+        if not isinstance(other,LogicalForm):
+            return False
+        return self.syn_cat == other.syn_cat and self.words == other.words
+
+    def __hash__(self):
+        return hash(self.syn_cat + ' '.join(self.words))
+
+    def siblingify(self,other):
+        self.sibling = other
+        other.sibling = self
+
+    def propagate_below_probs(self,syntax_learner,cache,split_prob,is_map):
+        self.split_prob = split_prob
+        if self in cache:
+            return cache[self]
+        all_probs = [syntax_learner.prob(self.words,self.syn_cat)]
+        for ps in self.possible_splits:
+            syntax_split = ps['left'].syn_cat + ' + ' + ps['right'].syn_cat
+            split_prob = syntax_learner.prob(syntax_split,self.syn_cat)
+            if split_prob == 0:
+                breakpoint()
+            left_below_prob = ps['left'].propagate_below_probs(syntax_learner,cache,split_prob,is_map)
+            right_below_prob = ps['right'].propagate_below_probs(syntax_learner,cache,split_prob,is_map)
+            all_probs.append(left_below_prob*right_below_prob*split_prob)
+
+        below_prob = max(all_probs) if is_map else sum(all_probs)
+        cache[self] = below_prob
+        self.below_prob = below_prob
+        return below_prob
+
+    def propagate_above_probs(self,passed_above_prob): #reuse split_prob from propagate_below_probs
+        self.above_prob = passed_above_prob*self.split_prob
+        for ps in self.possible_splits:
+            # this is how to get cousins probs
+            ps['left'].propagate_above_probs(self.above_prob*ps['right'].below_prob)
+            ps['right'].propagate_above_probs(self.above_prob*ps['left'].below_prob)
+            assert np.allclose(ps['left'].above_prob*ps['left'].below_prob, ps['right'].above_prob*ps['right'].below_prob)
+        if self.possible_splits != []:
+            if not self.above_prob > max([z.above_prob for ps in self.possible_splits for z in (ps['right'],ps['left'])]):
+                breakpoint()

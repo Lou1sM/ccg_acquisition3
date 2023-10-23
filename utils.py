@@ -108,40 +108,44 @@ def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
 def first_lambda_body_split(lf):
     """lambda_binder has the dot on the end"""
     try:
-        lambda_binder = re.match(r'lambda \$\d+\.',lf).group(0)
+        lambda_binder = re.match(r'^lambda \$\d{1,2}(_\{[er]\})?\.',lf).group(0)
     except AttributeError: #there's no lambda binder in the lf
         return '', lf, -1
     body = lf[len(lambda_binder):]
-    first_var_num = int(lambda_binder[8:-1])
+    first_var_num = int(lambda_binder[8:-5] if '_' in lambda_binder else lambda_binder[8:-1])
     return lambda_binder, body, first_var_num
 
 def all_lambda_body_splits(lf):
     """lambda_binder has the dot on the end"""
     try:
-        lambda_binder = re.match(r'(lambda \$\d{1,2}+\.)*',lf).group(0)
+        #lambda_binder = re.match(r'(lambda \$\d{1,2}?+\.)*',lf).group(0)
+        lambda_binder = re.match(r'(lambda \$\d{1,2}(_\{[er]\})?\.)*',lf).group(0)
     except AttributeError: #there's no lambda binder in the lf
         return '', lf
     body = lf[len(lambda_binder):]
     return lambda_binder, body
 
-def beta_normalize(m):
+def beta_normalize(m,verbose=False):
     m = maybe_debrac(m)
     assert is_wellformed_lf(m)
     if m.startswith('lambda'):
         lambda_binder, body, _ = first_lambda_body_split(m)
         return lambda_binder + beta_normalize(body)
     if re.match(r'^[\w\$]*$',m): # has no variables
+        if verbose: print(m)
         return m
     splits = split_respecting_brackets(m)
     if len(splits) == 1:
+        if verbose: print(m)
         return m
     left_ = maybe_debrac(' '.join(splits[:-1]))
     left = beta_normalize(left_)
     assert 'lambda (' not in left
     right_ = splits[-1]
     right = beta_normalize(right_)
-    if not re.match(r'^[\w\$\-]*$',right) and not is_bracketed(right):
-        right = '('+right+')'
+    #if not re.match(r'^[\w\$\-]*$',right) and not is_bracketed(right):
+        #right = '('+right+')'
+    right = maybe_brac(right, sep=' ')
 
     if left.startswith('lambda'):
         lambda_binder,_,rest = left.partition('.')
@@ -150,9 +154,11 @@ def beta_normalize(m):
         assert re.match(r'\$\d',var_name)
         combined = re.sub(re.escape(f'({var_name})'),right,rest) # to avoid doubly-bracketted
         combined = re.sub(re.escape(var_name),right,combined)
-        return beta_normalize(combined)
+        normed = beta_normalize(combined)
     else:
-        return ' '.join([left,right])
+        normed = ' '.join([left,right])
+    if verbose: print(normed)
+    return normed
 
 def strip_string(ss):
     ss = re.sub(r'lambda \$\d+\.','',ss)
@@ -425,7 +431,8 @@ def alpha_normalize(x):
     if len(hits) == 0:
         return x
     trans_list = sorted(set(hits),key=lambda x:hits.index(x))
-    buffer = int(max(trans_list))+1 # big enough to not clobber anything
+    #buffer = int(max(trans_list))+1 # big enough to not clobber anything
+    buffer = max([int(x) for x in trans_list]) + 1
     for v_new, v_old in enumerate(trans_list):
         assert f'${v_new+buffer}' not in x
         x = x.replace(fr'${v_old}',f'${v_new+buffer}')

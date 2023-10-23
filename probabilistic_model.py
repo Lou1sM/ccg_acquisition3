@@ -158,7 +158,9 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
 
     def prob(self,y,x):
         if len(split_respecting_brackets(x,sep=['/','\\','|'])) != n_lambda_binders(y)+1:
+            print(y,x)
             return 0
+        #y = maybe_de_type_raise(y_)
         base_prob = self.base_distribution(y)
         if x not in self.memory:
             return base_prob
@@ -178,7 +180,7 @@ class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
         return 28**-math.ceil(len(x)/2) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
-    def __init__(self,base_lexicon):
+    def __init__(self, base_lexicon):
         self.base_lexicon = base_lexicon
         self.syntaxl = CCGDirichletProcessLearner(10)
         self.shmeaningl = ShellMeaningDirichletProcessLearner(1)
@@ -282,7 +284,7 @@ class LanguageAcquirer():
         if lf_str in self.full_lfs_cache:
             return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,base_lexicon=self.base_lexicon,caches=self.lf_parts_cache,parent='START')
+            lf = LogicalForm(lf_str,self.base_lexicon,caches=self.lf_parts_cache,parent='START')
             self.full_lfs_cache[lf_str] = lf
             return lf
 
@@ -291,6 +293,8 @@ class LanguageAcquirer():
         prob_cache = {}
         root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                        self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=False)
+        if root_prob==0:
+            breakpoint()
         root.propagate_above_probs(1)
         #if len(words) == 4 and words[0] == 'does':
         #if ' '.join(words) == 'the mountain deracinates seattle':
@@ -306,7 +310,8 @@ class LanguageAcquirer():
                 update_weight = node.below_prob * node.above_prob / root_prob # for conditional
                 self.syntaxl.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
-            assert leaf_prob > 0
+            if not leaf_prob > 0:
+                print(node)
             lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cat, syn_cat = node.info_if_leaf()
             self.syntaxl.buffer.append(('leaf',syn_cat,leaf_prob))
@@ -317,29 +322,6 @@ class LanguageAcquirer():
             self.wordl.buffer.append((word_str,lf,leaf_prob))
         #print(words,sum([x[2] for x in self.wordl.buffer]))
         self.flush_buffers()
-
-    def test_NPs(self):
-        meaning_corrects = 0
-        syn_corrects = 0
-        attempts = 0
-        nps = [x for x,c in self.base_lexicon.items() if c=='NP']
-        for w in nps:
-            w_spaces = w.replace('_',' ')
-            if w_spaces not in self.word_to_lf_probs.index:
-                if w_spaces not in ['virginia','kansas','montgomery']:
-                    if not not any([w_spaces in ' '.join(x['words']) and len([z for z in x['words'] if z != '?']) <= ARGS.max_sent_len for x in d['data'][:NDPS]]):
-                        print(f'\'{w_spaces}\' not here')
-                continue
-            meaning_pred = self.word_to_lf_probs.loc[w_spaces].idxmax()
-            syn_pred = self.word_to_sem_probs.loc[w_spaces].idxmax()
-            if meaning_pred==w:
-                meaning_corrects += 1
-            if syn_pred=='NP':
-                syn_corrects += 1
-            attempts += 1
-        meaning_acc = 100*meaning_corrects/attempts
-        syn_acc = 100*syn_corrects/attempts
-        return meaning_acc, syn_acc
 
     def generate_words(self,syn_cat):
         while True:
@@ -582,7 +564,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--test_gts", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
-    ARGS.add_argument("-d", "--dset", type=str, default='determiners_questions1000')
+    ARGS.add_argument("-d", "--dset", type=str, default='simplified_adam')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
     ARGS = ARGS.parse_args()
 
@@ -601,11 +583,12 @@ if __name__ == "__main__":
     set_experiment_dir(f'experiments/{ARGS.expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
     with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
 
-    NAMES = d['np_list'] + [str(x) for x in range(1,11)] # because of the numbers in simple dsets
-    NOUNS = d['nouns'] + [x+'-s' for x in d['nouns']] # for pl., quicker than stripping each lookup
-    TRANSITIVES = d['transitive_verbs']
-    INTRANSITIVES = d['intransitive_verbs']
-    base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','N','S|NP','S|NP|NP')) for w in item}
+    #NAMES = d['np_list'] + [str(x) for x in range(1,11)] # because of the numbers in simple dsets
+    #NOUNS = d['nouns'] + [x+'-s' for x in d['nouns']] # for pl., quicker than stripping each lookup
+    #TRANSITIVES = d['transitive_verbs']
+    #INTRANSITIVES = d['intransitive_verbs']
+    #base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','N','S|NP','S|NP|NP')) for w in item}
+    base_lexicon = {'you':'NP','me':'NP','he':'NP','she':'NP','it':'NP'}
 
     language_acquirer = LanguageAcquirer(base_lexicon)
     if ARGS.reload_from is not None:
@@ -643,7 +626,6 @@ if __name__ == "__main__":
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
-    #meaning_acc ,syn_acc = language_acquirer.test_NPs()
     #file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     #file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
     if ARGS.n_generate > 0:
