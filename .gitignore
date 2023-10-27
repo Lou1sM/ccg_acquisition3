@@ -3,3 +3,8 @@ tmp/**/*
 *.pyc
 my_test/**
 experiments/**
+data/**
+jim*
+jim/**
+tmp*
+tmp/**

@@ -1,1 +1,0 @@
-placeholder_p($0,Q(not(placeholder_p($1,(and(placeholder_p($1),placeholder_p($1))),$0)))

@@ -1,0 +1,47 @@
+pos_marking_dict = {
+                    'adj':set(['N|N']),
+                    'adv':set([None]),
+                    'adv:int':set([None]),
+                    'adv:tem':set([None]),
+                    'aux':set([None]),
+                    'chi':set([None]),
+                    'co':set([None]),
+                    'conj':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
+                    'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # same as above ok for now?
+                    'cop':set(['S|NP|NP','S|NP|(N|N)']), # ?
+                    'det:art':set(['NP|N']),
+                    'det:dem':set(['NP|N']),
+                    'det:int':set(['NP']),
+                    'det:num':set(['NP|N']),
+                    'det:poss':set(['NP|N']),
+                    'meta':set([None]),
+                    'mod':set([None]),
+                    'mod:aux':set([None]),
+                    'n':set(['N']),
+                    'n:gerund':set(['NP']),
+                    'n:let':set(['NP']),
+                    'n:prop':set(['NP']),
+                    'n:pt':set(['N']), # seems to be for nouns with plural morph.]), like scissors
+                    'neg':set(['S|S']), # ?
+                    'on':set([None]),
+                    'part':set([None]),
+                    'poss':set([None]),
+                    'post':set(['S|S']), # ?
+                    'prep':set(['S|S|NP']),
+                    'pro:dem':set(['NP']), # ?
+                    'pro:exist':set(['NP']),
+                    'pro:indef':set(['NP']),
+                    'pro:int':set(['NP']),
+                    'pro:obj':set(['NP']),
+                    'pro:per':set(['NP']),
+                    'pro:poss':set(['NP|N']),
+                    'pro:refl':set(['NP']),
+                    'pro:rel':set(['NP']),
+                    'pro:sub':set(['NP']),
+                    'qn':set(['NP|N']),
+                    'v':set(['S|NP','S|NP|NP']),
+                    #'v:obj':set([None]),
+                    'wplay':set([None]),
+                    }
+
+pos_marking_dict = {k:set(['X']) if v == set([None]) else v for k,v in pos_marking_dict.items()}

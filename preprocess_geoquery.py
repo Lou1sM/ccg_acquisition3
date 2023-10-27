@@ -90,15 +90,16 @@ def convert_to_no_comma_form(parse):
         return parse[:end_of_lambda+1] + converted
 
 
-dpoints = []
-for gl in geoquery_data:
-    words, parse = process_line(gl)
-    decommaified = convert_to_no_comma_form(parse)
-    dpoints.append({'words':words,'parse':decommaified,'parse_with_commas':parse})
+if __name__ == '__main__':
+    dpoints = []
+    for gl in geoquery_data:
+        words, parse = process_line(gl)
+        decommaified = convert_to_no_comma_form(parse)
+        dpoints.append({'words':words,'parse':decommaified,'parse_with_commas':parse})
 
-np_list = list(set(np_list))
-processed_dset = {'np_list':np_list, 'intransitive_verbs':list(intransitives),
-                    'transitive_verbs': list(transitives), 'data':dpoints}
+    np_list = list(set(np_list))
+    processed_dset = {'np_list':np_list, 'intransitive_verbs':list(intransitives),
+                        'transitive_verbs': list(transitives), 'data':dpoints}
 
-with open('data/preprocessed_geoqueries.json','w') as f:
-    json.dump(processed_dset,f)
+    with open('data/preprocessed_geoqueries.json','w') as f:
+        json.dump(processed_dset,f)

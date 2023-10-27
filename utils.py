@@ -43,7 +43,8 @@ def combine_lfs(f_str,g_str,comb_type,normalize=True):
     orig_g_str = alpha_normalize(g_str)
     if increment_g_vars_by > 0:
         for v in sorted(set(vars_in_g),reverse=True):
-            g_str = g_str.replace(f'${v}',f'${int(v)+increment_g_vars_by}')
+            #g_str = g_str.replace(f'${v}',f'${int(v)+increment_g_vars_by}')
+            g_str = re.sub(rf'\${v}(?!\d)',f'${int(v)+increment_g_vars_by}',g_str)
     assert alpha_normalize(g_str) == orig_g_str
     if comb_type == 'app':
         unnormed = concat_lfs(f_str,g_str)
@@ -57,6 +58,16 @@ def combine_lfs(f_str,g_str,comb_type,normalize=True):
 def logical_type_raise(lf_str):
     n = new_var_num(lf_str)
     return f"lambda ${n}.${n} {maybe_brac(lf_str,sep=' ')}"
+
+def is_cat_type_raised(sem_cat):
+    splits = split_respecting_brackets(sem_cat, sep='|')
+    if len(splits) != 2:
+        return False
+    out_cat, in_cat = splits
+    in_cat_splits = split_respecting_brackets(in_cat, sep='|')
+    if len(in_cat_splits) != 2:
+        return False
+    return in_cat_splits[0] == out_cat
 
 def is_type_raised(lf_str):
     possible_first_lambda = re.match(r'lambda \$\d{1,2}',lf_str)
@@ -169,7 +180,12 @@ def strip_string(ss):
 def concat_lfs(lf_str1,lf_str2):
     return '(' + lf_str1 + ') (' + lf_str2 + ')'
 
+def set_congruent(sc1s, sc2s):
+    return set(x for x in sc1s if any(is_congruent(x,y) for y in sc2s))
+
 def is_congruent(sc1,sc2):
+    if sc1 is None or sc2 is None:
+        return False
     return sc1 == 'X' or sc2 == 'X' or n_nps(sc1) == n_nps(sc2)
 
 def is_direct_congruent(sc1,sc2):
@@ -180,7 +196,7 @@ def is_direct_congruent(sc1,sc2):
 def n_nps(sem_cat):
     if sem_cat == 'NP':
         return 1
-    elif sem_cat in ['Sq','S','N']:
+    elif sem_cat in ['Sq','S','N','Swhq']:
         return 0
     else:
         splits = split_respecting_brackets(sem_cat,sep=['\\','/','|'],debracket=True)
@@ -275,8 +291,10 @@ def normalize_dict(d):
         return {k:v/norm for k,v in d.items()}
 
 def n_lambda_binders(s):
-    maybe_lambda_list = split_respecting_brackets(s,sep='.')
-    assert all([x.startswith('lambda') for x in maybe_lambda_list[:-1]])
+    maybe_lambda_list_ = split_respecting_brackets(s,sep='.')
+    assert all(x.startswith('lambda') for x in maybe_lambda_list_[:-1])
+
+    maybe_lambda_list = set(x for x in maybe_lambda_list_ if not x.endswith('_{e}'))
     return len(maybe_lambda_list)-1
 
 def translate_by_unify(x,y):
@@ -400,10 +418,13 @@ def infer_slash(lcat,rcat,parent_cat,rule):
     return out_lcat, out_rcat
 
 def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
+    """Determines the slash directions for both f and g when comb. with fwd_cmp."""
     pout,pslash,pin = cat_components(parent_cat)
     gout,gslash,gin = cat_components(g_cat)
     assert maybe_debrac(pin) == maybe_debrac(gin)
-    if gslash == '\\' or pslash == '\\': # disallow bck cmp for now
+    if is_atomic(gout): # only consider if g is type-raised and in that case has slash
+        return None, None
+    elif gslash == '\\' or pslash == '\\': # disallow bck cmp for now
         return None, None
     elif sem_only:
         assert pslash == '|' and gslash == '|'
@@ -414,6 +435,11 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
         new_f = pout + '/' + maybe_brac(composed_cat)
         new_g = composed_cat + '/' + gin
         return new_f, new_g # hard-coding fwd slash
+
+def lf_sem_congruent(lf_str, sem_cat):
+    assert '\\' not in sem_cat and '/' not in sem_cat # should only run on sem_cats, not syn_cats
+    what_n_lambdas_should_be = 1 if sem_cat in ['N','Swhq'] else len(split_respecting_brackets(sem_cat,sep='|'))
+    return what_n_lambdas_should_be == n_lambda_binders(lf_str)+1
 
 def parent_cmp_from_f_and_g(f_cat,g_cat,sem_only):
     fout,fslash,fin = cat_components(f_cat,sep=['/','\\','|'])
@@ -435,10 +461,12 @@ def alpha_normalize(x):
     buffer = max([int(x) for x in trans_list]) + 1
     for v_new, v_old in enumerate(trans_list):
         assert f'${v_new+buffer}' not in x
-        x = x.replace(fr'${v_old}',f'${v_new+buffer}')
+        #x = x.replace(fr'${v_old}',f'${v_new+buffer}')
+        x = re.sub(rf'\${v_old}(?!\d)',f'${v_new+buffer}',x)
     for v_num in range(len(trans_list)):
         assert not bool(re.search(fr'${v_num}',x))
-        x = x.replace(fr'${v_num+buffer}',f'${v_num}')
+        #x = x.replace(fr'${v_num+buffer}',f'${v_num}')
+        x = re.sub(rf'\${v_num+buffer}(?!\d)',f'${v_num}',x)
     return x
 
 def maybe_app(sc1,sc2,direction):

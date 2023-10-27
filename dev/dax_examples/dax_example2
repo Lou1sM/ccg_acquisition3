@@ -1,4 +1,0 @@
-Sent: the man daxed the baby .
-Sem:  lambda $0_{ev}.v|dax&PAST(det|the($1,n|man($1)),det|the($2,n|baby($2)),$0)
-Sem:  lambda $0_{ev}.v|dax&PAST(det|the($1,n|baby($1)),det|the($2,n|man($2)),$0)
-example_end

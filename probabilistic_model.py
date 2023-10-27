@@ -157,7 +157,7 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
         return norm_factor * np.e**(-2*n_vars - n_constants)
 
     def prob(self,y,x):
-        if len(split_respecting_brackets(x,sep=['/','\\','|'])) != n_lambda_binders(y)+1:
+        if x not in ['N','Swhq'] and len(split_respecting_brackets(x,sep=['/','\\','|'])) != n_lambda_binders(y)+1:
             print(y,x)
             return 0
         #y = maybe_de_type_raise(y_)
@@ -180,8 +180,7 @@ class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
         return 28**-math.ceil(len(x)/2) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
-    def __init__(self, base_lexicon):
-        self.base_lexicon = base_lexicon
+    def __init__(self):
         self.syntaxl = CCGDirichletProcessLearner(10)
         self.shmeaningl = ShellMeaningDirichletProcessLearner(1)
         self.meaningl = MeaningDirichletProcessLearner(1)
@@ -284,17 +283,20 @@ class LanguageAcquirer():
         if lf_str in self.full_lfs_cache:
             return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,self.base_lexicon,caches=self.lf_parts_cache,parent='START')
+            lf = LogicalForm(lf_str,caches=self.lf_parts_cache,parent='START')
             self.full_lfs_cache[lf_str] = lf
             return lf
 
     def train_one_step(self,lf_str,words):
         root = self.make_parse_node(lf_str,words) # words is a list
+        if words == 'you won \'t eat'.split():
+            print(root.possible_splits[1]['right'].possible_splits)
+            breakpoint()
         prob_cache = {}
         root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                        self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=False)
         if root_prob==0:
-            breakpoint()
+            print('zero root prob for', lf_str, words)
         root.propagate_above_probs(1)
         #if len(words) == 4 and words[0] == 'does':
         #if ' '.join(words) == 'the mountain deracinates seattle':
@@ -303,21 +305,25 @@ class LanguageAcquirer():
             #root.logical_form.subtree_string_(as_shell=True,recompute=True,show_treelike=False)
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
-                if node.is_fwd:
-                    syntax_split = node.syn_cat + ' + ' + node.sibling.syn_cat
-                else:
-                    syntax_split = node.sibling.syn_cat + ' + ' + node.syn_cat
                 update_weight = node.below_prob * node.above_prob / root_prob # for conditional
-                self.syntaxl.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
+                if node.is_fwd:
+                    #syntax_split = node.syn_cat + ' + ' + node.sibling.syn_cat
+                    self.syntaxl.buffer = [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
+                else:
+                    #syntax_split = node.sibling.syn_cat + ' + ' + node.syn_cat
+                    self.syntaxl.buffer = [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
+                #self.syntaxl.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
             if not leaf_prob > 0:
                 print(node)
             lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
-            word_str, lf, shell_lf, sem_cat, syn_cat = node.info_if_leaf()
-            self.syntaxl.buffer.append(('leaf',syn_cat,leaf_prob))
+            word_str, lf, shell_lf, sem_cats, syn_cats = node.info_if_leaf()
+            #if len(sem_cats) > 1 or len(syn_cats)>1:
+                #breakpoint()
+            self.syntaxl.buffer += [('leaf',sync,leaf_prob) for sync in syn_cats]
             #if shell_lf == 'lambda $0.quant $0' and sem_cat == 'NP|N':
                 #breakpoint()
-            self.shmeaningl.buffer.append((shell_lf,sem_cat,leaf_prob))
+            self.shmeaningl.buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
             self.meaningl.buffer.append((lf,shell_lf,leaf_prob))
             self.wordl.buffer.append((word_str,lf,leaf_prob))
         #print(words,sum([x[2] for x in self.wordl.buffer]))
@@ -345,7 +351,8 @@ class LanguageAcquirer():
             parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
         else:
             parse_root = ParseNode(lf,words,'ROOT')
-            self.root_sem_cat_memory.observe(parse_root.sem_cat)
+            for sc in parse_root.sem_cats:
+                self.root_sem_cat_memory.observe(sc)
             self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
         return parse_root
 
@@ -588,9 +595,8 @@ if __name__ == "__main__":
     #TRANSITIVES = d['transitive_verbs']
     #INTRANSITIVES = d['intransitive_verbs']
     #base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','N','S|NP','S|NP|NP')) for w in item}
-    base_lexicon = {'you':'NP','me':'NP','he':'NP','she':'NP','it':'NP'}
 
-    language_acquirer = LanguageAcquirer(base_lexicon)
+    language_acquirer = LanguageAcquirer()
     if ARGS.reload_from is not None:
         language_acquirer.load_from(f'experiments/{ARGS.reload_from}')
     if ARGS.shuffle: np.random.shuffle(d['data'])
@@ -615,6 +621,7 @@ if __name__ == "__main__":
             if i == ARGS.db_at:
                 breakpoint()
             if len(words) <= ARGS.max_sent_len:
+                print('training on', words, lf_str)
                 language_acquirer.train_one_step(lf_str,words)
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
@@ -626,6 +633,7 @@ if __name__ == "__main__":
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
+    breakpoint()
     #file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     #file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
     if ARGS.n_generate > 0:

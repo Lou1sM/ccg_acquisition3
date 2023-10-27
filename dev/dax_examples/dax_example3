@@ -1,5 +1,0 @@
-Sent: this is corp Mommy
-Sem: lambda $0_{ev}.eq(pro:dem|this,prep|corp(n:prop|Mommy,$0),$0)
-Sem: lambda $0_{ev}.eq(pro:dem|this,det|the($1,n|corp($1)),$0)
-example_end
-
