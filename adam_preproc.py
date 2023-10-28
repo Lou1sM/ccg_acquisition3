@@ -1,48 +1,55 @@
 import json
 import re
-from utils import split_respecting_brackets, is_bracketed, outermost_first_bracketed_chunk, maybe_debrac
+from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac
 
 
-def decommafy(parse):
-    #if ',_' in parse or '_,' in parse:
-        #return None
+def decommafy(parse, debrac=False):
+    #if parse == 'lambda $1_{<r,t>}.v|do-3s_2(and(v|come_4(pro:sub|he_3),$1))':
+    #if parse == 'not(mod|will_2(v|eat_4(pro:per|you_1,BARE($1,n|tiger-pl_5($1)))))':
+    if parse == 'n|tiger_4(pro:sub|he_1)':
+        breakpoint()
     if len(re.findall(r'[(),]',parse)) == 0:
         return parse
-    maybe_lambda_body = re.search(r'(?<=^lambda \$1_\{[re]\}\.).*$',parse)
+    #maybe_lambda_body = re.search(r'(?<=^lambda \$1_\{(r|e|<r,t>)\}\.).*$',parse)
+    maybe_lambda_body = re.search(r'^lambda \$1_\{(r|e|<r,t>)\}\.(.*)$',parse)
     if maybe_lambda_body is None:
         body = parse
         prefix = ''
     else:
-        body = maybe_lambda_body.group()
-        prefix = parse[:maybe_lambda_body.span()[0]]
+        body = maybe_lambda_body.group(2)
+        prefix = parse[:-len(body)]
         assert prefix + body == parse
     suffix = ''
     if body.startswith('Q('):
         body = body[2:-1]
         prefix += 'Q ('
         suffix += ')'
-    first_chunk, rest = outermost_first_bracketed_chunk(body)
+    first_chunk, rest = outermost_first_chunk(body)
     end_of_predicate = first_chunk.find('(')
     pred = first_chunk[:end_of_predicate]
     arg_splits = split_respecting_brackets(first_chunk[end_of_predicate+1:-1],sep=',')
     recursed_list = [decommafy(x) for x in arg_splits]
-    recursed = ' '.join(['('+x+')' if len(x.split())>1 and i > 0 else x for i,x in enumerate(recursed_list)])
-    #converted = f'{pred} {recursed}'
-    converted = f'{pred} ({recursed})' if 'not' in pred or 'will' in pred else f'{pred} {recursed}'
-    if rest.startswith(','): rest = rest[1:]
+    #recursed = ' '.join(['('+x+')' if len(x.split())>1 and i > 0 else x for i,x in enumerate(recursed_list)])
+    recursed = ' '.join(recursed_list)
+    converted = f'{pred} {recursed}'
+    #converted = f'{pred} ({recursed})' if 'not' in pred or 'will' in pred else f'{pred} {recursed}'
+    #if rest.startswith(','): rest = rest[1:]
     assert rest == ''
     #converted_rest = decommafy(rest)
     #if len(converted_rest) > 0:
     #    breakpoint()
-    #    if converted.startswith('AND'):
+    #    if converted.startswith('and'):
     #        converted = f'({converted}) ({converted_rest})'
-    #        print(converted)
     #    else:
     #        converted = f'{converted} ({converted_rest})'
     #assert ' )' not in converted
     assert ',' not in converted or re.search(r'lambda \$\d{1,2}_\{<[ert,<>]+>\}',converted)
-    print(f'{parse} --> {converted}')
     lf = prefix + converted + suffix
+    if debrac:
+        lf = maybe_debrac(lf)
+    elif not is_bracketed(lf):
+        lf = f'({lf})'
+    #else: # already bracced and shouldn't be debracced
     return lf
 
 def lf_preproc(lf_):
@@ -50,9 +57,11 @@ def lf_preproc(lf_):
         return None
     lf = lf_.rstrip('\n')
     lf = lf[5:] # have already checked it starts with 'Sem: '
-    lf = lf.replace('lambda $0_{r}.','').replace(',$0','')
-    lf = lf.replace('lambda $0_{<r,t>}.','').replace(',$0','')
-    return decommafy(lf)
+    lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
+    lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
+    dlf = decommafy(lf, debrac=True)
+    print(f'{lf} --> {dlf}')
+    return dlf
     #m = re.search(r'(?<=^Sem: lambda \$0_\{r\}\.)(.*)(,\$0\))(\)*$)',lf)
     #body, _, closing_brackets = m.groups()
     #return body+closing_brackets

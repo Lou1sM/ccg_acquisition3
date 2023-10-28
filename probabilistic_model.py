@@ -158,7 +158,7 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
 
     def prob(self,y,x):
         if x not in ['N','Swhq'] and len(split_respecting_brackets(x,sep=['/','\\','|'])) != n_lambda_binders(y)+1:
-            print(y,x)
+            #print(y,x)
             return 0
         #y = maybe_de_type_raise(y_)
         base_prob = self.base_distribution(y)
@@ -289,29 +289,24 @@ class LanguageAcquirer():
 
     def train_one_step(self,lf_str,words):
         root = self.make_parse_node(lf_str,words) # words is a list
-        if words == 'you won \'t eat'.split():
-            print(root.possible_splits[1]['right'].possible_splits)
-            breakpoint()
+        #if words == 'you won \'t eat'.split():
+        #if words == 'you want one what'.split():
+            #print(root.possible_splits[1]['right'].possible_splits)
         prob_cache = {}
         root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                        self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=False)
         if root_prob==0:
             print('zero root prob for', lf_str, words)
         root.propagate_above_probs(1)
-        #if len(words) == 4 and words[0] == 'does':
-        #if ' '.join(words) == 'the mountain deracinates seattle':
-        #if 'deracinate' in ' '.join(words):
-            #breakpoint()
-            #root.logical_form.subtree_string_(as_shell=True,recompute=True,show_treelike=False)
         for node, prob in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 update_weight = node.below_prob * node.above_prob / root_prob # for conditional
                 if node.is_fwd:
                     #syntax_split = node.syn_cat + ' + ' + node.sibling.syn_cat
-                    self.syntaxl.buffer = [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
+                    self.syntaxl.buffer += [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
                 else:
                     #syntax_split = node.sibling.syn_cat + ' + ' + node.syn_cat
-                    self.syntaxl.buffer = [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
+                    self.syntaxl.buffer += [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
                 #self.syntaxl.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
             if not leaf_prob > 0:
@@ -328,6 +323,8 @@ class LanguageAcquirer():
             self.wordl.buffer.append((word_str,lf,leaf_prob))
         #print(words,sum([x[2] for x in self.wordl.buffer]))
         self.flush_buffers()
+        #if words == 'you want one what'.split():
+        #    breakpoint()
 
     def generate_words(self,syn_cat):
         while True:
@@ -560,6 +557,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--n_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
     ARGS.add_argument("--max_sent_len", type=int, default=9)
+    ARGS.add_argument("--start_from", type=int, default=0)
     ARGS.add_argument("--n_epochs", type=int, default=1)
     ARGS.add_argument("--n_generate", type=int, default=0)
     ARGS.add_argument("-tt","--short_test_run", action="store_true")
@@ -602,9 +600,11 @@ if __name__ == "__main__":
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     f = open(f'experiments/{ARGS.expname}/results.txt','w')
-    all_data = d['data'][:NDPS]
-    train_data = all_data[:-len(all_data)//5]
-    test_data = train_data if ARGS.test_run else all_data[-len(all_data)//5:]
+    bad_list = ['and', 'att', ' _ ']
+    all_data = [x for x in d['data'] if all(y not in x['lf'] for y in bad_list)]
+    data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
+    train_data = data_to_use[:-len(data_to_use)//5]
+    test_data = train_data if ARGS.test_run else data_to_use[-len(data_to_use)//5:]
     if 'questions' in ARGS.dset:
         univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a lake))'}
         train_data = train_data[:10] + [univ] + train_data[10:]
@@ -621,7 +621,7 @@ if __name__ == "__main__":
             if i == ARGS.db_at:
                 breakpoint()
             if len(words) <= ARGS.max_sent_len:
-                print('training on', words, lf_str)
+                print(f'{i}th dpoint: {words}, {lf_str}')
                 language_acquirer.train_one_step(lf_str,words)
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')

@@ -28,7 +28,7 @@ def is_wellformed_lf(lf):
         skolem_matches = re.findall(r'\(lambda (\$\d{1,2})\.[a-z]* \1\)',lf)
         if len(re.findall(r'lambda',lf)) != len(skolem_matches):
             return False
-    #first, rest = outermost_first_bracketed_chunk(lf)
+    #first, rest = outermost_first_chunk(lf)
     #if first != lf:
         #return is_wellformed_lf(first) and is_wellformed_lf(rest)
     return False
@@ -119,11 +119,11 @@ def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
 def first_lambda_body_split(lf):
     """lambda_binder has the dot on the end"""
     try:
-        lambda_binder = re.match(r'^lambda \$\d{1,2}(_\{[er]\})?\.',lf).group(0)
+        lambda_binder = re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>)\})?\.',lf).group(0)
     except AttributeError: #there's no lambda binder in the lf
         return '', lf, -1
     body = lf[len(lambda_binder):]
-    first_var_num = int(lambda_binder[8:-5] if '_' in lambda_binder else lambda_binder[8:-1])
+    first_var_num = int(lambda_binder[8:lambda_binder.index('_')] if '_' in lambda_binder else lambda_binder[8:-1])
     return lambda_binder, body, first_var_num
 
 def all_lambda_body_splits(lf):
@@ -136,11 +136,31 @@ def all_lambda_body_splits(lf):
     body = lf[len(lambda_binder):]
     return lambda_binder, body
 
+def alpha_normalize(x):
+    hits = re.findall(r'(?<=\$)\d{1,2}',x)
+    if len(hits) == 0:
+        return x
+    trans_list = sorted(set(hits),key=lambda x:hits.index(x))
+    #buffer = int(max(trans_list))+1 # big enough to not clobber anything
+    buffer = max([int(x) for x in trans_list]) + 1
+    #if x == 'lambda $2.Q (mod|do_2 (v|think_4 pro:per|you_3 (lambda $5_{r}.v|say-3s_6 pro:per|it_5 $2 $1)))':
+        #breakpoint()
+    for v_new, v_old in enumerate(trans_list):
+        assert f'${v_new+buffer}' not in x
+        #x = x.replace(fr'${v_old}',f'${v_new+buffer}')
+        x = re.sub(rf'\${v_old}(?!\d)',f'${v_new+buffer}',x)
+    for v_num in range(len(trans_list)):
+        assert not bool(re.search(fr'${v_num}',x))
+        #x = x.replace(fr'${v_num+buffer}',f'${v_num}')
+        x = re.sub(rf'\${v_num+buffer}(?!\d)',f'${v_num}',x)
+    return x
+
 def beta_normalize(m,verbose=False):
     m = maybe_debrac(m)
     assert is_wellformed_lf(m)
     if m.startswith('lambda'):
         lambda_binder, body, _ = first_lambda_body_split(m)
+        assert lambda_binder != ''
         return lambda_binder + beta_normalize(body)
     if re.match(r'^[\w\$]*$',m): # has no variables
         if verbose: print(m)
@@ -207,7 +227,7 @@ def n_nps(sem_cat):
 def is_balanced_nums_brackets(s):
     return len(re.findall(r'\(',s)) == len(re.findall(r'\)',s))
 
-def outermost_first_bracketed_chunk(s):
+def outermost_first_chunk(s):
     """Similar to the first argument returned by split_respecting_brackets,
     but here we don't need a separator, just split as soon as brackets are
     closed, e.g. f(x,y)g(z) --> f(x,y)
@@ -215,6 +235,8 @@ def outermost_first_bracketed_chunk(s):
     if '(' not in s:
         assert ')' not in s
         return s, ''
+    #if not s.startswith('('):
+        #return s[:s.index('(')],s[s.index('('):]
     n_open_brackets = 0
     has_been_bracketed = False
     for i,c in enumerate(s):
@@ -275,7 +297,7 @@ def maybe_debrac(s):
     while True:
         if not is_bracketed(s):
             return s
-        elif outermost_first_bracketed_chunk(s)[0] == s: # don't debrac cases like (...)(...)
+        elif outermost_first_chunk(s)[0] == s: # don't debrac cases like (...)(...)
             s = s[1:-1]
         else:
             return s
@@ -293,7 +315,6 @@ def normalize_dict(d):
 def n_lambda_binders(s):
     maybe_lambda_list_ = split_respecting_brackets(s,sep='.')
     assert all(x.startswith('lambda') for x in maybe_lambda_list_[:-1])
-
     maybe_lambda_list = set(x for x in maybe_lambda_list_ if not x.endswith('_{e}'))
     return len(maybe_lambda_list)-1
 
@@ -451,23 +472,6 @@ def parent_cmp_from_f_and_g(f_cat,g_cat,sem_only):
 def reverse_slash(slash):
     assert slash in ['\\','/']
     return '\\' if slash == '/' else '/'
-
-def alpha_normalize(x):
-    hits = re.findall(r'(?<=\$)\d{1,2}',x)
-    if len(hits) == 0:
-        return x
-    trans_list = sorted(set(hits),key=lambda x:hits.index(x))
-    #buffer = int(max(trans_list))+1 # big enough to not clobber anything
-    buffer = max([int(x) for x in trans_list]) + 1
-    for v_new, v_old in enumerate(trans_list):
-        assert f'${v_new+buffer}' not in x
-        #x = x.replace(fr'${v_old}',f'${v_new+buffer}')
-        x = re.sub(rf'\${v_old}(?!\d)',f'${v_new+buffer}',x)
-    for v_num in range(len(trans_list)):
-        assert not bool(re.search(fr'${v_num}',x))
-        #x = x.replace(fr'${v_num+buffer}',f'${v_num}')
-        x = re.sub(rf'\${v_num+buffer}(?!\d)',f'${v_num}',x)
-    return x
 
 def maybe_app(sc1,sc2,direction):
     if direction=='bck':
