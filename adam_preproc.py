@@ -4,10 +4,6 @@ from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk
 
 
 def decommafy(parse, debrac=False):
-    #if parse == 'lambda $1_{<r,t>}.v|do-3s_2(and(v|come_4(pro:sub|he_3),$1))':
-    #if parse == 'not(mod|will_2(v|eat_4(pro:per|you_1,BARE($1,n|tiger-pl_5($1)))))':
-    if parse == 'n|tiger_4(pro:sub|he_1)':
-        breakpoint()
     if len(re.findall(r'[(),]',parse)) == 0:
         return parse
     #maybe_lambda_body = re.search(r'(?<=^lambda \$1_\{(r|e|<r,t>)\}\.).*$',parse)
@@ -27,11 +23,23 @@ def decommafy(parse, debrac=False):
     first_chunk, rest = outermost_first_chunk(body)
     end_of_predicate = first_chunk.find('(')
     pred = first_chunk[:end_of_predicate]
-    arg_splits = split_respecting_brackets(first_chunk[end_of_predicate+1:-1],sep=',')
+    args = first_chunk[end_of_predicate+1:-1]
+    #if pred.startswith('mod|do'):
+    if re.match(r'(v|mod)\|do',pred):
+        if '-' in pred and args.startswith('v|'):
+            marking = pred.split('-')[1].split('_')[0]
+            args = re.sub(r'v\|([a-zA-Z0-9]+)_',fr'v|\1-{marking}_', args)
+            pred = ''
+        elif '-' in pred and not args.startswith('v|'):
+            pass # probs not do-support then
+        else: # no marking to pass on
+            pred = ''
+    arg_splits = split_respecting_brackets(args,sep=',')
+
     recursed_list = [decommafy(x) for x in arg_splits]
     #recursed = ' '.join(['('+x+')' if len(x.split())>1 and i > 0 else x for i,x in enumerate(recursed_list)])
     recursed = ' '.join(recursed_list)
-    converted = f'{pred} {recursed}'
+    converted = maybe_debrac(recursed) if pred=='' else f'{pred} {recursed}'
     #converted = f'{pred} ({recursed})' if 'not' in pred or 'will' in pred else f'{pred} {recursed}'
     #if rest.startswith(','): rest = rest[1:]
     assert rest == ''
@@ -60,7 +68,7 @@ def lf_preproc(lf_):
     lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
     lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
     dlf = decommafy(lf, debrac=True)
-    print(f'{lf} --> {dlf}')
+    #print(f'{lf} --> {dlf}')
     return dlf
     #m = re.search(r'(?<=^Sem: lambda \$0_\{r\}\.)(.*)(,\$0\))(\)*$)',lf)
     #body, _, closing_brackets = m.groups()
@@ -81,6 +89,9 @@ assert all([adam_lines[i]=='\n' for i in range(3,len(adam_lines),4)])
 
 dset_data = []
 for l,s in zip(lfs,sents):
+    if s[6:-3] in ['don \'t Adam foot', 'who is going to become a spider', 'two Adam', 'a d a m']:
+        print(888)
+        continue
     pl = lf_preproc(l)
     if pl is None:
         continue
