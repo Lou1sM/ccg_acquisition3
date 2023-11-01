@@ -1,11 +1,17 @@
 import re
 
 
+LAMBDA_RE_STR = r'^lambda \$\d{1,2}(_\{(e|r|<r,t>)\})?\.'
 def new_var_num(lf_str):
     vars_in_self = re.findall(r'\$\d{1,2}',lf_str)
     if len(vars_in_self) == 0:
         return 0
     return max([int(x[1:]) for x in vars_in_self])+1
+
+def lambda_match(maybe_lambda_str):
+    if not maybe_lambda_str.startswith('lambda $'):
+        return None # fast check without re to rule out most
+    return re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.',maybe_lambda_str)
 
 def is_wellformed_lf(lf):
     if lf == '': return True
@@ -18,8 +24,7 @@ def is_wellformed_lf(lf):
         return True
     if bool(re.match(r'\$\d{1,2}$',lf)):
         return True
-    possible_first_lambda = re.match(r'lambda \$\d{1,2}',lf)
-    if bool(possible_first_lambda):
+    if bool(possible_first_lambda := lambda_match(lf)):
         return is_wellformed_lf(lf[possible_first_lambda.end():])
     splits = split_respecting_brackets(lf)
     if len(splits) > 1:
@@ -70,7 +75,8 @@ def is_cat_type_raised(sem_cat):
     return in_cat_splits[0] == out_cat
 
 def is_type_raised(lf_str):
-    possible_first_lambda = re.match(r'lambda \$\d{1,2}',lf_str)
+    #possible_first_lambda = re.match(r'lambda \$\d{1,2}',lf_str)
+    possible_first_lambda = lambda_match(lf_str)
     if lf_str == 'lambda $0.jumps a $0':
         breakpoint()
     if not bool(possible_first_lambda):
@@ -81,7 +87,8 @@ def is_type_raised(lf_str):
 
 def logical_de_type_raise(lf_str):
     lambda_binder, _, rest = lf_str.rpartition('.')
-    type_raising_part = re.match(r'lambda (\$\d{1,2}).\1',lf_str)
+    #type_raising_part = re.match(r'lambda (\$\d{1,2}).\1',lf_str)
+    type_raising_part = lambda_match(lf_str)
     len_of_type_raising_part = type_raising_part.span()[1]
     rest = lf_str[len_of_type_raising_part+1:]
     rest = maybe_debrac(rest)
@@ -119,7 +126,8 @@ def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
 def first_lambda_body_split(lf):
     """lambda_binder has the dot on the end"""
     try:
-        lambda_binder = re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>)\})?\.',lf).group(0)
+        #lambda_binder = re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>)\})?\.',lf).group(0)
+        lambda_binder = lambda_match(lf).group(0)
     except AttributeError: #there's no lambda binder in the lf
         return '', lf, -1
     body = lf[len(lambda_binder):]
@@ -180,7 +188,8 @@ def beta_normalize(m,verbose=False):
 
     if left.startswith('lambda'):
         lambda_binder,_,rest = left.partition('.')
-        assert re.match(r'lambda \$\d{1,2}',lambda_binder)
+        #assert re.match(r'lambda \$\d{1,2}',lambda_binder)
+        assert lambda_match(lambda_binder+'.')
         var_name = lambda_binder[7:]
         assert re.match(r'\$\d',var_name)
         combined = re.sub(re.escape(f'({var_name})'),right,rest) # to avoid doubly-bracketted
@@ -313,9 +322,9 @@ def normalize_dict(d):
         return {k:v/norm for k,v in d.items()}
 
 def n_lambda_binders(s):
-    maybe_lambda_list_ = split_respecting_brackets(s,sep='.')
-    assert all(x.startswith('lambda') for x in maybe_lambda_list_[:-1])
-    maybe_lambda_list = set(x for x in maybe_lambda_list_ if not x.endswith('_{e}'))
+    maybe_lambda_list = split_respecting_brackets(s,sep='.')
+    assert all(x.startswith('lambda') for x in maybe_lambda_list[:-1])
+    #maybe_lambda_list = set(x for x in maybe_lambda_list_ if not x.endswith('_{e}'))
     return len(maybe_lambda_list)-1
 
 def translate_by_unify(x,y):
@@ -459,8 +468,8 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
 
 def lf_sem_congruent(lf_str, sem_cat):
     assert '\\' not in sem_cat and '/' not in sem_cat # should only run on sem_cats, not syn_cats
-    what_n_lambdas_should_be = 1 if sem_cat in ['N','Swhq'] else len(split_respecting_brackets(sem_cat,sep='|'))
-    return what_n_lambdas_should_be == n_lambda_binders(lf_str)+1
+    what_n_lambdas_should_be = 1 if sem_cat in ['N','Swhq'] else (len(split_respecting_brackets(sem_cat,sep='|'))-1)
+    return what_n_lambdas_should_be == n_lambda_binders(lf_str)
 
 def parent_cmp_from_f_and_g(f_cat,g_cat,sem_only):
     fout,fslash,fin = cat_components(f_cat,sep=['/','\\','|'])

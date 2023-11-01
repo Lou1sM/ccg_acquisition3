@@ -28,7 +28,7 @@ def type_raise(cat,direction,out_cat='S'):
 
 class DirichletProcess():
     def __init__(self,alpha):
-        self.memory = {'count':0}
+        self.memory = {'COUNT':0}
         self.alpha = alpha
 
     def observe(self,obs):
@@ -36,13 +36,14 @@ class DirichletProcess():
             self.memory[obs] += 1
         else:
             self.memory = self.memory | {obs:1}
-        self.memory['count'] += 1
-        assert np.allclose(2*self.memory['count'],sum(self.memory.values()),rtol=1e-6)
+        self.memory['COUNT'] += 1
+        assert np.allclose(2*self.memory['COUNT'],sum(self.memory.values()),rtol=1e-6)
 
-    def prob(self,obs):
+    def prob(self,obs, ignore_prior=False):
         base_prob = 0.25 * (1/12)**(obs.count('/') + obs.count('\\') + obs.count('|'))
         mx = self.memory.get(obs,0)
-        return (mx+self.alpha*base_prob)/(self.memory['count']+self.alpha)
+        count = self.memory['COUNT']
+        return mx/count if ignore_prior else (mx+self.alpha*base_prob)/(count+self.alpha)
 
 class BaseDirichletProcessLearner(ABC):
     def __init__(self,alpha):
@@ -50,6 +51,7 @@ class BaseDirichletProcessLearner(ABC):
         self.memory = {}
         self.base_distribution_cache = {}
         self.buffer = []
+        self.is_training = True
 
     def base_distribution_(self,x):
         raise NotImplementedError
@@ -63,21 +65,21 @@ class BaseDirichletProcessLearner(ABC):
         if x not in self.memory:
             return base_prob
         mx = self.memory[x].get(y,0)
-        return (mx+self.alpha*base_prob)/(self.memory[x]['count']+self.alpha)
+        return (mx+self.alpha*base_prob)/(self.memory[x]['COUNT']+self.alpha)
 
     def prob(self,*args,**kwargs):
         return self._prob(*args,**kwargs)
 
     def _observe(self,y,x,weight):
         if x not in self.memory:
-            self.memory[x] = {y:weight,'count':weight}
+            self.memory[x] = {y:weight,'COUNT':weight}
         elif y not in self.memory[x]:
             self.memory[x] = self.memory[x] | {y:weight}
-            self.memory[x]['count'] += weight
+            self.memory[x]['COUNT'] += weight
         else:
             self.memory[x][y] += weight
-            self.memory[x]['count'] += weight
-        assert np.allclose(2*self.memory[x]['count'],sum(self.memory[x].values()),rtol=1e-6)
+            self.memory[x]['COUNT'] += weight
+        assert np.allclose(2*self.memory[x]['COUNT'],sum(self.memory[x].values()),rtol=1e-6)
 
     def observe(self,*args,**kwargs):
         """Can be overwritten if necessary."""
@@ -104,7 +106,7 @@ class BaseDirichletProcessLearner(ABC):
     def conditional_sample(self,x):
         if x not in self.memory:
             breakpoint()
-        options,unnormed_probs = zip(*[z for z in self.memory[x].items() if z[0]!='count'])
+        options,unnormed_probs = zip(*[z for z in self.memory[x].items() if z[0]!='COUNT'])
         probs = np.array(unnormed_probs)/sum(unnormed_probs)
         return np.random.choice(options,p=probs)
 
@@ -122,7 +124,6 @@ class BaseDirichletProcessLearner(ABC):
 
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        assert x != 'NP + S/NP\\NP'
         #n_slashes = len(re.findall(r'[\\/\|]',x))
         #return (0.5555)*0.9**(n_slashes+1) # Omri 2017 had 0.2
         return 1
@@ -133,21 +134,22 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
         else:
             self._observe(y,x,weight)
 
-    def prob(self,y,x):
+    def prob(self,y,x, can_be_weird_svo=False):
         if y != 'leaf':
             outcat, _ = get_combination(*y.split(' + '))
             if outcat is None: #only time this should happen is during inference with crossed cmp
                 return 0
             if not is_direct_congruent(outcat,x):
                 return 0
+        assert x != 'NP + S/NP\\NP' or not self.is_training
         base_prob = self.base_distribution(y)
         if x not in self.memory:
             if y == 'leaf':
-                #return base_prob/(self.memory.get('count',0) + 1) #could be +base_prob instead of 1
+                #return base_prob/(self.memory.get('COUNT',0) + 1) #could be +base_prob instead of 1
                 return base_prob
             return base_prob
         mx = self.memory[x].get(y,0)
-        return (mx+self.alpha*base_prob)/(self.memory[x]['count']+self.alpha)
+        return (mx+self.alpha*base_prob)/(self.memory[x]['COUNT']+self.alpha)
 
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
@@ -165,7 +167,7 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
         if x not in self.memory:
             return base_prob
         mx = self.memory[x].get(y,0)
-        return (mx+self.alpha*base_prob)/(self.memory[x]['count']+self.alpha)
+        return (mx+self.alpha*base_prob)/(self.memory[x]['COUNT']+self.alpha)
 
 class MeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
@@ -190,6 +192,18 @@ class LanguageAcquirer():
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
         self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
 
+    def train(self):
+        self.syntaxl.is_training = True
+        self.shmeaningl.is_training = True
+        self.meaningl.is_training = True
+        self.wordl.is_training = True
+
+    def eval(self):
+        self.syntaxl.is_training = False
+        self.shmeaningl.is_training = False
+        self.meaningl.is_training = False
+        self.wordl.is_training = False
+
     @property
     def lf_vocab(self):
         return self.wordl.memory.keys()
@@ -208,11 +222,11 @@ class LanguageAcquirer():
 
     @property
     def splits_vocab(self):
-        return list(set([w for x in self.syntaxl.memory.values() for w in x.keys() if w!='count']))
+        return list(set([w for x in self.syntaxl.memory.values() for w in x.keys() if w!='COUNT']))
 
     @property
     def mwe_vocab(self):
-        return list(set([w for x in self.wordl.memory.values() for w in x.keys() if w!='count']))
+        return list(set([w for x in self.wordl.memory.values() for w in x.keys() if w!='COUNT']))
 
     @property
     def vocab(self):
@@ -275,8 +289,8 @@ class LanguageAcquirer():
     def show_splits(self,syn_cat,f):
         file_print(f'Learned splits for category {syn_cat}',f)
         counts = self.syntaxl.memory[syn_cat]
-        norm = counts['count']
-        probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='count'}
+        norm = counts['COUNT']
+        probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='COUNT'}
         file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
 
     def get_lf(self,lf_str):
@@ -289,9 +303,8 @@ class LanguageAcquirer():
 
     def train_one_step(self,lf_str,words):
         root = self.make_parse_node(lf_str,words) # words is a list
-        #if words == 'you won \'t eat'.split():
-        #if words == 'you want one what'.split():
-            #print(root.possible_splits[1]['right'].possible_splits)
+        #if lf_str == 'not (mod|will_2 (v|eat_4 pro:per|you_1 (BARE $1 (n|tiger-pl_5 $1))))':
+            #breakpoint()
         prob_cache = {}
         root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                        self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=False)
@@ -325,6 +338,31 @@ class LanguageAcquirer():
         self.flush_buffers()
         #if words == 'you want one what'.split():
         #    breakpoint()
+
+    def probs_of_word_orders(self, ignore_prior):
+        if ignore_prior:
+            syn_prob_func = lambda y,x: self.syntaxl.memory[x][y]/self.syntaxl.memory[x]['COUNT']
+            shm_prob_func = lambda y,x: self.shmeaningl.memory[x][y]/self.shmeaningl.memory[x]['COUNT']
+        else:
+            syn_prob_func = self.syntaxl.prob
+            shm_prob_func = self.shmeaningl.prob
+        svo_ = syn_prob_func('NP + S\\NP', 'S')*syn_prob_func('S\\NP/NP + NP', 'S\\NP')
+        sov_or_osv = syn_prob_func('NP + S\\NP', 'S')*syn_prob_func('NP + S\\NP\\NP','S\\NP')
+        vso_or_vos = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('S/NP/NP + NP','S/NP')
+        # it will never have seen this split because disallowed during training
+        # so only option is to include prior
+        ovs_ = syn_prob_func('S/NP + NP', 'S')*self.shmeaningl.prob('NP + S/NP\\NP', 'S/NP')
+        comb_obj_first = shm_prob_func('lambda $0.lambda $1.const $1 $0', 'S|NP|NP')
+        comb_subj_first = shm_prob_func('lambda $0.lambda $1.const $0 $1', 'S|NP|NP')
+        unnormed_probs = pd.Series({
+        'sov': sov_or_osv*comb_obj_first,
+        'svo': svo_*comb_obj_first,
+        'vso': vso_or_vos*comb_subj_first,
+        'vos': vso_or_vos*comb_obj_first,
+        'osv': sov_or_osv*comb_subj_first,
+        'ovs': ovs_*comb_subj_first
+        })
+        return unnormed_probs/unnormed_probs.sum()
 
     def generate_words(self,syn_cat):
         while True:
@@ -556,12 +594,12 @@ if __name__ == "__main__":
     ARGS.add_argument("--n_test", type=int,default=5)
     ARGS.add_argument("--n_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
-    ARGS.add_argument("--max_sent_len", type=int, default=9)
+    ARGS.add_argument("--max_lf_len", type=int, default=9)
     ARGS.add_argument("--start_from", type=int, default=0)
     ARGS.add_argument("--n_epochs", type=int, default=1)
     ARGS.add_argument("--n_generate", type=int, default=0)
-    ARGS.add_argument("-tt","--short_test_run", action="store_true")
-    ARGS.add_argument("-t","--test_run", action="store_true")
+    ARGS.add_argument("-tt","--is_short_test", action="store_true")
+    ARGS.add_argument("-t","--is_test", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
     ARGS.add_argument("--show_graphs", action="store_true")
     ARGS.add_argument("--db_parse", action="store_true")
@@ -573,18 +611,16 @@ if __name__ == "__main__":
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
     ARGS = ARGS.parse_args()
 
-    ARGS.test_run = ARGS.test_run or ARGS.short_test_run
+    ARGS.is_test = ARGS.is_test or ARGS.is_short_test
 
-    if ARGS.test_run:
+    if ARGS.is_test:
         ARGS.expname = 'tmp'
         if ARGS.n_dpoints == -1:
             ARGS.n_dpoints = 10
     elif ARGS.expname is None:
-        expname = f'{ARGS.n_epochs}_{ARGS.max_sent_len}'
+        expname = f'{ARGS.n_epochs}_{ARGS.max_lf_len}'
     else:
         expname = ARGS.expname
-    if ARGS.short_test_run:
-        ARGS.n_dpoints = 30
     set_experiment_dir(f'experiments/{ARGS.expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
     with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
 
@@ -600,16 +636,18 @@ if __name__ == "__main__":
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     f = open(f'experiments/{ARGS.expname}/results.txt','w')
-    bad_list = ['and', 'att', ' _ ']
+    bad_list = ['and', 'att', ' _ ','(BARE $1 ($2 (qn|many_2 $1))','lambda $1_{<<e,e>,e>}.lambda $1_{<<e,e>,e>}','{e}.lambda $1_{e}.', 'v|do-past_1 (v|hit-zero_3 pro:per|you_2 pro:indef|something_4)', '$1_{e}.lambda $2_{e}']
     all_data = [x for x in d['data'] if all(y not in x['lf'] for y in bad_list)]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
     train_data = data_to_use[:-len(data_to_use)//5]
-    test_data = train_data if ARGS.test_run else data_to_use[-len(data_to_use)//5:]
+    test_data = train_data if ARGS.is_test else data_to_use[-len(data_to_use)//5:]
     if 'questions' in ARGS.dset:
         univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a lake))'}
         train_data = train_data[:10] + [univ] + train_data[10:]
         test_data = [univ] + test_data
     start_time = time()
+    all_word_order_probs = []
+    all_word_order_probs_no_prior = []
     for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
@@ -620,9 +658,14 @@ if __name__ == "__main__":
                 words = words[:-1]
             if i == ARGS.db_at:
                 breakpoint()
-            if len(words) <= ARGS.max_sent_len:
+            if len(lf_str.split()) - 3*lf_str.count('BARE') <= ARGS.max_lf_len:
                 print(f'{i}th dpoint: {words}, {lf_str}')
                 language_acquirer.train_one_step(lf_str,words)
+            if ((i+1)%10 == 0) or (ARGS.is_test and i>10):
+                language_acquirer.eval()
+                all_word_order_probs.append(language_acquirer.probs_of_word_orders(False))
+                all_word_order_probs_no_prior.append(language_acquirer.probs_of_word_orders(True))
+                language_acquirer.train()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
         print(f"Epoch {epoch_num} time: {time()-epoch_start_time:.3f} per dpoint: {time_per_dpoint:.6f}")
@@ -633,9 +676,27 @@ if __name__ == "__main__":
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
-    breakpoint()
+    print(df_prior:=pd.DataFrame(all_word_order_probs))
+    df_no_prior=pd.DataFrame(all_word_order_probs_no_prior)
+    cs = ['r','g','b','y','orange','brown']
+
+    def plot_df(df, savepath):
+        for i,c in enumerate(df.columns):
+            plt.plot(df[c],label=c,color=cs[i])
+        plt.legend(loc='upper right')
+        plt.savefig(savepath)
+        #plt.show()
+
+    plot_df(df_prior, 'word_order_probs.png')
+    plot_df(df_no_prior, 'word_order_probs_no_prior.png')
     #file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     #file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
+    if ARGS.db_after:
+        la = language_acquirer
+        print(la.syntaxl.memory['S\\NP'])
+        print(la.syntaxl.memory['S\\NP'])
+        breakpoint()
+        la.probs_of_word_orders()
     if ARGS.n_generate > 0:
         file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
     for _ in range(ARGS.n_generate):
@@ -653,7 +714,4 @@ if __name__ == "__main__":
             language_acquirer.parse(gt[0][0]['words'].split())
             language_acquirer.draw_graph(gt,is_gt=True)
     print(language_acquirer.syntaxl.memory['S/NP'])
-    if ARGS.db_after:
-        la = language_acquirer
-        breakpoint()
     language_acquirer.save_to(f'experiments/{ARGS.expname}')

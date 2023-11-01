@@ -1,5 +1,5 @@
 import numpy as np
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_sem_congruent, is_cat_type_raised
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_sem_congruent, is_cat_type_raised, lambda_match
 import re
 import sys; sys.setrecursionlimit(500)
 from config import pos_marking_dict
@@ -40,7 +40,7 @@ class LogicalForm:
         if parent == 'START':
             if defining_string.startswith('Q'):
                 self.sem_cats = set(['Sq'])
-            elif defining_string.startswith('lambda $1_{e}') or defining_string.startswith('lambda $1_{<r,t>}'):
+            elif lambda_match(defining_string):
                 self.sem_cats = set(['Swhq'])
             else:
                 self.sem_cats = set(['S'])
@@ -50,11 +50,14 @@ class LogicalForm:
             self.node_type = 'barenoun'
             self.is_leaf = True
             self.string = defining_string
+            for v_num in set(re.findall(r'(?<=\$)\d{1,2}',defining_string)):
+                self.extend_var_descendents(v_num)
         elif defining_string=='not':
             self.node_type = 'neg'
             self.string = 'not'
             self.is_leaf = True
-        elif bool(re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>)\})?\.',defining_string)):
+        #elif bool(re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>)\})?\.',defining_string)):
+        elif bool(lambda_match(defining_string)):
             lambda_string, _, remaining_string = defining_string.partition('.')
             variable_index = lambda_string.partition('_')[0][7:]
             self.is_leaf = False
@@ -118,6 +121,7 @@ class LogicalForm:
         #if defining_string.startswith('lambda $1_{r}.'):
             #breakpoint()
         pass
+
     def set_cats_from_string(self):
         if self.parent == 'START':
             self.is_semantic_leaf = False
@@ -287,7 +291,8 @@ class LogicalForm:
             assert g.subtree_string().startswith('lambda')
             f.sem_cats = set(['X'])
             to_add_to = self.possible_cmp_splits
-        assert combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True)
+        if not combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True):
+            breakpoint()
         g.infer_splits()
         if self.sem_cat_is_set and g.sem_cat_is_set:
             self.set_f_sem_cat_from_self_and_g(f,g,split_type)
