@@ -8,6 +8,8 @@ def decommafy(parse, debrac=False):
         return parse
     #maybe_lambda_body = re.search(r'(?<=^lambda \$1_\{(r|e|<r,t>)\}\.).*$',parse)
     maybe_lambda_body = re.search(r'^lambda \$1_\{(r|e|<r,t>)\}\.(.*)$',parse)
+    #if parse.startswith('BARE'):
+        #breakpoint()
     if maybe_lambda_body is None:
         body = parse
         prefix = ''
@@ -30,9 +32,7 @@ def decommafy(parse, debrac=False):
             marking = pred.split('-')[1].split('_')[0]
             args = re.sub(r'v\|([a-zA-Z0-9]+)_',fr'v|\1-{marking}_', args)
             pred = ''
-        elif '-' in pred and not args.startswith('v|'):
-            pass # probs not do-support then
-        else: # no marking to pass on
+        elif args.startswith('v|'):
             pred = ''
     arg_splits = split_respecting_brackets(args,sep=',')
 
@@ -55,7 +55,7 @@ def decommafy(parse, debrac=False):
     lf = prefix + converted + suffix
     if debrac:
         lf = maybe_debrac(lf)
-    elif not is_bracketed(lf):
+    elif not is_bracketed(lf) and len(lf.split())>1:
         lf = f'({lf})'
     #else: # already bracced and shouldn't be debracced
     return lf
@@ -65,40 +65,50 @@ def lf_preproc(lf_):
         return None
     lf = lf_.rstrip('\n')
     lf = lf[5:] # have already checked it starts with 'Sem: '
-    lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
-    lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
+    if lf.startswith('lambda $0'):
+        lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
+        lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
     dlf = decommafy(lf, debrac=True)
-    #print(f'{lf} --> {dlf}')
+    if ARGS.print_conversions:
+        print(f'{lf} --> {dlf}')
     return dlf
-    #m = re.search(r'(?<=^Sem: lambda \$0_\{r\}\.)(.*)(,\$0\))(\)*$)',lf)
-    #body, _, closing_brackets = m.groups()
-    #return body+closing_brackets
 
 def sent_preproc(sent):
     return sent[6:].rstrip('?.!\n').split()
 
-with open('data/adam.all_lf.txt') as f:
-    adam_lines = f.readlines()
+if __name__ == '__main__':
+    import argparse
+    ARGS = argparse.ArgumentParser()
+    ARGS.add_argument("-d", "--dset", type=str, choices=['adam', 'hagar'])
+    ARGS.add_argument("-p", "--print_conversions", action='store_true')
+    ARGS = ARGS.parse_args()
 
-sents = [adam_lines[i] for i in range(0,len(adam_lines),4)]
-assert all([s.startswith('Sent: ') for s in sents])
-lfs = [adam_lines[i] for i in range(1,len(adam_lines),4)]
-assert all([lf.startswith('Sem: ') for lf in lfs])
-assert all([adam_lines[i]=='example_end\n' for i in range(2,len(adam_lines),4)])
-assert all([adam_lines[i]=='\n' for i in range(3,len(adam_lines),4)])
+    with open(f'data/{ARGS.dset}_comma_format.txt') as f:
+        adam_lines = f.readlines()
 
-dset_data = []
-for l,s in zip(lfs,sents):
-    if s[6:-3] in ['don \'t Adam foot', 'who is going to become a spider', 'two Adam', 'a d a m']:
-        print(888)
-        continue
-    pl = lf_preproc(l)
-    if pl is None:
-        continue
-    ps = sent_preproc(s)
-    dset_data.append({'lf':pl, 'words':ps})
-dset = {'data':dset_data}
+    sents = [adam_lines[i] for i in range(0,len(adam_lines),4)]
+    assert all([s.startswith('Sent: ') for s in sents])
+    lfs = [adam_lines[i] for i in range(1,len(adam_lines),4)]
+    assert all([lf.startswith('Sem: ') for lf in lfs])
+    assert all([adam_lines[i]=='example_end\n' for i in range(2,len(adam_lines),4)])
+    assert all([adam_lines[i]=='\n' for i in range(3,len(adam_lines),4)])
 
-breakpoint()
-with open('data/simplified_adam.json','w') as f:
-    json.dump(dset,f)
+    if ARGS.dset == 'adam':
+        exclude_list = ['don \'t Adam foot', 'who is going to become a spider', 'two Adam', 'a d a m']
+    else:
+        exclude_list = []
+    dset_data = []
+    for l,s in zip(lfs,sents):
+        if s[6:-3] in exclude_list:
+            print(888)
+            continue
+        pl = lf_preproc(l)
+        if pl is None:
+            continue
+        ps = sent_preproc(s)
+        dset_data.append({'lf':pl, 'words':ps})
+    dset = {'data':dset_data}
+
+    breakpoint()
+    with open(f'data/simplified_{ARGS.dset}.json','w') as f:
+        json.dump(dset,f)

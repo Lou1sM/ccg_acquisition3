@@ -680,21 +680,29 @@ if __name__ == "__main__":
     df_no_prior=pd.DataFrame(all_word_order_probs_no_prior)
     cs = ['r','g','b','y','orange','brown']
 
-    def plot_df(df, savepath):
+    def plot_df(df, info=''):
+        if info != '':
+            info = f' {info}'
+        xticks = np.arange(len(df)) if ARGS.is_test else 10*np.arange(len(df))
         for i,c in enumerate(df.columns):
-            plt.plot(df[c],label=c,color=cs[i])
+            plt.plot(xticks, df[c], label=c, color=cs[i])
         plt.legend(loc='upper right')
-        plt.savefig(savepath)
-        #plt.show()
+        #plt.xticks(xticks)
+        plt.xlabel('Num Training Points')
+        plt.ylabel('Relative Probability')
+        plt.title(f'Word Order Probs{info}')
+        plt.show()
+        plt.savefig(f'word_order_probs{info.replace(" ","_").lower()}.png')
+        plt.clf()
 
-    plot_df(df_prior, 'word_order_probs.png')
-    plot_df(df_no_prior, 'word_order_probs_no_prior.png')
+    plot_df(df_prior)
+    plot_df(df_no_prior, 'No Prior')
     #file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     #file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
+    print(language_acquirer.syntaxl.memory['S\\NP'])
+    print(language_acquirer.syntaxl.memory['S\\NP'])
     if ARGS.db_after:
         la = language_acquirer
-        print(la.syntaxl.memory['S\\NP'])
-        print(la.syntaxl.memory['S\\NP'])
         breakpoint()
         la.probs_of_word_orders()
     if ARGS.n_generate > 0:
@@ -713,5 +721,4 @@ if __name__ == "__main__":
         for sent,gt in gts.items():
             language_acquirer.parse(gt[0][0]['words'].split())
             language_acquirer.draw_graph(gt,is_gt=True)
-    print(language_acquirer.syntaxl.memory['S/NP'])
     language_acquirer.save_to(f'experiments/{ARGS.expname}')

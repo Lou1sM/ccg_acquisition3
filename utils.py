@@ -1,7 +1,7 @@
 import re
 
 
-LAMBDA_RE_STR = r'^lambda \$\d{1,2}(_\{(e|r|<r,t>)\})?\.'
+LAMBDA_RE_STR = r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.'
 def new_var_num(lf_str):
     vars_in_self = re.findall(r'\$\d{1,2}',lf_str)
     if len(vars_in_self) == 0:

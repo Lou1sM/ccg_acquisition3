@@ -1,5 +1,5 @@
 import re
-from utils import split_respecting_brackets, is_bracketed, outermost_first_bracketed_chunk, maybe_debrac
+from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac
 import json
 
 with open('geoqueries880') as f:
