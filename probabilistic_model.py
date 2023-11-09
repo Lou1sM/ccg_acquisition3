@@ -85,9 +85,10 @@ class BaseDirichletProcessLearner(ABC):
         """Can be overwritten if necessary."""
         return self._observe(*args,**kwargs)
 
-    def flush_buffer(self):
+    def flush_buffer(self, lr=1.0):
         for _ in range(len(self.buffer)):
-            self.observe(*self.buffer.pop())
+            y, x, weight = self.buffer.pop()
+            self.observe(y, x, weight*lr)
         assert len(self.buffer) == 0
 
     def inverse_distribution(self,y): # conditional on y
@@ -182,13 +183,15 @@ class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
         return 28**-math.ceil(len(x)/2) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
-    def __init__(self):
+    def __init__(self, lr):
+        self.lr = lr
         self.syntaxl = CCGDirichletProcessLearner(10)
         self.shmeaningl = ShellMeaningDirichletProcessLearner(1)
         self.meaningl = MeaningDirichletProcessLearner(1)
         self.wordl = WordSpanDirichletProcessLearner(0.25)
         self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
-        self.lf_parts_cache = {'splits':{},'cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
+        #self.lf_parts_cache = {'splits':{},'cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
+        self.lf_parts_cache = {}
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
         self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
 
@@ -266,10 +269,10 @@ class LanguageAcquirer():
         self.lf_shell_to_sem_probs.to_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
 
     def flush_buffers(self):
-        self.syntaxl.flush_buffer()
-        self.shmeaningl.flush_buffer()
-        self.meaningl.flush_buffer()
-        self.wordl.flush_buffer()
+        self.syntaxl.flush_buffer(self.lr)
+        self.shmeaningl.flush_buffer(self.lr)
+        self.meaningl.flush_buffer(self.lr)
+        self.wordl.flush_buffer(self.lr)
 
     def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
         distr = self.wordl.inverse_distribution(word)
@@ -297,11 +300,13 @@ class LanguageAcquirer():
         if lf_str in self.full_lfs_cache:
             return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,caches=self.lf_parts_cache,parent='START')
+            lf = LogicalForm(lf_str,cache=self.lf_parts_cache,parent='START')
             self.full_lfs_cache[lf_str] = lf
             return lf
 
     def train_one_step(self,lf_str,words):
+        #if lf_str == 'Q (v|see_3 pro:per|you_2 pro:per|it_4)':
+            #breakpoint()
         root = self.make_parse_node(lf_str,words) # words is a list
         #if lf_str == 'not (mod|will_2 (v|eat_4 pro:per|you_1 (BARE $1 (n|tiger-pl_5 $1))))':
             #breakpoint()
@@ -596,8 +601,10 @@ if __name__ == "__main__":
     ARGS.add_argument("--db_at", type=int, default=-1)
     ARGS.add_argument("--max_lf_len", type=int, default=9)
     ARGS.add_argument("--start_from", type=int, default=0)
+    ARGS.add_argument("--lr", type=float, default=1.0)
     ARGS.add_argument("--n_epochs", type=int, default=1)
     ARGS.add_argument("--n_generate", type=int, default=0)
+    ARGS.add_argument("--n_distractors", type=int, default=0)
     ARGS.add_argument("-tt","--is_short_test", action="store_true")
     ARGS.add_argument("-t","--is_test", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
@@ -630,7 +637,7 @@ if __name__ == "__main__":
     #INTRANSITIVES = d['intransitive_verbs']
     #base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','N','S|NP','S|NP|NP')) for w in item}
 
-    language_acquirer = LanguageAcquirer()
+    language_acquirer = LanguageAcquirer(ARGS.lr)
     if ARGS.reload_from is not None:
         language_acquirer.load_from(f'experiments/{ARGS.reload_from}')
     if ARGS.shuffle: np.random.shuffle(d['data'])
@@ -653,14 +660,19 @@ if __name__ == "__main__":
         for i,dpoint in enumerate(train_data):
             if i < 10 and epoch_num > 0:
                 continue
-            words, lf_str = dpoint['words'], dpoint['lf']
-            if words[-1] == '?':
-                words = words[:-1]
-            if i == ARGS.db_at:
-                breakpoint()
-            if len(lf_str.split()) - 3*lf_str.count('BARE') <= ARGS.max_lf_len:
-                print(f'{i}th dpoint: {words}, {lf_str}')
-                language_acquirer.train_one_step(lf_str,words)
+            words = dpoint['words']
+            nd = 0 if i<50 else ARGS.n_distractors
+            for didx in range(i-(nd//2), i+((nd+1)//2)+1):
+                if didx < 0 or didx >= len(train_data):
+                    continue
+                lf_str = train_data[didx]['lf']
+                if words[-1] == '?':
+                    words = words[:-1]
+                if i == ARGS.db_at:
+                    breakpoint()
+                if len(lf_str.split()) - 3*lf_str.count('BARE') <= ARGS.max_lf_len:
+                    print(f'{i}th dpoint: {words}, {lf_str}')
+                    language_acquirer.train_one_step(lf_str,words)
             if ((i+1)%10 == 0) or (ARGS.is_test and i>10):
                 language_acquirer.eval()
                 all_word_order_probs.append(language_acquirer.probs_of_word_orders(False))

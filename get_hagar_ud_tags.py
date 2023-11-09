@@ -29,13 +29,17 @@ all_missings = set()
 for sent,ilf,mlf in zip(ida_sents, ida_lfs, my_lfs):
     corr_conll = conll[conll_sents.index(sent)]
     assert len(sent.split())== len(corr_conll.split('\n'))
-    ud_dict = dict(zip(sent.split(),[x.split('\t')[4] for x in corr_conll.split('\n')]))
-    for k,v in ud_dict.items():
+    chiltags = [x.split('\t')[4] for x in corr_conll.split('\n')]
+    chil_dict = dict(zip(sent.split(),chiltags))
+    lemma_chil_dict = dict(zip([x.split('\t')[2] for x in corr_conll.split('\n')],chiltags))
+    chil_dict = {k:'pro:per' if v=='pro:person' else v for k,v in chil_dict.items()}
+    chil_dict.update(lemma_chil_dict)
+    for k,v in chil_dict.items():
         if k!='.':
-            ilf = ilf.replace(k,f'{k}|{v}')
+            ilf = ilf.replace(k,f'{v}|{k}')
     mlf_ =  re.sub(lrs[1:],'',mlf)
     appearing_lf_atoms = set(re.sub(r'(\$\d{1,2}|\(|\))', ' ', mlf_).split())
-    missings = [x for x in appearing_lf_atoms if x not in ud_dict and x not in ['and','BARE','not','Q','_']]
+    missings = [x for x in appearing_lf_atoms if x not in chil_dict and x not in ['and','BARE','not','Q','_']]
     for m in missings:
         all_missings.add(m)
     assert all('lambda' not in x for x in missings)

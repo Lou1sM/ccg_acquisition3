@@ -20,13 +20,15 @@ from config import pos_marking_dict
 BASE_LEXICON = {k:set(['NP']) for k in ('you','i','me','he','she','it')}
 
 class LogicalForm:
-    def __init__(self,defining_string,idx_in_tree=[],caches=None,parent=None):
+    #def __init__(self,defining_string,idx_in_tree=[],cache=None,parent=None):
+    def __init__(self,defining_string,idx_in_tree=[],cache={},parent=None):
         assert isinstance(idx_in_tree,list)
         assert is_wellformed_lf(defining_string)
         had_surrounding_brackets = False
         self.sibling = None
         self.idx_in_tree = idx_in_tree
-        self.caches = {'splits':{},'sem_cats':{},'lfs':{}} if caches is None else caches
+        #self.cache = {'splits':{},'sem_cats':{},'lfs':{}} if cache is None else cache
+        self.cache = cache
         self.var_descendents = []
         self.possible_app_splits = []
         self.possible_cmp_splits = []
@@ -160,20 +162,23 @@ class LogicalForm:
         return is_tr
 
     def infer_splits(self):
-        #if self.lf_str == 'lambda $1_{e}.v|want_2 pro:per|you_1 $1':
-            #breakpoint()
+        if self.lf_str == 'lambda $0.v|see_3 pro:per|you_2 $0':
+            breakpoint()
         if self.is_semantic_leaf or self.n_lambda_binders > 4:
             self.possible_app_splits = []
+            self.possible_cmp_splits = []
             return self.possible_app_splits
-        if self.lf_str in self.caches['splits']:
-            self.possible_app_splits = self.caches['splits'][self.lf_str]
+        #if self.lf_str in self.cache['splits']:
+        if self.lf_str in self.cache:
+            #self.possible_app_splits = self.cache['splits'][self.lf_str]
+            self.possible_app_splits, self.possible_cmp_splits, self.sem_cats = self.cache[self.lf_str]
             return self.possible_app_splits
         possible_removee_idxs = [i for i,d in enumerate(self.descendents) if d.node_type in ['const','noun','quant','barenoun','neg']]
         for removee_idxs in all_sublists(possible_removee_idxs):
             n_removees = len(removee_idxs)
             if n_removees == 0: continue
-            #if self.lf_str == 'lambda $2.v|think_2 $2 (lambda $1_{r}.det:art|a_5 pro:per|it_3 (n|rhinoceros_6 pro:per|it_3 $1))' and removee_idxs == [9]:
-                #breakpoint()
+            if self.lf_str == 'Q (v|see_3 pro:per|you_2 pro:per|it_4)' and removee_idxs == [2,3,4]:
+                breakpoint()
             if n_removees == len(possible_removee_idxs):
                 if self.node_type == 'Q': # in that case, only split if self is a Q node
                     f = LogicalForm('lambda $0.Q ($0)')
@@ -236,7 +241,7 @@ class LogicalForm:
             g_sub_var_num = self.new_var_num
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([maybe_brac(n.string,sep=' ') for n in to_present_as_args_to_g])))
             assert entry_point.subtree_string() in self.subtree_string()
-            entry_point.__init__(new_entry_point_in_f_as_str,self.idx_in_tree,entry_point.caches)
+            entry_point.__init__(new_entry_point_in_f_as_str,self.idx_in_tree,entry_point.cache)
             if len(to_present_as_args_to_g) >= 3: # then f will end up with arity 4
                 continue
             if not f.set_cats_from_string():
@@ -261,8 +266,9 @@ class LogicalForm:
                     self.add_split(f_cmp,g_cmp,'cmp')
         if '|' in self.sem_cats:
             assert self.subtree_string().startswith('lambda')
-        self.caches['splits'][self.lf_str] = self.possible_app_splits
-        return self.possible_app_splits
+        #self.cache['splits'][self.lf_str] = self.possible_app_splits
+        self.cache[self.lf_str] = self.possible_app_splits, self.possible_cmp_splits, self.sem_cats
+        return self.possible_app_splits, self.possible_cmp_splits
 
     def add_split(self,f,g,split_type):
         f.parent = g.parent = self
@@ -294,6 +300,7 @@ class LogicalForm:
         if not combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True):
             breakpoint()
         g.infer_splits()
+        f.infer_splits()
         if self.sem_cat_is_set and g.sem_cat_is_set:
             self.set_f_sem_cat_from_self_and_g(f,g,split_type)
             if not f.cat_consistent():
@@ -301,9 +308,10 @@ class LogicalForm:
         if f.sem_cats.intersection(['S|N','S|NP|N']):
             breakpoint()
             return
-        f.infer_splits()
         #if f.lf_str == 'lambda $1.lambda $0.not (mod|will_2 ($1 $0))' and g.lf_str == 'lambda $1.v|eat_4 $1':
             #breakpoint()
+        if f.lf_str== 'lambda $2.not (mod|will_2 $2)':
+            breakpoint()
         if g.sem_cat_is_set and f.sem_cat_is_set and split_type=='app': # no cmp inferred cats ftm
             inferred_sem_cats = set([])
             for fsc in f.sem_cats:
@@ -352,6 +360,7 @@ class LogicalForm:
             new_inferred_sem_cats = set(x for x in new_inferred_sem_cats if x is not None)
         assert not any(x.startswith('|') for x in new_inferred_sem_cats)
         f.sem_cats = f.sem_cats.intersection(new_inferred_sem_cats) if f.sem_cat_is_set else new_inferred_sem_cats
+        f.cache[f.lf_str] = f.possible_app_splits, f.possible_cmp_splits, f.sem_cats
         assert f.sem_cats
         if new_inferred_sem_cats.intersection(set(['S|N','S|NP|N'])):
             return
@@ -361,12 +370,12 @@ class LogicalForm:
 
     def spawn_child(self,defining_string,sibling_idx):
         """Careful, this means a child in the tree of one logical form, not a possible split."""
-        return LogicalForm(defining_string,idx_in_tree=self.idx_in_tree+[sibling_idx],caches=self.caches,parent=self)
+        return LogicalForm(defining_string,idx_in_tree=self.idx_in_tree+[sibling_idx],cache=self.cache,parent=self)
 
     def spawn_self_like(self,defining_string,idx_in_tree=None):
         if idx_in_tree is None:
             idx_in_tree = self.idx_in_tree
-        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,caches=self.caches,parent=self.parent)
+        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,cache=self.cache,parent=self.parent)
         new.sem_cats = self.sem_cats
         return new
 
