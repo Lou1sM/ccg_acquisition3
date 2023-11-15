@@ -75,11 +75,9 @@ def is_cat_type_raised(sem_cat):
     return in_cat_splits[0] == out_cat
 
 def is_type_raised(lf_str):
-    #possible_first_lambda = re.match(r'lambda \$\d{1,2}',lf_str)
-    possible_first_lambda = lambda_match(lf_str)
     if lf_str == 'lambda $0.jumps a $0':
         breakpoint()
-    if not bool(possible_first_lambda):
+    if not bool(possible_first_lambda := lambda_match(lf_str)):
         return False
     first_lambda_var_num = lf_str[possible_first_lambda.end()-2:possible_first_lambda.end()]
     body = split_respecting_brackets(lf_str,sep='.')[-1]
@@ -233,8 +231,10 @@ def n_nps(sem_cat):
             breakpoint()
         return n_nps(splits[0]) - sum([n_nps(sc) for sc in splits[1:]])
 
-def is_balanced_nums_brackets(s):
-    return len(re.findall(r'\(',s)) == len(re.findall(r'\)',s))
+def is_bracket_balanced(s):
+    if len(re.findall(r'\(',s)) != len(re.findall(r'\)',s)):
+        return False
+    return split_respecting_brackets(s) != []
 
 def outermost_first_chunk(s):
     """Similar to the first argument returned by split_respecting_brackets,
@@ -255,8 +255,8 @@ def outermost_first_chunk(s):
         elif c == ')':
             n_open_brackets -= 1
         if n_open_brackets == 0 and has_been_bracketed:
-            assert is_balanced_nums_brackets(s[:i+1])
-            assert is_balanced_nums_brackets(s[i+1:])
+            assert is_bracket_balanced(s[:i+1])
+            assert is_bracket_balanced(s[i+1:])
             return s[:i+1], s[i+1:]
     breakpoint()
 
@@ -278,6 +278,8 @@ def split_respecting_brackets(s,sep=' ',debracket=False):
             n_open_brackets += 1
         elif c == ')':
             n_open_brackets -= 1
+        if n_open_brackets < 0:
+            return []
     split_points.append(len(s))
     splits = [s[split_points[i]+1:split_points[i+1]] for i in range(len(split_points)-1)]
     return splits

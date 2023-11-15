@@ -45,3 +45,21 @@ pos_marking_dict = {
                     }
 
 pos_marking_dict = {k:set(['X']) if v == set([None]) else v for k,v in pos_marking_dict.items()}
+
+exclude_lfs = [
+        'and',
+        'att',
+        ' _ ',
+        '(BARE $1 ($2 (qn|many_2 $1))',
+        'lambda $1_{<<e,e>,e>}.lambda $1_{<<e,e>,e>}',
+        '{e}.lambda $1_{e}.',
+        'v|do-past_1 (v|hit-zero_3 pro:per|you_2 pro:indef|something_4)',
+        '$1_{e}.lambda $2_{e}',
+        'Q (n:prop|adam_3 pro:per|you_1)',
+        'Q (n:prop|ursula_3 pro:per|you_1)',
+        'Q (pro:int|what_3 pro:per|you_1)',
+        'Q (not (v|hurry_3 you))',
+        'Q (n:prop|daddy_3 pro:dem|that_1)',
+        'Q (n|right_3 pro:dem|that_2)',
+        'n|stop_1 you'
+        ]

@@ -1,4 +1,5 @@
 import numpy as np
+from config import exclude_lfs
 from gt_parse_graphs import gts
 import os
 import networkx as nx
@@ -305,10 +306,10 @@ class LanguageAcquirer():
             return lf
 
     def train_one_step(self,lf_str,words):
-        #if lf_str == 'Q (v|see_3 pro:per|you_2 pro:per|it_4)':
-            #breakpoint()
         root = self.make_parse_node(lf_str,words) # words is a list
         #if lf_str == 'not (mod|will_2 (v|eat_4 pro:per|you_1 (BARE $1 (n|tiger-pl_5 $1))))':
+            #breakpoint()
+        #if root.possible_splits == []:
             #breakpoint()
         prob_cache = {}
         root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
@@ -643,8 +644,7 @@ if __name__ == "__main__":
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     f = open(f'experiments/{ARGS.expname}/results.txt','w')
-    bad_list = ['and', 'att', ' _ ','(BARE $1 ($2 (qn|many_2 $1))','lambda $1_{<<e,e>,e>}.lambda $1_{<<e,e>,e>}','{e}.lambda $1_{e}.', 'v|do-past_1 (v|hit-zero_3 pro:per|you_2 pro:indef|something_4)', '$1_{e}.lambda $2_{e}']
-    all_data = [x for x in d['data'] if all(y not in x['lf'] for y in bad_list)]
+    all_data = [x for x in d['data'] if all(y not in x['lf'] for y in exclude_lfs)]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
     train_data = data_to_use[:-len(data_to_use)//5]
     test_data = train_data if ARGS.is_test else data_to_use[-len(data_to_use)//5:]
@@ -670,14 +670,20 @@ if __name__ == "__main__":
                     words = words[:-1]
                 if i == ARGS.db_at:
                     breakpoint()
+                #if words == 'is that right'.split():
+                    #breakpoint()
                 if len(lf_str.split()) - 3*lf_str.count('BARE') <= ARGS.max_lf_len:
                     print(f'{i}th dpoint: {words}, {lf_str}')
                     language_acquirer.train_one_step(lf_str,words)
-            if ((i+1)%10 == 0) or (ARGS.is_test and i>10):
+            if ((i+1)%1 == 0 or ARGS.is_test) and i>10:
                 language_acquirer.eval()
                 all_word_order_probs.append(language_acquirer.probs_of_word_orders(False))
                 all_word_order_probs_no_prior.append(language_acquirer.probs_of_word_orders(True))
                 language_acquirer.train()
+                if i > 50:
+                    x = all_word_order_probs[-1]
+                    if not x['svo'] >= x.values.max():
+                        breakpoint()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
         print(f"Epoch {epoch_num} time: {time()-epoch_start_time:.3f} per dpoint: {time_per_dpoint:.6f}")
