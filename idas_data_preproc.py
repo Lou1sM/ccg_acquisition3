@@ -3,23 +3,34 @@ from pprint import pprint as pp
 import numpy as np
 import re
 from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac
+from config import manual_ida_fixes, pos_marking_dict
 
 
 def maybe_detnoun_match(x):
-    return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE)\((\$\d{1,2}),(\w*\|\w*)\(\2\)\)',x)
+    #return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{1,2}),(\w*\|\w*)\(\2\)\)',x)
+    return re.match(r'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{1,2}),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
 
 def maybe_attrib_noun_match(x):
-    return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE)\((pro:(sub|obj|per|dem)\|\w*),(\w*\|\w*)\(\2\)\)',x)
+    return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
+    #return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|\w*)\(\1\)\)',x)
 
-def is_np(x):
-    if x.startswith('lambda'):
+def is_nplike(x):
+    if x in ['WHO', 'WHAT', 'you']:
+        return True
+    if x == 'not':
+        return False
+    elif x.startswith('lambda'):
         return False
     elif bool(maybe_detnoun_match(x)):
         return True
     elif any(c in x for c in ',().\$'):
         return False
+    #elif '|' not in x:
+        #print(x)
+        #return False
     else:
-        return x.split('|')[0] in ['pro:per', 'n:prop', 'pro:dem', 'pro:sub', 'pro:obj', 'pro:exist']
+        return pos_marking_dict[x.split('|')[0]] == set(['NP'])
+        #return x.split('|')[0] in ['pro:per', 'n:prop', 'pro:dem', 'pro:sub', 'pro:obj', 'pro:exist','chi'] # not sure the diff between 'chi' and n:prop
 
 def is_adj(x):
     #if x == 'n|right_3':
@@ -31,17 +42,17 @@ def is_adj(x):
         return x.split('|')[0] in ['adj', 'n']
 
 def decommafy(parse, debrac=False):
+    if parse == ARGS.db:
+        breakpoint()
     if len(re.findall(r'[(),]',parse)) == 0:
         return parse
-    if parse == 'det:poss|my_3(pro:dem|that_1,n|umbrella_4(pro:dem|that_1))':
-        breakpoint()
     #maybe_lambda_body = re.search(r'(?<=^lambda \$1_\{(r|e|<r,t>)\}\.).*$',parse)
-    maybe_lambda_body = re.search(r'^lambda \$1_\{(r|e|<r,t>)\}\.(.*)$',parse)
+    maybe_lambda_body = re.match(r'^lambda (WHAT|WHO|\$1_\{(r|e|<r,t>)\})\.(.*)$',parse)
     if maybe_lambda_body is None:
         body = parse
         prefix = ''
     else:
-        body = maybe_lambda_body.group(2)
+        body = maybe_lambda_body.group(3)
         prefix = parse[:-len(body)]
         assert prefix + body == parse
     suffix = ''
@@ -55,24 +66,25 @@ def decommafy(parse, debrac=False):
         lf = maybe_debrac(lf)
     elif not is_bracketed(lf) and len(lf.split())>1:
         lf = f'({lf})'
+    #lf = lf.replace('you_2','you_1').replace('you_3','you_1')
+    lf = re.sub(r'_\d{1,2}\b','',lf)
     return lf
 
 def _decommafy_inner(parse):
     if parse == 'pro:dem|that_1(pro:per|it_3)':
         return 'equals pro:dem|that_1 pro:per|it_3'
-    #if 'n|spray_3' in parse:
-        #breakpoint()
+    if parse.startswith('Q(mod|do_1('):
+        breakpoint()
     if bool(mdm := maybe_detnoun_match(parse)):
         det, var, noun = mdm.groups()
-        if det == 'BARE':
-            det_word = 'BARE'
-        else:
-            det_pos, det_word = det.split('|')
-            if not det_pos.startswith('det'):
-                print(det_pos)
+        if det != 'BARE':
+            if 'that' in det:
+                #print(det)
+                det = f'det:dem|that_1'
+            assert det.startswith('det') or det.startswith('qn')
         noun_pos, noun_word = noun.split('|')
-        if noun_pos != 'n':
-            print(noun_pos)
+        #if noun_pos != 'n':
+            #print(noun_pos)
         return f'{det} n|{noun_word}'
     if bool(mam := maybe_attrib_noun_match(parse)):
         det, subj, _, noun = mam.groups()
@@ -92,22 +104,24 @@ def _decommafy_inner(parse):
                 marking = pred.split('-')[1].split('_')[0]
                 args = re.sub(r'v\|([a-zA-Z0-9]+)_',fr'v|\1-{marking}_', args)
                 pred = ''
-            elif args.startswith('v|'):
+            elif args.startswith('v|'): # removing 'do'
                 pred = ''
         arg_splits = split_respecting_brackets(args,sep=',')
 
         #if parse == 'Q(n|right_3(pro:dem|that_1))':
             #breakpoint()
-        if len(arg_splits)==1 and is_np(arg_splits[0]):
-            if is_np(pred):
-                if pred.startswith('pro:exist|'):
+        if len(arg_splits)==1 and is_nplike(arg_splits[0]):
+            if is_nplike(pred):
+                if pred.startswith('pro:exist|') or pred in ('WHAT,WHO'):
                     return f'equals {decommafy(pred)} {decommafy(arg_splits[0])}'
                 else:
                     return f'equals {decommafy(arg_splits[0])} {decommafy(pred)}'
             elif is_adj(pred):
-                if pred.startswith('n|'):
-                    print(f'has_property {decommafy(arg_splits[0])} {decommafy(pred)}')
-                return f'has_property {decommafy(arg_splits[0])} {decommafy(pred)}'
+                #if pred.startswith('n|'):
+                    #print(f'hasproperty {decommafy(arg_splits[0])} {decommafy(pred)}')
+                dpred = decommafy(pred)
+                dpred_pos, dpred_word = dpred.split('|')
+                return f'hasproperty {decommafy(arg_splits[0])} adj|{dpred_word}'
         recursed_list = [decommafy(x) for x in arg_splits]
         recursed = ' '.join(recursed_list)
         lf = maybe_debrac(recursed) if pred=='' else f'{pred} {recursed}'
@@ -123,15 +137,28 @@ def _decommafy_inner(parse):
             breakpoint()
         return lf
 
-def lf_preproc(lf_):
+def lf_preproc(lf_, sent):
     lf = lf_.rstrip('\n')
     lf = lf[5:] # have already checked it starts with 'Sem: '
+    #if lf == 'lambda $0_{r}.pro:poss|mine_3(pro:per|it_1,$0)':
+    #    breakpoint()
     if 'lambda $0' in lf.rpartition('.')[0]:
         lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
+    if lf.startswith('lambda $1_{e}'):
+        if (wh_word := sent.split()[0] in ['what','who']):
+            lf = lf[14:].replace('$1',f'{wh_word.upper()}1')
+        elif 'what' in sent:
+            lf = lf[14:].replace('$1',f'WHAT')
+        elif 'who' in sent:
+            lf = lf[14:].replace('$1',f'WHO')
     dlf = decommafy(lf, debrac=True)
     if ARGS.print_conversions:
         print(f'{lf} --> {dlf}')
+    if dlf in manual_ida_fixes.keys():
+        old_dlf = dlf
+        dlf = manual_ida_fixes[dlf]
+        print(f'fixing {old_dlf} to {dlf}')
     return dlf
 
 def sent_preproc(sent):
@@ -141,6 +168,7 @@ if __name__ == '__main__':
     import argparse
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("-d", "--dset", type=str, choices=['adam', 'hagar'], required=True)
+    ARGS.add_argument("--db", type=str)
     ARGS.add_argument("-p", "--print_conversions", action='store_true')
     ARGS = ARGS.parse_args()
 
@@ -162,7 +190,8 @@ if __name__ == '__main__':
     for l,s in zip(lfs,sents):
         if s[6:-3] in exclude_list:
             continue
-        pl = lf_preproc(l)
+        print(l,s)
+        pl = lf_preproc(l,s)
         if pl is None:
             continue
         ps = sent_preproc(s)
