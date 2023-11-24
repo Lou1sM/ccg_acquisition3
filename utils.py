@@ -2,6 +2,7 @@ import re
 
 
 LAMBDA_RE_STR = r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.'
+#LAMBDA_RE_STR = r'^lambda (WHAT1|WHO1|\$\d{1,2}|\$\d{1,2}_\{e\}|\$\d{1,2}_\{r\}|\$\d{1,2}_\{<r,t>\}|\$\d{1,2}\{<<e,e>,e>\})?\.'
 def new_var_num(lf_str):
     vars_in_self = re.findall(r'\$\d{1,2}',lf_str)
     if len(vars_in_self) == 0:
@@ -9,15 +10,15 @@ def new_var_num(lf_str):
     return max([int(x[1:]) for x in vars_in_self])+1
 
 def lambda_match(maybe_lambda_str):
-    if not maybe_lambda_str.startswith('lambda $'):
+    if not maybe_lambda_str.startswith('lambda '):
         return None # fast check without re to rule out most
-    return re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.',maybe_lambda_str)
+    #return re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.',maybe_lambda_str)
+    return re.match(LAMBDA_RE_STR, maybe_lambda_str)
 
 def is_wellformed_lf(lf):
     if lf == '': return True
-    if lf == '$4 (lambda $2.traverse a $2 $3)':
-        breakpoint()
     if bool(re.search(r'lambda(?! \$\d)',lf)): # rule out this simple string
+    #if bool(re.search(r'lambda(?! (WHAT1|WHO1|\$\d))', lf)):
         return False
     lf = maybe_debrac(lf)
     if bool(re.match(r'[a-zA-Z0-9_]+',lf)):
@@ -75,11 +76,10 @@ def is_cat_type_raised(sem_cat):
     return in_cat_splits[0] == out_cat
 
 def is_type_raised(lf_str):
-    if lf_str == 'lambda $0.jumps a $0':
-        breakpoint()
     if not bool(possible_first_lambda := lambda_match(lf_str)):
         return False
-    first_lambda_var_num = lf_str[possible_first_lambda.end()-2:possible_first_lambda.end()]
+    #first_lambda_var_num = lf_str[possible_first_lambda.end()-2:possible_first_lambda.end()]
+    first_lambda_var_num = possible_first_lambda.group()[7:-1]
     body = split_respecting_brackets(lf_str,sep='.')[-1]
     return body.startswith(first_lambda_var_num)
 
@@ -199,8 +199,10 @@ def beta_normalize(m,verbose=False):
     return normed
 
 def strip_string(ss):
-    ss = re.sub(r'lambda \$\d+\.','',ss)
-    ss = re.sub(r'( ?\$\d+)+$','',ss.replace('(','').replace(')',''))
+    #ss = re.sub(r'(lambda \$\d{1,2})+\.','', ss)
+    ss = re.sub(r'^(lambda \$\d{1,2}\.)+','', ss)
+    #ss = re.sub(r'( ?\$\d+)+$','',ss.replace('(','').replace(')',''))
+    ss = re.sub(r' ?\$\d{1,2}','', ss).replace('()','')
     # allowed to have trailing bound variables
     return ss.strip()
 
@@ -324,10 +326,17 @@ def normalize_dict(d):
         return {k:v/norm for k,v in d.items()}
 
 def n_lambda_binders(s):
+    if '.' not in s:
+        return 0
     maybe_lambda_list = split_respecting_brackets(s,sep='.')
-    assert all(x.startswith('lambda') for x in maybe_lambda_list[:-1])
+    lambdas, body = maybe_lambda_list[:-1], maybe_lambda_list[-1]
+    assert all(x.startswith('lambda') for x in lambdas)
     #maybe_lambda_list = set(x for x in maybe_lambda_list_ if not x.endswith('_{e}'))
-    return len(maybe_lambda_list)-1
+    #maybe_lambda_list = [m for m in maybe_lambda_list if m.startswith('lambda')]
+    if bool(leading_vars := re.match(r'(\$\d{1,2} ?)*', body)):
+        type_raised_vars = leading_vars.group().split()
+        lambdas = [m for m in lambdas if all(trv not in m for trv in type_raised_vars)]
+    return len(lambdas)
 
 def translate_by_unify(x,y):
     """Equate corresponding subexpressions in x and y to form a translation between subexpressions"""
@@ -451,9 +460,11 @@ def infer_slash(lcat,rcat,parent_cat,rule):
 
 def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
     """Determines the slash directions for both f and g when comb. with fwd_cmp."""
+    if parent_cat=='X' or g_cat=='X':
+        return 'X', 'X'
     pout,pslash,pin = cat_components(parent_cat)
     gout,gslash,gin = cat_components(g_cat)
-    assert maybe_debrac(pin) == maybe_debrac(gin)
+    #assert maybe_debrac(pin) == maybe_debrac(gin)
     if is_atomic(gout): # only consider if g is type-raised and in that case has slash
         return None, None
     elif gslash == '\\' or pslash == '\\': # disallow bck cmp for now
@@ -470,10 +481,18 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
 
 def lf_sem_congruent(lf_str, sem_cat):
     assert '\\' not in sem_cat and '/' not in sem_cat # should only run on sem_cats, not syn_cats
-    what_n_lambdas_should_be = 1 if sem_cat in ['N','Swhq'] else (len(split_respecting_brackets(sem_cat,sep='|'))-1)
+    #what_n_lambdas_should_be = 1 if sem_cat in ['N','Swhq'] else (len(split_respecting_brackets(sem_cat,sep='|'))-1)
+    if sem_cat == 'Swhq':
+        what_n_lambdas_should_be = 1
+    elif sem_cat == 'N|N':
+        what_n_lambdas_should_be = 0
+    else:
+        what_n_lambdas_should_be = len(split_respecting_brackets(sem_cat,sep='|'))-1
     return what_n_lambdas_should_be == n_lambda_binders(lf_str)
 
 def parent_cmp_from_f_and_g(f_cat,g_cat,sem_only):
+    if f_cat=='X' or g_cat=='X':
+        return 'X'
     fout,fslash,fin = cat_components(f_cat,sep=['/','\\','|'])
     gout,gslash,gin = cat_components(g_cat,sep=['/','\\','|'])
     if sem_only or (fslash == '/' and gslash == '/'):
@@ -536,3 +555,12 @@ def parses_of_syn_cats(self,syn_cats):
     for _ in range(len(syn_cats)-1):
         frontiers = [current+[f] for current in frontiers for f in possible_next_frontiers(current[-1])]
     return frontiers
+
+class CCGLearnerError(Exception):
+    """A base class for CCGLearnerError exceptions."""
+
+class SemCatError(CCGLearnerError):
+    """A base class for CCGLearnerError exceptions."""
+
+class ZeroProbError(CCGLearnerError):
+    """A base class for CCGLearnerError exceptions."""

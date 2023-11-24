@@ -10,7 +10,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise, split_respecting_brackets, n_lambda_binders, possible_syn_cats, infer_slash
+from utils import file_print, get_combination, is_direct_congruent, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise, split_respecting_brackets, n_lambda_binders, possible_syn_cats, infer_slash, lf_sem_congruent, CCGLearnerError
 from time import time
 import argparse
 from abc import ABC
@@ -124,11 +124,16 @@ class BaseDirichletProcessLearner(ABC):
         assert (df.sum(axis=1)<=1+1e-7).all()
         return df
 
+    def show_commons(self, x):
+        print(sorted([(k,v) for k,v in self.memory[x].items()], key=lambda x:x[1],reverse=True)[:10])
+
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        #n_slashes = len(re.findall(r'[\\/\|]',x))
-        #return (0.5555)*0.9**(n_slashes+1) # Omri 2017 had 0.2
-        return 1
+        if self.is_training:
+            return 1
+        else:
+            n_slashes = len(re.findall(r'[\\/\|]',x))
+            return (0.5555)*0.9**(n_slashes+1) # Omri 2017 had 0.2
 
     def observe(self,y,x,weight):
         if y == 'leaf':
@@ -161,7 +166,8 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
         return norm_factor * np.e**(-2*n_vars - n_constants)
 
     def prob(self,y,x):
-        if x not in ['N','Swhq'] and len(split_respecting_brackets(x,sep=['/','\\','|'])) != n_lambda_binders(y)+1:
+        #if x not in ['N','Swhq'] and len(split_respecting_brackets(x,sep=['/','\\','|'])) != n_lambda_binders(y)+1:
+        if not lf_sem_congruent(y,x):
             #print(y,x)
             return 0
         #y = maybe_de_type_raise(y_)
@@ -181,7 +187,7 @@ class MeaningDirichletProcessLearner(BaseDirichletProcessLearner):
 class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution(self,x):
         assert len(x) > 0
-        return 28**-math.ceil(len(x)/2) # kinda approximate num phonetic chunks
+        return 28**-(len(x)/2) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
     def __init__(self, lr):
@@ -301,7 +307,7 @@ class LanguageAcquirer():
         if lf_str in self.full_lfs_cache:
             return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,cache=self.lf_parts_cache,parent='START')
+            lf = LogicalForm(lf_str,cache=self.lf_parts_cache,parent='START',dbslf=ARGS.dbslf,dbsss=ARGS.dbsss)
             self.full_lfs_cache[lf_str] = lf
             return lf
 
@@ -309,15 +315,21 @@ class LanguageAcquirer():
         root = self.make_parse_node(lf_str,words) # words is a list
         #if lf_str == 'not (mod|will_2 (v|eat_4 pro:per|you_1 (BARE $1 (n|tiger-pl_5 $1))))':
             #breakpoint()
-        #if root.possible_splits == []:
-            #breakpoint()
+        if root.possible_splits == []:
+            print('no splits :(')
         prob_cache = {}
         root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                        self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=False)
         if root_prob==0:
             print('zero root prob for', lf_str, words)
         root.propagate_above_probs(1)
+        if lf_str == ARGS.dbr:
+            breakpoint()
         for node, prob in prob_cache.items():
+            #if node.lf_str == 'lambda $0.det:art|a_3 $0' and node.words==['a']:
+                #breakpoint()
+            #if lf_str == 'Q (v|do-past_1 (v|miss_3 pro:per|you_2 pro:indef|one_4))' and node.words==['you'] and node.lf_str == 'pro:per|you_2':
+                #breakpoint()
             if node.parent is not None and not node.is_g:
                 update_weight = node.below_prob * node.above_prob / root_prob # for conditional
                 if node.is_fwd:
@@ -341,14 +353,24 @@ class LanguageAcquirer():
             self.meaningl.buffer.append((lf,shell_lf,leaf_prob))
             self.wordl.buffer.append((word_str,lf,leaf_prob))
         #print(words,sum([x[2] for x in self.wordl.buffer]))
+        bad_prob = sum(x[2] for x in self.syntaxl.buffer if x[0]=='NP + S\\NP\\NP')
+        good_prob = sum(x[2] for x in self.syntaxl.buffer if x[0]=='S\\NP/NP + NP')
+        if bad_prob > good_prob:
+            bad=max([x for x in prob_cache if 'S\\NP\\NP' in x.syn_cats], key=lambda x:x.above_prob*x.below_prob)
+            good=max([x for x in prob_cache if 'S\\NP/NP' in x.syn_cats], key=lambda x:x.above_prob*x.below_prob)
+            print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
+            print(self.syntaxl.prob('NP + S\\NP\\NP','S\\NP'), self.syntaxl.prob('S\\NP/NP + NP','S\\NP'))
         self.flush_buffers()
+        #print(self.wordl.prob('you','pro:per|you_1'))
+        #if 'pro:per|you_1' in self.wordl.memory:
+            #print(self.wordl.memory['pro:per|you_1'].get('you',0), self.wordl.memory['pro:per|you_1']['COUNT'])
         #if words == 'you want one what'.split():
         #    breakpoint()
 
     def probs_of_word_orders(self, ignore_prior):
         if ignore_prior:
-            syn_prob_func = lambda y,x: self.syntaxl.memory[x][y]/self.syntaxl.memory[x]['COUNT']
-            shm_prob_func = lambda y,x: self.shmeaningl.memory[x][y]/self.shmeaningl.memory[x]['COUNT']
+            syn_prob_func = lambda y,x: self.syntaxl.memory[x].get(y,0)/self.syntaxl.memory[x]['COUNT']
+            shm_prob_func = lambda y,x: self.shmeaningl.memory[x].get(y,0)/self.shmeaningl.memory[x]['COUNT']
         else:
             syn_prob_func = self.syntaxl.prob
             shm_prob_func = self.shmeaningl.prob
@@ -357,7 +379,7 @@ class LanguageAcquirer():
         vso_or_vos = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('S/NP/NP + NP','S/NP')
         # it will never have seen this split because disallowed during training
         # so only option is to include prior
-        ovs_ = syn_prob_func('S/NP + NP', 'S')*self.shmeaningl.prob('NP + S/NP\\NP', 'S/NP')
+        ovs_ = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('NP + S/NP\\NP', 'S/NP')
         comb_obj_first = shm_prob_func('lambda $0.lambda $1.const $1 $0', 'S|NP|NP')
         comb_subj_first = shm_prob_func('lambda $0.lambda $1.const $0 $1', 'S|NP|NP')
         unnormed_probs = pd.Series({
@@ -617,6 +639,9 @@ if __name__ == "__main__":
     ARGS.add_argument("--shuffle", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='simplified_adam')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
+    ARGS.add_argument("--dbslf", type=str)
+    ARGS.add_argument("--dbsss", type=str)
+    ARGS.add_argument("--dbr", type=str)
     ARGS = ARGS.parse_args()
 
     ARGS.is_test = ARGS.is_test or ARGS.is_short_test
@@ -645,6 +670,7 @@ if __name__ == "__main__":
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     f = open(f'experiments/{ARGS.expname}/results.txt','w')
     all_data = [x for x in d['data'] if all(y not in x['lf'] for y in exclude_lfs)]
+    all_data = [x for x in all_data if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
     train_data = data_to_use[:-len(data_to_use)//5]
     test_data = train_data if ARGS.is_test else data_to_use[-len(data_to_use)//5:]
@@ -655,6 +681,7 @@ if __name__ == "__main__":
     start_time = time()
     all_word_order_probs = []
     all_word_order_probs_no_prior = []
+    problem_list = []
     for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
@@ -672,10 +699,13 @@ if __name__ == "__main__":
                     breakpoint()
                 #if words == 'is that right'.split():
                     #breakpoint()
-                if len(lf_str.split()) - 3*lf_str.count('BARE') <= ARGS.max_lf_len:
-                    print(f'{i}th dpoint: {words}, {lf_str}')
+                print(f'{i}th dpoint: {words}, {lf_str}')
+                try:
                     language_acquirer.train_one_step(lf_str,words)
-            if ((i+1)%1 == 0 or ARGS.is_test) and i>10:
+                except CCGLearnerError as e:
+                    problem_list.append((dpoint,e))
+                    print(e)
+            if ((i+1)%10 == 0 or ARGS.is_test):
                 language_acquirer.eval()
                 all_word_order_probs.append(language_acquirer.probs_of_word_orders(False))
                 all_word_order_probs_no_prior.append(language_acquirer.probs_of_word_orders(True))
@@ -691,6 +721,9 @@ if __name__ == "__main__":
         final_parses = {}
         n_correct_parses = 0
 
+    with open(f'{ARGS.dset}_failures.txt','w') as f:
+        for pf,e in problem_list:
+            f.write(' '.join(pf['words']) + pf['lf'] + str(e))
     inverse_probs_start_time = time()
     language_acquirer.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
@@ -715,6 +748,7 @@ if __name__ == "__main__":
 
     plot_df(df_prior)
     plot_df(df_no_prior, 'No Prior')
+    breakpoint()
     #file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     #file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
     print(language_acquirer.syntaxl.memory['S\\NP'])
