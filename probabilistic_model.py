@@ -201,6 +201,7 @@ class LanguageAcquirer():
         self.lf_parts_cache = {}
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
         self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
+        self.vocab_thresh = 1
 
     def train(self):
         self.syntaxl.is_training = True
@@ -216,27 +217,30 @@ class LanguageAcquirer():
 
     @property
     def lf_vocab(self):
-        return self.wordl.memory.keys()
+        #return self.wordl.memory.keys()
+        return [k for k,v in self.wordl.memory.items() if v['COUNT']>self.vocab_thresh]
 
     @property
     def shell_lf_vocab(self):
-        return self.meaningl.memory.keys()
+        #return self.meaningl.memory.keys()
+        return [k for k,v in self.meaningl.memory.items() if v['COUNT']>self.vocab_thresh]
 
     @property
     def sem_cat_vocab(self):
-        return self.shmeaningl.memory.keys()
+        return [k for k,v in self.shmeaningl.memory.items() if v['COUNT']>self.vocab_thresh]
 
     @property
     def syn_cat_vocab(self):
-        return self.syntaxl.memory.keys()
+        #return self.syntaxl.memory.keys()
+        return [k for k,v in self.syntaxl.memory.items() if v['COUNT']>self.vocab_thresh]
 
     @property
     def splits_vocab(self):
-        return list(set([w for x in self.syntaxl.memory.values() for w in x.keys() if w!='COUNT']))
+        return list(set([k for x in self.syntaxl.memory.values() for k,v in x.items() if k!='COUNT' if v>self.vocab_thresh]))
 
     @property
     def mwe_vocab(self):
-        return list(set([w for x in self.wordl.memory.values() for w in x.keys() if w!='COUNT']))
+        return list(set([k for x in self.wordl.memory.values() for k,v in x.items() if k!='COUNT' if v>self.vocab_thresh]))
 
     @property
     def vocab(self):
@@ -622,7 +626,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--n_test", type=int,default=5)
     ARGS.add_argument("--n_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
-    ARGS.add_argument("--max_lf_len", type=int, default=9)
+    ARGS.add_argument("--max_lf_len", type=int, default=6)
     ARGS.add_argument("--start_from", type=int, default=0)
     ARGS.add_argument("--lr", type=float, default=1.0)
     ARGS.add_argument("--n_epochs", type=int, default=1)
@@ -708,7 +712,7 @@ if __name__ == "__main__":
             if ((i+1)%10 == 0 or ARGS.is_test):
                 language_acquirer.eval()
                 all_word_order_probs.append(language_acquirer.probs_of_word_orders(False))
-                all_word_order_probs_no_prior.append(language_acquirer.probs_of_word_orders(True))
+                #all_word_order_probs_no_prior.append(language_acquirer.probs_of_word_orders(True))
                 language_acquirer.train()
                 if i > 50:
                     x = all_word_order_probs[-1]
@@ -748,7 +752,6 @@ if __name__ == "__main__":
 
     plot_df(df_prior)
     plot_df(df_no_prior, 'No Prior')
-    breakpoint()
     #file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     #file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
     print(language_acquirer.syntaxl.memory['S\\NP'])
@@ -757,16 +760,16 @@ if __name__ == "__main__":
         la = language_acquirer
         breakpoint()
         la.probs_of_word_orders()
-    if ARGS.n_generate > 0:
-        file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
-    for _ in range(ARGS.n_generate):
-        generated = language_acquirer.generate_words(ARGS.cat_to_sample_from)
-        if any([x['words'][:-1]==generated.split() for x in d['data']]):
-            file_print(f'{generated}: seen during training',f)
-        else:
-            file_print(f'{generated}: not seen during training',f)
-    file_print(f'Total run time: {time()-start_time:.3f}s',f)
-    f.close()
+    with open(f'summary.txt','w') as f:
+        if ARGS.n_generate > 0:
+            file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
+        for _ in range(ARGS.n_generate):
+            generated = language_acquirer.generate_words(ARGS.cat_to_sample_from)
+            if any([x['words'][:-1]==generated.split() for x in d['data']]):
+                file_print(f'{generated}: seen during training',f)
+            else:
+                file_print(f'{generated}: not seen during training',f)
+        file_print(f'Total run time: {time()-start_time:.3f}s',f)
     for dpoint in test_data[:ARGS.n_test]:
         language_acquirer.parse(dpoint['words'])
     if ARGS.test_gts:

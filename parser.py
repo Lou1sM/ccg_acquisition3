@@ -146,10 +146,10 @@ class LogicalForm:
             ss = self.stripped_subtree_string
             if ss == debug_set_cats:
                 breakpoint()
-            if ss in ['v|show_3','v|show-past_3','v|show_5',]:
-                self.is_semantic_leaf = True
-                self.sem_cats = set(['S|NP|NP|NP'])
-            elif ss == 'not':
+            assert ss not in ['v|show_3','v|show-past_3','v|show_5',]
+                #self.is_semantic_leaf = True
+                #self.sem_cats = set(['S|NP|NP|NP'])
+            if ss == 'not':
                 self.is_semantic_leaf = True
                 self.sem_cats = set(['X'])
                 had_initial_q = False
