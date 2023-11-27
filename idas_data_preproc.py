@@ -123,8 +123,12 @@ def _decommafy_inner(parse):
                 dpred_pos, dpred_word = dpred.split('|')
                 return f'hasproperty {decommafy(arg_splits[0])} adj|{dpred_word}'
         recursed_list = [decommafy(x) for x in arg_splits]
-        recursed = ' '.join(recursed_list)
-        lf = maybe_debrac(recursed) if pred=='' else f'{pred} {recursed}'
+        if pred in ['and', '']: # can be '' because do-support
+            debracced_rl = [maybe_debrac(recursed_list[0])] + recursed_list[1:]
+            lf = ' '.join(debracced_rl)
+        else:
+            recursed = ' '.join(recursed_list)
+            lf = f'{pred} {recursed}'
         #converted_rest = decommafy(rest)
         #if len(converted_rest) > 0:
         #    breakpoint()
@@ -190,7 +194,6 @@ if __name__ == '__main__':
     for l,s in zip(lfs,sents):
         if s[6:-3] in exclude_list:
             continue
-        print(l,s)
         pl = lf_preproc(l,s)
         if pl is None:
             continue
@@ -202,5 +205,5 @@ if __name__ == '__main__':
     pp(hist_counts[:20])
     dset = {'data':dset_data, 'hist_counts':hist_counts}
 
-    with open(f'data/simplified_{ARGS.dset}.json','w') as f:
+    with open(f'data/{ARGS.dset}.json','w') as f:
         json.dump(dset,f)
