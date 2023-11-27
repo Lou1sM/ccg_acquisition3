@@ -1,4 +1,5 @@
 import numpy as np
+from dl_utils.misc import check_dir
 from config import exclude_lfs
 from gt_parse_graphs import gts
 import os
@@ -396,8 +397,6 @@ class LanguageAcquirer():
                     self.shmeaningl.memory[x].get(y,0)/self.shmeaningl.memory[x]['COUNT']
                 except KeyError:
                     return 0
-            #syn_prob_func = lambda y,x: self.syntaxl.memory[x].get(y,0)/self.syntaxl.memory[x]['COUNT']
-            #shm_prob_func = lambda y,x: self.shmeaningl.memory[x].get(y,0)/self.shmeaningl.memory[x]['COUNT']
         else:
             syn_prob_func = self.syntaxl.prob
             shm_prob_func = self.shmeaningl.prob
@@ -409,17 +408,6 @@ class LanguageAcquirer():
         ovs_ = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('NP + S/NP\\NP', 'S/NP')
         comb_obj_first = shm_prob_func('lambda $0.lambda $1.const $1 $0', 'S|NP|NP')
         comb_subj_first = shm_prob_func('lambda $0.lambda $1.const $0 $1', 'S|NP|NP')
-        #try:
-            #comb_obj_first = shm_prob_func('lambda $0.lambda $1.const $1 $0', 'S|NP|NP')
-        #except KeyError:
-            #assert ignore_prior
-            #comb_obj_first = 0
-        #try:
-            #comb_subj_first = shm_prob_func('lambda $0.lambda $1.const $0 $1', 'S|NP|NP')
-            #comb_obj_first = shm_prob_func('lambda $0.lambda $1.const $1 $0', 'S|NP|NP')
-        #except KeyError:
-            #assert ignore_prior
-            #comb_subj_first = 0
         unnormed_probs = pd.Series({
         'sov': sov_or_osv*comb_obj_first,
         'svo': svo_*comb_obj_first,
@@ -695,12 +683,6 @@ if __name__ == "__main__":
     set_experiment_dir(f'experiments/{ARGS.expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
     with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
 
-    #NAMES = d['np_list'] + [str(x) for x in range(1,11)] # because of the numbers in simple dsets
-    #NOUNS = d['nouns'] + [x+'-s' for x in d['nouns']] # for pl., quicker than stripping each lookup
-    #TRANSITIVES = d['transitive_verbs']
-    #INTRANSITIVES = d['intransitive_verbs']
-    #base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','N','S|NP','S|NP|NP')) for w in item}
-
     la = LanguageAcquirer(ARGS.lr)
     if ARGS.reload_from is not None:
         la.load_from(f'experiments/{ARGS.reload_from}')
@@ -730,18 +712,11 @@ if __name__ == "__main__":
                 breakpoint()
             if words[-1] == '?':
                 words = words[:-1]
-            #nd = 0 if i<50 else ARGS.n_distractors
             if i == ARGS.db_at:
                 breakpoint()
             start = max(0, i-(ARGS.n_distractors//2))
             stop = min(len(train_data)-1, i+((ARGS.n_distractors+1)//2)+1)
             lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
-            #for didx in range(i-(nd//2), i+((nd+1)//2)+1):
-                #if didx < 0 or didx >= len(train_data):
-                    #continue
-                #lf_str = train_data[didx]['lf']
-                #if words == 'is that right'.split():
-                    #breakpoint()
             print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
             try:
                 la.train_one_step(lf_strs_incl_distractors,words)
@@ -781,18 +756,16 @@ if __name__ == "__main__":
         for i,c in enumerate(df.columns):
             plt.plot(xticks, df[c], label=c, color=cs[i])
         plt.legend(loc='upper right')
-        #plt.xticks(xticks)
         plt.xlabel('Num Training Points')
         plt.ylabel('Relative Probability')
         plt.title(f'Word Order Probs{info}')
         plt.show()
-        plt.savefig(f'word_order_probs{info.replace(" ","_").lower()}.png')
+        check_dir('plotted_figures')
+        plt.savefig(f'plotted_figures/word_order_probs{info.replace(" ","_").lower()}.png')
         plt.clf()
 
     plot_df(df_prior, ARGS.expname)
     plot_df(df_no_prior, f'{ARGS.expname} No Prior')
-    #file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
-    #file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
     print(la.syntaxl.memory['S\\NP'])
     if ARGS.db_after:
         breakpoint()

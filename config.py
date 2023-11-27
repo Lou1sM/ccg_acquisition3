@@ -5,6 +5,7 @@ pos_marking_dict = {
                     'adv:tem':set([None]),
                     'aux':set([None]),
                     'chi':set([None]),
+                    #'co':set(['S']),
                     'co':set([None]),
                     'conj':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
                     'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # same as above ok for now?
@@ -78,6 +79,7 @@ full_lfs_to_exclude = [
         'qn|some n|water', # just noun phrase
         'n|tickle WHO pro:obj|me', # 'tickle' pos wrong and sent is malordered
         'n|call you n:prop|robin', # 'call' pos wrong and not clear what sent means
+        'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         ]
 
 partial_lfs_to_exclude = [
