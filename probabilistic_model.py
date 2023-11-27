@@ -127,6 +127,9 @@ class BaseDirichletProcessLearner(ABC):
     def show_commons(self, x):
         print(sorted([(k,v) for k,v in self.memory[x].items()], key=lambda x:x[1],reverse=True)[:10])
 
+    def top_k(self,x,k=10):
+        return sorted(self.memory[x].items(), key=lambda x:x[1], reverse=True)[:k]
+
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
         if self.is_training:
@@ -315,20 +318,30 @@ class LanguageAcquirer():
             self.full_lfs_cache[lf_str] = lf
             return lf
 
-    def train_one_step(self,lf_str,words):
-        root = self.make_parse_node(lf_str,words) # words is a list
-        #if lf_str == 'not (mod|will_2 (v|eat_4 pro:per|you_1 (BARE $1 (n|tiger-pl_5 $1))))':
-            #breakpoint()
-        if root.possible_splits == []:
-            print('no splits :(')
+    def train_one_step(self,lf_strs,words):
         prob_cache = {}
-        root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
-                       self.meaningl,self.wordl,prob_cache,split_prob=1,is_map=False)
-        if root_prob==0:
-            print('zero root prob for', lf_str, words)
-        root.propagate_above_probs(1)
-        if lf_str == ARGS.dbr:
-            breakpoint()
+        root_prob = 0
+        for lfs in lf_strs:
+            root = self.make_parse_node(lfs,words) # words is a list
+            #if lf_str == 'not (mod|will_2 (v|eat_4 pro:per|you_1 (BARE $1 (n|tiger-pl_5 $1))))':
+                #breakpoint()
+            if root.possible_splits == []:
+                print('no splits :(')
+            new_prob_cache = {}
+            new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
+                           self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
+            if new_root_prob==0:
+                print('zero root prob for', lfs, words)
+            root.propagate_above_probs(1)
+            if lfs == ARGS.dbr:
+                breakpoint()
+            for n,p in new_prob_cache.items():
+                if n in prob_cache.keys():
+                    prob_cache[n] += p
+                else:
+                    prob_cache[n] = p
+            root_prob += new_root_prob
+        print(root_prob)
         for node, prob in prob_cache.items():
             #if node.lf_str == 'lambda $0.det:art|a_3 $0' and node.words==['a']:
                 #breakpoint()
@@ -363,7 +376,7 @@ class LanguageAcquirer():
             bad=max([x for x in prob_cache if 'S\\NP\\NP' in x.syn_cats], key=lambda x:x.above_prob*x.below_prob)
             good=max([x for x in prob_cache if 'S\\NP/NP' in x.syn_cats], key=lambda x:x.above_prob*x.below_prob)
             print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
-            print(self.syntaxl.prob('NP + S\\NP\\NP','S\\NP'), self.syntaxl.prob('S\\NP/NP + NP','S\\NP'))
+            print('TOTAL BAD:', self.syntaxl.prob('NP + S\\NP\\NP','S\\NP'), 'TOTAL GOOD:', self.syntaxl.prob('S\\NP/NP + NP','S\\NP'))
         self.flush_buffers()
         #print(self.wordl.prob('you','pro:per|you_1'))
         #if 'pro:per|you_1' in self.wordl.memory:
@@ -373,8 +386,18 @@ class LanguageAcquirer():
 
     def probs_of_word_orders(self, ignore_prior):
         if ignore_prior:
-            syn_prob_func = lambda y,x: self.syntaxl.memory[x].get(y,0)/self.syntaxl.memory[x]['COUNT']
-            shm_prob_func = lambda y,x: self.shmeaningl.memory[x].get(y,0)/self.shmeaningl.memory[x]['COUNT']
+            def syn_prob_func(x,y):
+                try:
+                    self.syntaxl.memory[x].get(y,0)/self.syntaxl.memory[x]['COUNT']
+                except KeyError:
+                    return 0
+            def shm_prob_func(x,y):
+                try:
+                    self.shmeaningl.memory[x].get(y,0)/self.shmeaningl.memory[x]['COUNT']
+                except KeyError:
+                    return 0
+            #syn_prob_func = lambda y,x: self.syntaxl.memory[x].get(y,0)/self.syntaxl.memory[x]['COUNT']
+            #shm_prob_func = lambda y,x: self.shmeaningl.memory[x].get(y,0)/self.shmeaningl.memory[x]['COUNT']
         else:
             syn_prob_func = self.syntaxl.prob
             shm_prob_func = self.shmeaningl.prob
@@ -386,6 +409,17 @@ class LanguageAcquirer():
         ovs_ = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('NP + S/NP\\NP', 'S/NP')
         comb_obj_first = shm_prob_func('lambda $0.lambda $1.const $1 $0', 'S|NP|NP')
         comb_subj_first = shm_prob_func('lambda $0.lambda $1.const $0 $1', 'S|NP|NP')
+        #try:
+            #comb_obj_first = shm_prob_func('lambda $0.lambda $1.const $1 $0', 'S|NP|NP')
+        #except KeyError:
+            #assert ignore_prior
+            #comb_obj_first = 0
+        #try:
+            #comb_subj_first = shm_prob_func('lambda $0.lambda $1.const $0 $1', 'S|NP|NP')
+            #comb_obj_first = shm_prob_func('lambda $0.lambda $1.const $1 $0', 'S|NP|NP')
+        #except KeyError:
+            #assert ignore_prior
+            #comb_subj_first = 0
         unnormed_probs = pd.Series({
         'sov': sov_or_osv*comb_obj_first,
         'svo': svo_*comb_obj_first,
@@ -641,7 +675,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--test_gts", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
-    ARGS.add_argument("-d", "--dset", type=str, default='simplified_adam')
+    ARGS.add_argument("-d", "--dset", type=str, default='adam')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
     ARGS.add_argument("--dbslf", type=str)
     ARGS.add_argument("--dbsss", type=str)
@@ -667,9 +701,9 @@ if __name__ == "__main__":
     #INTRANSITIVES = d['intransitive_verbs']
     #base_lexicon = {w:cat for item,cat in zip([NAMES,NOUNS,INTRANSITIVES,TRANSITIVES],('NP','N','S|NP','S|NP|NP')) for w in item}
 
-    language_acquirer = LanguageAcquirer(ARGS.lr)
+    la = LanguageAcquirer(ARGS.lr)
     if ARGS.reload_from is not None:
-        language_acquirer.load_from(f'experiments/{ARGS.reload_from}')
+        la.load_from(f'experiments/{ARGS.reload_from}')
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     f = open(f'experiments/{ARGS.expname}/results.txt','w')
@@ -689,47 +723,52 @@ if __name__ == "__main__":
     for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
-            if i < 10 and epoch_num > 0:
-                continue
             words = dpoint['words']
-            nd = 0 if i<50 else ARGS.n_distractors
-            for didx in range(i-(nd//2), i+((nd+1)//2)+1):
-                if didx < 0 or didx >= len(train_data):
-                    continue
-                lf_str = train_data[didx]['lf']
-                if words[-1] == '?':
-                    words = words[:-1]
-                if i == ARGS.db_at:
-                    breakpoint()
+            if words == ['that', 'spells', 'one']:
+                breakpoint()
+            if dpoint != all_data[i+ARGS.start_from]:
+                breakpoint()
+            if words[-1] == '?':
+                words = words[:-1]
+            #nd = 0 if i<50 else ARGS.n_distractors
+            if i == ARGS.db_at:
+                breakpoint()
+            start = max(0, i-(ARGS.n_distractors//2))
+            stop = min(len(train_data)-1, i+((ARGS.n_distractors+1)//2)+1)
+            lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
+            #for didx in range(i-(nd//2), i+((nd+1)//2)+1):
+                #if didx < 0 or didx >= len(train_data):
+                    #continue
+                #lf_str = train_data[didx]['lf']
                 #if words == 'is that right'.split():
                     #breakpoint()
-                print(f'{i}th dpoint: {words}, {lf_str}')
-                try:
-                    language_acquirer.train_one_step(lf_str,words)
-                except CCGLearnerError as e:
-                    problem_list.append((dpoint,e))
-                    print(e)
+            print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
+            try:
+                la.train_one_step(lf_strs_incl_distractors,words)
+            except CCGLearnerError as e:
+                problem_list.append((dpoint,e))
+                print(e)
             if ((i+1)%10 == 0 or ARGS.is_test):
-                language_acquirer.eval()
-                all_word_order_probs.append(language_acquirer.probs_of_word_orders(False))
-                #all_word_order_probs_no_prior.append(language_acquirer.probs_of_word_orders(True))
-                language_acquirer.train()
-                if i > 50:
-                    x = all_word_order_probs[-1]
-                    if not x['svo'] >= x.values.max():
-                        breakpoint()
+                la.eval()
+                all_word_order_probs.append(la.probs_of_word_orders(False))
+                all_word_order_probs_no_prior.append(la.probs_of_word_orders(True))
+                la.train()
+                #if i > 50:
+                #    x = all_word_order_probs[-1]
+                #    if not x['svo'] >= x.values.max():
+                #        breakpoint()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
         print(f"Epoch {epoch_num} time: {time()-epoch_start_time:.3f} per dpoint: {time_per_dpoint:.6f}")
-        language_acquirer.show_splits(ARGS.cat_to_sample_from,f)
+        la.show_splits(ARGS.cat_to_sample_from,f)
         final_parses = {}
         n_correct_parses = 0
 
-    with open(f'{ARGS.dset}_failures.txt','w') as f:
+    with open(f'{ARGS.expname}_failures.txt','w') as f:
         for pf,e in problem_list:
             f.write(' '.join(pf['words']) + pf['lf'] + str(e))
     inverse_probs_start_time = time()
-    language_acquirer.compute_inverse_probs()
+    la.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
     print(df_prior:=pd.DataFrame(all_word_order_probs))
     df_no_prior=pd.DataFrame(all_word_order_probs_no_prior)
@@ -750,30 +789,28 @@ if __name__ == "__main__":
         plt.savefig(f'word_order_probs{info.replace(" ","_").lower()}.png')
         plt.clf()
 
-    plot_df(df_prior)
-    plot_df(df_no_prior, 'No Prior')
+    plot_df(df_prior, ARGS.expname)
+    plot_df(df_no_prior, f'{ARGS.expname} No Prior')
     #file_print(f'Accuracy at meaning of state names: {meaning_acc:.1f}%',f)
     #file_print(f'Accuracy at syn-cat of state names: {syn_acc:.1f}%',f)
-    print(language_acquirer.syntaxl.memory['S\\NP'])
-    print(language_acquirer.syntaxl.memory['S\\NP'])
+    print(la.syntaxl.memory['S\\NP'])
     if ARGS.db_after:
-        la = language_acquirer
         breakpoint()
         la.probs_of_word_orders()
-    with open(f'summary.txt','w') as f:
+    with open(f'{ARGS.expname}_summary.txt','w') as f:
         if ARGS.n_generate > 0:
             file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
         for _ in range(ARGS.n_generate):
-            generated = language_acquirer.generate_words(ARGS.cat_to_sample_from)
+            generated = la.generate_words(ARGS.cat_to_sample_from)
             if any([x['words'][:-1]==generated.split() for x in d['data']]):
                 file_print(f'{generated}: seen during training',f)
             else:
                 file_print(f'{generated}: not seen during training',f)
         file_print(f'Total run time: {time()-start_time:.3f}s',f)
     for dpoint in test_data[:ARGS.n_test]:
-        language_acquirer.parse(dpoint['words'])
+        la.parse(dpoint['words'])
     if ARGS.test_gts:
         for sent,gt in gts.items():
-            language_acquirer.parse(gt[0][0]['words'].split())
-            language_acquirer.draw_graph(gt,is_gt=True)
-    language_acquirer.save_to(f'experiments/{ARGS.expname}')
+            la.parse(gt[0][0]['words'].split())
+            la.draw_graph(gt,is_gt=True)
+    la.save_to(f'experiments/{ARGS.expname}')

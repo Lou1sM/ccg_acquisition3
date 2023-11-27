@@ -289,7 +289,7 @@ class LogicalForm:
                 continue
             self.add_split(f,g,'app')
             # if self is a lambda and had it's bound var removed and put in g then try cmp
-            if self.node_type == 'lmbda' and f.node_type == 'lmbda' and any(cat_components(x,allow_atomic=True)[-1] == cat_components(y,allow_atomic=True)[-1] and cat_components(y,allow_atomic=True)[-1]!='X' for x in self.sem_cats for y in f.sem_cats):
+            if self.node_type == 'lmbda' and any(not is_atomic(x) for x in self.sem_cats) and any(not is_atomic(x) for x in f.sem_cats) and f.node_type == 'lmbda' and any(cat_components(x,allow_atomic=True)[-1] == cat_components(y,allow_atomic=True)[-1] and cat_components(y,allow_atomic=True)[-1]!='X' for x in self.sem_cats for y in f.sem_cats):
                 f_cmp_string = logical_type_raise(g.lf_str)
                 assert f_cmp_string == logical_type_raise(g.lf_str)
                 f_cmp = LogicalForm(f_cmp_string)
@@ -338,7 +338,11 @@ class LogicalForm:
             assert g.subtree_string().startswith('lambda')
             f.sem_cats = set(['X'])
             to_add_to = self.possible_cmp_splits
-        assert combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True)
+        if not ( combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True)):
+            fstr = f.subtree_string()
+            gstr = g.subtree_string()
+            breakpoint()
+            combine_lfs(fstr,gstr,split_type,normalize=True)
         g.infer_splits()
         f.infer_splits()
         if self.sem_cat_is_set and g.sem_cat_is_set:
@@ -522,7 +526,7 @@ class LogicalForm:
             assert len(self.children) == 1
             # debraccing only happens in subtree_string() so child already bracced here
             x = self.children[0].subtree_string_(show_treelike,as_shell,recompute=recompute)
-            bracced_if_var = f'({x})' if x.startswith('$') else x
+            bracced_if_var = f'({x})' if x.startswith('$') or x.startswith('BARE') else x
             return f'Q {bracced_if_var}'
         elif self.node_type in ['composite','detnoun']:
             child_trees = [maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']) for c in self.children]
@@ -672,10 +676,12 @@ class ParseNode():
             right_child_fwd = ParseNode(g,right_words,parent=self,node_type='right_fwd_app')
             new_syn_cats = set(f'{ssync}/{maybe_brac(rcsync)}' for ssync in self.syn_cats for rcsync in right_child_fwd.syn_cats)
             assert new_syn_cats != 'S/NP\\NP'
+            if 'X/S' in new_syn_cats or 'X\\S' in new_syn_cats:
+                raise SemCatError
             left_child_fwd = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',syn_cats=new_syn_cats)
             #congs = set(x for x in f.sem_cats if any(is_congruent(x,y) for y in new_syn_cats))
             if not ( f.was_cached or set_congruent(f.sem_cats, new_syn_cats)):
-                breakpoint()
+                raise SemCatError
             self.append_split(left_child_fwd,right_child_fwd,'fwd_app')
 
             left_child_bck = ParseNode(g,left_words,parent=self,node_type='left_bck_app')
