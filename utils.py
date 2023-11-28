@@ -462,8 +462,11 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
     """Determines the slash directions for both f and g when comb. with fwd_cmp."""
     if parent_cat=='X' or g_cat=='X':
         return 'X', 'X'
-    pout,pslash,pin = cat_components(parent_cat)
-    gout,gslash,gin = cat_components(g_cat)
+    try:
+        pout,pslash,pin = cat_components(parent_cat)
+        gout,gslash,gin = cat_components(g_cat)
+    except ValueError:
+        breakpoint()
     #assert maybe_debrac(pin) == maybe_debrac(gin)
     if is_atomic(gout): # only consider if g is type-raised and in that case has slash
         return None, None

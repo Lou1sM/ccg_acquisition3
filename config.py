@@ -57,6 +57,7 @@ base_lexicon['mod|will_2'] = set(['S|NP', 'S|NP|NP'])
 base_lexicon['not'] = set(['X'])
 
 full_lfs_to_exclude = [
+        # Adam
         'lambda $0_{r}.cop|be-pres_1(part|write-presp_3(pro:per|you_2,det:art|a_4($1,n|letter_5($1)),$0),$0)',
         'n|stop_1 you',
         'n|talk_1 you',
@@ -79,10 +80,12 @@ full_lfs_to_exclude = [
         'qn|some n|water', # just noun phrase
         'n|tickle WHO pro:obj|me', # 'tickle' pos wrong and sent is malordered
         'n|call you n:prop|robin', # 'call' pos wrong and not clear what sent means
+        # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         ]
 
 partial_lfs_to_exclude = [
+        # Adam
         'and',
         'att',
         ' _ ',
@@ -95,6 +98,13 @@ partial_lfs_to_exclude = [
         'pro:per|it_3_at_2',
         '(lambda $1_{r}.', # means embedded S and haven't yet removed the event vars from them
         'BARE($0,pro:indef|something_1($0))', # sent is wrong
+        # Hagar
+        'qn|gam', # wrong pos
+        'qn|raq', # wrong pos
+        'sing|', # meaningless pos
+        'chi|', # meaningless pos
+        'pro:per|štey', # wrong pos
+        'pro:per|kol', # wrong pos
         ]
 
 exclude_lfs = full_lfs_to_exclude + partial_lfs_to_exclude

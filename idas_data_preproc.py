@@ -7,12 +7,10 @@ from config import manual_ida_fixes, pos_marking_dict
 
 
 def maybe_detnoun_match(x):
-    #return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{1,2}),(\w*\|\w*)\(\2\)\)',x)
     return re.match(r'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{1,2}),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
 
 def maybe_attrib_noun_match(x):
     return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
-    #return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|\w*)\(\1\)\)',x)
 
 def is_nplike(x):
     if x in ['WHO', 'WHAT', 'you']:
@@ -25,16 +23,10 @@ def is_nplike(x):
         return True
     elif any(c in x for c in ',().\$'):
         return False
-    #elif '|' not in x:
-        #print(x)
-        #return False
     else:
         return pos_marking_dict[x.split('|')[0]] == set(['NP'])
-        #return x.split('|')[0] in ['pro:per', 'n:prop', 'pro:dem', 'pro:sub', 'pro:obj', 'pro:exist','chi'] # not sure the diff between 'chi' and n:prop
 
 def is_adj(x):
-    #if x == 'n|right_3':
-        #return True
     if bool(maybe_detnoun_match(x)):
         return False
     else:
@@ -42,6 +34,8 @@ def is_adj(x):
         return x.split('|')[0] in ['adj', 'n']
 
 def decommafy(parse, debrac=False):
+    if ARGS.dset == 'hagar':
+        parse = parse.replace('part|','v|')
     if parse == ARGS.db:
         breakpoint()
     if len(re.findall(r'[(),]',parse)) == 0:
@@ -177,14 +171,14 @@ if __name__ == '__main__':
     ARGS = ARGS.parse_args()
 
     with open(f'data/{ARGS.dset}_comma_format.txt') as f:
-        adam_lines = f.readlines()
+        dset_lines = f.readlines()
 
-    sents = [adam_lines[i] for i in range(0,len(adam_lines),4)]
+    sents = [dset_lines[i] for i in range(0,len(dset_lines),4)]
     assert all([s.startswith('Sent: ') for s in sents])
-    lfs = [adam_lines[i] for i in range(1,len(adam_lines),4)]
+    lfs = [dset_lines[i] for i in range(1,len(dset_lines),4)]
     assert all([lf.startswith('Sem: ') for lf in lfs])
-    assert all([adam_lines[i]=='example_end\n' for i in range(2,len(adam_lines),4)])
-    assert all([adam_lines[i]=='\n' for i in range(3,len(adam_lines),4)])
+    assert all([dset_lines[i]=='example_end\n' for i in range(2,len(dset_lines),4)])
+    assert all([dset_lines[i]=='\n' for i in range(3,len(dset_lines),4)])
 
     if ARGS.dset == 'adam':
         exclude_list = ['don \'t Adam foot', 'who is going to become a spider', 'two Adam', 'a d a m']

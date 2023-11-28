@@ -691,6 +691,7 @@ if __name__ == "__main__":
     f = open(f'experiments/{ARGS.expname}/results.txt','w')
     all_data = [x for x in d['data'] if all(y not in x['lf'] for y in exclude_lfs)]
     all_data = [x for x in all_data if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
+    all_data = [x for x in all_data if len(x['words']) > 1]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
     train_data = data_to_use[:-len(data_to_use)//5]
     test_data = train_data if ARGS.is_test else data_to_use[-len(data_to_use)//5:]
