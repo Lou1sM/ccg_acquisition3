@@ -97,6 +97,7 @@ partial_lfs_to_exclude = [
         '(lambda $1_{r}.v|swallow_5 pro:per|you_2 pro:per|it_6 $1)',
         'pro:per|it_3_at_2',
         '(lambda $1_{r}.', # means embedded S and haven't yet removed the event vars from them
+        ',lambda $1_{r}', # means embedded S and haven't yet removed the event vars from them
         'BARE($0,pro:indef|something_1($0))', # sent is wrong
         # Hagar
         'qn|gam', # wrong pos
@@ -105,14 +106,26 @@ partial_lfs_to_exclude = [
         'chi|', # meaningless pos
         'pro:per|štey', # wrong pos
         'pro:per|kol', # wrong pos
+        'co|loʔ($1,n|', # mistaken use of co| as determiner
+        'co|loʔ($0,n|', # mistaken use of co| as determiner
+        'co|zēhu($0,n|', # mistaken use of co| as determiner
+        'co|maspīQ($1,n|', # mistaken use of co| as determiner
         ]
 
+he_chars = "qhvSWl~N?ʔmetṭ   טʕJ!.FbcM_kçGDHwxByQẒLKAgYRPTnoֿ+=CzpšXṣʝfi&d́:arusū"
+# he_chars = ''.join(pd.read_csv('hebrew_latin_table.tsv',sep='\t')['Unnamed: 0'])
 exclude_lfs = full_lfs_to_exclude + partial_lfs_to_exclude
 
+pre_manual_ida_fixes = { # for when they will error in conversion
+    'lambda $0_{r}.Q(mod|do-3s_1(co|like_3(pro:sub|he_2,BARE($1,n|apple-pl_4($1)),$0),$0))': 'lambda $0_{r}.Q(mod|do-3s_1(v|like_3(pro:sub|he_2,BARE($1,n|apple-pl_4($1)),$0),$0))', # pos of 'like' to verb}
+    'lambda $1_{<<e,e>,e>}.lambda $0_{r}.mod|will-cond_3(co|like_5(pro:per|you_4,$1($2,pro:indef|one_2($2)),$0),$0)': 'lambda $1_{<<e,e>,e>}.lambda $0_{r}.mod|will-cond_3(v|like_5(pro:per|you_4,$1($2,pro:indef|one_2($2)),$0),$0)', # pos of 'like' to verb}
+    'lambda $0_{r}.Q(mod|do_1(co|like_3(pro:per|you_2,BARE($1,n|grape+fruit_4($1)),$0),$0))': 'lambda $0_{r}.Q(mod|do_1(v|like_3(pro:per|you_2,BARE($1,n|grape+fruit_4($1)),$0),$0))', # pos of 'like' to verb}
+    }
+
 manual_ida_fixes = { # applied after conversion to no-comma form
-    'Q (v|do-past_1 (n|miss_3 pro:per|you_1 pro:indef|one_4))': 'Q (v|do-past_1 (v|miss_3 pro:per|you_1 pro:indef|one_4))', # pos of 'miss' to verb
-    'n|stop_2 you pro:dem|that_3': 'v|stop_2 you pro:dem|that_3', # pos of 'stop' to verb
-    'Q (v|do-past_1 (prep|like_3 pro:per|you_1 pro:per|it_4))': 'Q (v|do-past_1 (v|like_3 pro:per|you_1 pro:per|it_4))', # pos of 'like' to verb
+    'Q (v|do-past (n|miss_3 pro:per|you pro:indef|one))': 'Q (v|do-past (v|miss pro:per|you pro:indef|one))', # pos of 'miss' to verb
+    'n|stop you pro:dem|that': 'v|stop you pro:dem|that', # pos of 'stop' to verb
+    'Q (v|do-past (prep|like pro:per|you pro:per|it))': 'Q (v|do-past (v|like pro:per|you pro:per|it))', # pos of 'like' to verb
     'n|call you n:prop|daddy': 'v|call you n:prop|daddy', # pos of 'call' to verb
     'equals pro:per|you (det:art|the n|drive-dv)': 'Q (equals pro:per|you (det:art|the n|drive-dv))', # add 'Q'
     'hasproperty you n|stop': 'v|stop you', # add 'Q'

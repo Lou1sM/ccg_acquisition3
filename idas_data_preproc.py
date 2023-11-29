@@ -3,8 +3,12 @@ from pprint import pprint as pp
 import numpy as np
 import re
 from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac
-from config import manual_ida_fixes, pos_marking_dict
+from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs
 
+
+with open('data/hagar_comma_format.txt') as f:
+    d=f.read()
+cw_words = set(sorted(re.findall(rf'(?<=co\|)[{he_chars}]+(?=\()',d)))
 
 def maybe_detnoun_match(x):
     return re.match(r'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{1,2}),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
@@ -15,7 +19,7 @@ def maybe_attrib_noun_match(x):
 def is_nplike(x):
     if x in ['WHO', 'WHAT', 'you']:
         return True
-    if x == 'not':
+    if x in ['not', 'and']:
         return False
     elif x.startswith('lambda'):
         return False
@@ -61,7 +65,6 @@ def decommafy(parse, debrac=False):
     elif not is_bracketed(lf) and len(lf.split())>1:
         lf = f'({lf})'
     #lf = lf.replace('you_2','you_1').replace('you_3','you_1')
-    lf = re.sub(r'_\d{1,2}\b','',lf)
     return lf
 
 def _decommafy_inner(parse):
@@ -69,6 +72,7 @@ def _decommafy_inner(parse):
         return 'equals pro:dem|that_1 pro:per|it_3'
     if parse.startswith('Q(mod|do_1('):
         breakpoint()
+    parse = maybe_debrac(parse)
     if bool(mdm := maybe_detnoun_match(parse)):
         det, var, noun = mdm.groups()
         if det != 'BARE':
@@ -140,6 +144,12 @@ def lf_preproc(lf_, sent):
     lf = lf[5:] # have already checked it starts with 'Sem: '
     #if lf == 'lambda $0_{r}.pro:poss|mine_3(pro:per|it_1,$0)':
     #    breakpoint()
+    #lf = re.sub(f'mod\|do(.*)\(co\|like_\d', r'mod|do\1(v|like', lf)
+    #if 'mod|will-cond_3(co|like_5' in lf:
+        #breakpoint()
+    #lf = re.sub(f'mod\|will(.*)\(co\|like_\d', r'mod|do\1(v|like', lf)
+    lf = lf.replace('co|like', 'v|like')
+    lf = lf.replace('co|look', 'v|look')
     if 'lambda $0' in lf.rpartition('.')[0]:
         lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
@@ -150,9 +160,16 @@ def lf_preproc(lf_, sent):
             lf = lf[14:].replace('$1',f'WHAT')
         elif 'who' in sent:
             lf = lf[14:].replace('$1',f'WHO')
+    lf = re.sub(r'_\d{1,2}\b','',lf)
+    lf =re.sub(rf',co\|[{he_chars}]+', '', lf)
+    lf =re.sub(rf'co\|[{he_chars}]+,', '', lf)
+    lf =re.sub(rf'co\|[{he_chars}]+', '', lf)
+    lf = lf.replace('()', '')
+    if lf in ['Q', 'and', '(you)', '(WHO)', 'aux|~be((WHAT))']:
+        return ''
     dlf = decommafy(lf, debrac=True)
     if ARGS.print_conversions:
-        print(f'{lf} --> {dlf}')
+        print(f'{lf} --> {dlf}', end='\t')
     if dlf in manual_ida_fixes.keys():
         old_dlf = dlf
         dlf = manual_ida_fixes[dlf]
@@ -160,7 +177,9 @@ def lf_preproc(lf_, sent):
     return dlf
 
 def sent_preproc(sent):
-    return sent[6:].rstrip('?.!\n').split()
+    sent = sent[6:].rstrip('?.!\n')
+    sent = [w for w in sent.split() if w not in cw_words]
+    return sent
 
 if __name__ == '__main__':
     import argparse
@@ -186,12 +205,20 @@ if __name__ == '__main__':
         exclude_list = []
     dset_data = []
     for l,s in zip(lfs,sents):
+        if any(x in l for x in exclude_lfs):
+            continue
         if s[6:-3] in exclude_list:
             continue
+        ps = sent_preproc(s)
+        if ps == []:
+            continue
         pl = lf_preproc(l,s)
+        if ARGS.print_conversions:
+            print(' '.join(ps))
+        if pl == '':
+            continue
         if pl is None:
             continue
-        ps = sent_preproc(s)
         dset_data.append({'lf':pl, 'words':ps})
     x=[' '.join(y['words']) for y in dset_data]
     y=dict(zip(*np.unique(x, return_counts=True)))
