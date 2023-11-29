@@ -11,10 +11,12 @@ with open('data/hagar_comma_format.txt') as f:
 cw_words = set(sorted(re.findall(rf'(?<=co\|)[{he_chars}]+(?=\()',d)))
 
 def maybe_detnoun_match(x):
-    return re.match(r'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{1,2}),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
+    #return re.match(r'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{1,2}),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
+    return re.match(fr'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{{1,2}}),(n\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def maybe_attrib_noun_match(x):
-    return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
+    #return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
+    return re.match(fr'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def is_nplike(x):
     if x in ['WHO', 'WHAT', 'you']:
@@ -44,7 +46,6 @@ def decommafy(parse, debrac=False):
         breakpoint()
     if len(re.findall(r'[(),]',parse)) == 0:
         return parse
-    #maybe_lambda_body = re.search(r'(?<=^lambda \$1_\{(r|e|<r,t>)\}\.).*$',parse)
     maybe_lambda_body = re.match(r'^lambda (WHAT|WHO|\$1_\{(r|e|<r,t>)\})\.(.*)$',parse)
     if maybe_lambda_body is None:
         body = parse
@@ -64,7 +65,6 @@ def decommafy(parse, debrac=False):
         lf = maybe_debrac(lf)
     elif not is_bracketed(lf) and len(lf.split())>1:
         lf = f'({lf})'
-    #lf = lf.replace('you_2','you_1').replace('you_3','you_1')
     return lf
 
 def _decommafy_inner(parse):
@@ -77,12 +77,9 @@ def _decommafy_inner(parse):
         det, var, noun = mdm.groups()
         if det != 'BARE':
             if 'that' in det:
-                #print(det)
                 det = f'det:dem|that_1'
             assert det.startswith('det') or det.startswith('qn')
         noun_pos, noun_word = noun.split('|')
-        #if noun_pos != 'n':
-            #print(noun_pos)
         return f'{det} n|{noun_word}'
     if bool(mam := maybe_attrib_noun_match(parse)):
         det, subj, _, noun = mam.groups()
@@ -106,7 +103,6 @@ def _decommafy_inner(parse):
                 pred = ''
         arg_splits = split_respecting_brackets(args,sep=',')
 
-        #if parse == 'Q(n|right_3(pro:dem|that_1))':
             #breakpoint()
         if len(arg_splits)==1 and is_nplike(arg_splits[0]):
             if is_nplike(pred):

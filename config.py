@@ -128,14 +128,14 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     }
 
 hagar_svo_sentences = {
-    "ken ʔanāxnu loxcōt yadāyim .", # Line 833
-    "ʔat mecayēret ʕigūl ?", # Line 649
-    "ʔat roʔā galīm ?", # Line 1065
-    "ʔat qanīt matanā le sābaʔ ?", # Line 1645
-    "ʔat kotēvet ʔat kotēvet miḳtāv ?", # Line 19129
-    "Bindī ʔatā ʔohēv salāṭ ?", # Line 6433
-    "ʔatā rocē glīda ?", # Line 17277
-    "ʔanī mexapēṣet pitarōn le ~ha xidā ha qašē ha zōʔti .", # Line 3165
-    "ʔanī ʔoḳāl ʔavoqādo bli limōn we mēlax .", # Line 6533
-    "ʔat ṣāma sukār ?", # Line 23829
+    "ʔat mecayēret ʕigūl", # Line 649
+    "ʔanāxnu loxcōt yadāyim", # Line 833
+    "ʔat roʔā galīm", # Line 1065
+    "ʔat qanīt matanā le sābaʔ", # Line 1645
+    "ʔanī mexapēṣet pitarōn le ~ha xidā ha qašē ha zōʔti", # Line 3165
+    "Bindī ʔatā ʔohēv salāṭ", # Line 6433
+    "ʔanī ʔoḳāl ʔavoqādo bli limōn we mēlax", # Line 6533
+    "ʔatā rocē glīda", # Line 17277
+    "ʔat kotēvet ʔat kotēvet miḳtāv", # Line 19129
+    "ʔat ṣāma sukār", # Line 23829
 }

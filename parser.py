@@ -22,11 +22,11 @@ debug_set_cats = None
 
 class LogicalForm:
     #def __init__(self,defining_string,idx_in_tree=[],cache=None,parent=None):
-    def __init__(self,defining_string,idx_in_tree=[],cache={},parent=None,dbslf=None,dbsss=None):
-        if dbslf is not None:
+    def __init__(self,defining_string,idx_in_tree=[],cache={},parent=None,dblfs=None,dbsss=None):
+        if dblfs is not None:
             global debug_split_lf
-            assert debug_split_lf in (None, dbslf)
-            debug_split_lf = dbslf
+            assert debug_split_lf in (None, dblfs)
+            debug_split_lf = dblfs
         if dbsss is not None:
             global debug_set_cats
             assert debug_set_cats in (None, dbsss)

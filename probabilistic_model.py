@@ -315,7 +315,7 @@ class LanguageAcquirer():
         if lf_str in self.full_lfs_cache:
             return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,cache=self.lf_parts_cache,parent='START',dbslf=ARGS.dbslf,dbsss=ARGS.dbsss)
+            lf = LogicalForm(lf_str,cache=self.lf_parts_cache,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss)
             self.full_lfs_cache[lf_str] = lf
             return lf
 
@@ -335,6 +335,10 @@ class LanguageAcquirer():
                 print('zero root prob for', lfs, words)
             root.propagate_above_probs(1)
             if lfs == ARGS.dbr:
+                breakpoint()
+            if words == ARGS.dbsent.split():
+                breakpoint()
+            if ' '.join(words).startswith('ken ʔa'):
                 breakpoint()
             for n,p in new_prob_cache.items():
                 if n in prob_cache.keys():
@@ -665,7 +669,8 @@ if __name__ == "__main__":
     ARGS.add_argument("--shuffle", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='adam')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
-    ARGS.add_argument("--dbslf", type=str)
+    ARGS.add_argument("--dblfs", type=str)
+    ARGS.add_argument("--dbsent", type=str)
     ARGS.add_argument("--dbsss", type=str)
     ARGS.add_argument("--dbr", type=str)
     ARGS = ARGS.parse_args()
