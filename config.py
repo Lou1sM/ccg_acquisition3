@@ -116,12 +116,6 @@ he_chars = "qhvSWl~N?ʔmetṭ   טʕJ!.FbcM_kçGDHwxByQẒLKAgYRPTnoֿ+=CzpšXs
 # he_chars = ''.join(pd.read_csv('hebrew_latin_table.tsv',sep='\t')['Unnamed: 0'])
 exclude_lfs = full_lfs_to_exclude + partial_lfs_to_exclude
 
-pre_manual_ida_fixes = { # for when they will error in conversion
-    'lambda $0_{r}.Q(mod|do-3s_1(co|like_3(pro:sub|he_2,BARE($1,n|apple-pl_4($1)),$0),$0))': 'lambda $0_{r}.Q(mod|do-3s_1(v|like_3(pro:sub|he_2,BARE($1,n|apple-pl_4($1)),$0),$0))', # pos of 'like' to verb}
-    'lambda $1_{<<e,e>,e>}.lambda $0_{r}.mod|will-cond_3(co|like_5(pro:per|you_4,$1($2,pro:indef|one_2($2)),$0),$0)': 'lambda $1_{<<e,e>,e>}.lambda $0_{r}.mod|will-cond_3(v|like_5(pro:per|you_4,$1($2,pro:indef|one_2($2)),$0),$0)', # pos of 'like' to verb}
-    'lambda $0_{r}.Q(mod|do_1(co|like_3(pro:per|you_2,BARE($1,n|grape+fruit_4($1)),$0),$0))': 'lambda $0_{r}.Q(mod|do_1(v|like_3(pro:per|you_2,BARE($1,n|grape+fruit_4($1)),$0),$0))', # pos of 'like' to verb}
-    }
-
 manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (v|do-past (n|miss_3 pro:per|you pro:indef|one))': 'Q (v|do-past (v|miss pro:per|you pro:indef|one))', # pos of 'miss' to verb
     'n|stop you pro:dem|that': 'v|stop you pro:dem|that', # pos of 'stop' to verb

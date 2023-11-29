@@ -142,12 +142,6 @@ def _decommafy_inner(parse):
 def lf_preproc(lf_, sent):
     lf = lf_.rstrip('\n')
     lf = lf[5:] # have already checked it starts with 'Sem: '
-    #if lf == 'lambda $0_{r}.pro:poss|mine_3(pro:per|it_1,$0)':
-    #    breakpoint()
-    #lf = re.sub(f'mod\|do(.*)\(co\|like_\d', r'mod|do\1(v|like', lf)
-    #if 'mod|will-cond_3(co|like_5' in lf:
-        #breakpoint()
-    #lf = re.sub(f'mod\|will(.*)\(co\|like_\d', r'mod|do\1(v|like', lf)
     lf = lf.replace('co|like', 'v|like')
     lf = lf.replace('co|look', 'v|look')
     if 'lambda $0' in lf.rpartition('.')[0]:
