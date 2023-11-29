@@ -126,3 +126,16 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'n|stop you pro:dem|that': 'v|stop you pro:dem|that', # pos of 'stop' to verb
     'n|stop you pro:rel|that': 'v|stop you pro:rel|that', # pos of 'stop' to verb
     }
+
+hagar_svo_sentences = {
+    "ken ʔanāxnu loxcōt yadāyim .", # Line 833
+    "ʔat mecayēret ʕigūl ?", # Line 649
+    "ʔat roʔā galīm ?", # Line 1065
+    "ʔat qanīt matanā le sābaʔ ?", # Line 1645
+    "ʔat kotēvet ʔat kotēvet miḳtāv ?", # Line 19129
+    "Bindī ʔatā ʔohēv salāṭ ?", # Line 6433
+    "ʔatā rocē glīda ?", # Line 17277
+    "ʔanī mexapēṣet pitarōn le ~ha xidā ha qašē ha zōʔti .", # Line 3165
+    "ʔanī ʔoḳāl ʔavoqādo bli limōn we mēlax .", # Line 6533
+    "ʔat ṣāma sukār ?", # Line 23829
+}
