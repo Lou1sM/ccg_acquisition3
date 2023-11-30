@@ -202,7 +202,7 @@ class LanguageAcquirer():
         self.wordl = WordSpanDirichletProcessLearner(0.25)
         self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
         #self.lf_parts_cache = {'splits':{},'cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
-        self.lf_parts_cache = {}
+        self.caches = {'splits':{}, 'cats':{}}
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
         self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
         self.vocab_thresh = 1
@@ -315,22 +315,28 @@ class LanguageAcquirer():
         if lf_str in self.full_lfs_cache:
             return self.full_lfs_cache[lf_str]
         else:
-            lf = LogicalForm(lf_str,cache=self.lf_parts_cache,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss)
+            lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss)
             self.full_lfs_cache[lf_str] = lf
             return lf
 
     def train_one_step(self,lf_strs,words):
         prob_cache = {}
         root_prob = 0
+        new_problem_list = []
         for lfs in lf_strs:
-            root = self.make_parse_node(lfs,words) # words is a list
+            try:
+                root = self.make_parse_node(lfs,words) # words is a list
+                new_prob_cache = {}
+                new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
+                           self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
+            except CCGLearnerError as e:
+                new_problem_list.append((dpoint,e))
+                print(e)
+                continue
             #if lf_str == 'not (mod|will_2 (v|eat_4 pro:per|you_1 (BARE $1 (n|tiger-pl_5 $1))))':
                 #breakpoint()
             if root.possible_splits == []:
                 print('no splits :(')
-            new_prob_cache = {}
-            new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
-                           self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
             if new_root_prob==0:
                 print('zero root prob for', lfs, words)
             root.propagate_above_probs(1)
@@ -352,6 +358,10 @@ class LanguageAcquirer():
                 #breakpoint()
             #if lf_str == 'Q (v|do-past_1 (v|miss_3 pro:per|you_2 pro:indef|one_4))' and node.words==['you'] and node.lf_str == 'pro:per|you_2':
                 #breakpoint()
+            if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $1 $0':
+                breakpoint()
+            if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $0 $1':
+                breakpoint()
             if node.parent is not None and not node.is_g:
                 update_weight = node.below_prob * node.above_prob / root_prob # for conditional
                 if node.is_fwd:
@@ -378,11 +388,10 @@ class LanguageAcquirer():
         bad_prob = sum(x[2] for x in self.syntaxl.buffer if x[0]=='NP + S\\NP\\NP')
         good_prob = sum(x[2] for x in self.syntaxl.buffer if x[0]=='S\\NP/NP + NP')
         if bad_prob > good_prob:
-            bad=max([x for x in prob_cache if 'S\\NP\\NP' in x.syn_cats], key=lambda x:x.above_prob*x.below_prob)
-            good=max([x for x in prob_cache if 'S\\NP/NP' in x.syn_cats], key=lambda x:x.above_prob*x.below_prob)
             print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
             print('TOTAL BAD:', self.syntaxl.prob('NP + S\\NP\\NP','S\\NP'), 'TOTAL GOOD:', self.syntaxl.prob('S\\NP/NP + NP','S\\NP'))
         self.flush_buffers()
+        return new_problem_list
         #print(self.wordl.prob('you','pro:per|you_1'))
         #if 'pro:per|you_1' in self.wordl.memory:
             #print(self.wordl.memory['pro:per|you_1'].get('you',0), self.wordl.memory['pro:per|you_1']['COUNT'])
@@ -391,14 +400,14 @@ class LanguageAcquirer():
 
     def probs_of_word_orders(self, ignore_prior):
         if ignore_prior:
-            def syn_prob_func(x,y):
+            def syn_prob_func(y,x):
                 try:
-                    self.syntaxl.memory[x].get(y,0)/self.syntaxl.memory[x]['COUNT']
+                    return self.syntaxl.memory[x].get(y,0)/self.syntaxl.memory[x]['COUNT']
                 except KeyError:
                     return 0
-            def shm_prob_func(x,y):
+            def shm_prob_func(y,x):
                 try:
-                    self.shmeaningl.memory[x].get(y,0)/self.shmeaningl.memory[x]['COUNT']
+                    return self.shmeaningl.memory[x].get(y,0)/self.shmeaningl.memory[x]['COUNT']
                 except KeyError:
                     return 0
         else:
@@ -419,7 +428,10 @@ class LanguageAcquirer():
         'vos': vso_or_vos*comb_obj_first,
         'osv': sov_or_osv*comb_subj_first,
         'ovs': ovs_*comb_subj_first
-        })
+        }) + 1e-8
+        #if unnormed_probs['ovs'] > unnormed_probs['svo']:
+            #breakpoint()
+
         return unnormed_probs/unnormed_probs.sum()
 
     def generate_words(self,syn_cat):
@@ -662,6 +674,7 @@ if __name__ == "__main__":
     ARGS.add_argument("-t","--is_test", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
     ARGS.add_argument("--show_graphs", action="store_true")
+    ARGS.add_argument("--show_plots", action="store_true")
     ARGS.add_argument("--db_parse", action="store_true")
     ARGS.add_argument("--db_after", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
@@ -670,7 +683,7 @@ if __name__ == "__main__":
     ARGS.add_argument("-d", "--dset", type=str, default='adam')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
     ARGS.add_argument("--dblfs", type=str)
-    ARGS.add_argument("--dbsent", type=str)
+    ARGS.add_argument("--dbsent", type=str, default='')
     ARGS.add_argument("--dbsss", type=str)
     ARGS.add_argument("--dbr", type=str)
     ARGS = ARGS.parse_args()
@@ -724,12 +737,12 @@ if __name__ == "__main__":
             stop = min(len(train_data)-1, i+((ARGS.n_distractors+1)//2)+1)
             lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
             print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
-            try:
-                la.train_one_step(lf_strs_incl_distractors,words)
-            except CCGLearnerError as e:
-                problem_list.append((dpoint,e))
-                print(e)
-            if ((i+1)%10 == 0 or ARGS.is_test):
+            #try:
+            problem_list += la.train_one_step(lf_strs_incl_distractors,words)
+            #except CCGLearnerError as e:
+                #problem_list.append((dpoint,e))
+                #print(e)
+            if ((i+1)%1 == 0 or ARGS.is_test):
                 la.eval()
                 all_word_order_probs.append(la.probs_of_word_orders(False))
                 all_word_order_probs_no_prior.append(la.probs_of_word_orders(True))
@@ -740,7 +753,6 @@ if __name__ == "__main__":
                 #        breakpoint()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
-        print(f"Epoch {epoch_num} time: {time()-epoch_start_time:.3f} per dpoint: {time_per_dpoint:.6f}")
         la.show_splits(ARGS.cat_to_sample_from,f)
         final_parses = {}
         n_correct_parses = 0
@@ -765,9 +777,11 @@ if __name__ == "__main__":
         plt.xlabel('Num Training Points')
         plt.ylabel('Relative Probability')
         plt.title(f'Word Order Probs{info}')
-        plt.show()
         check_dir('plotted_figures')
-        plt.savefig(f'plotted_figures/word_order_probs{info.replace(" ","_").lower()}.png')
+        fpath = f'plotted_figures/word_order_probs{info.replace(" ","_").lower()}.png'
+        plt.savefig(fpath)
+        if ARGS.show_plots:
+            os.system(f'/usr/bin/xdg-open {fpath}')
         plt.clf()
 
     plot_df(df_prior, ARGS.expname)
@@ -775,7 +789,6 @@ if __name__ == "__main__":
     print(la.syntaxl.memory['S\\NP'])
     if ARGS.db_after:
         breakpoint()
-        la.probs_of_word_orders()
     with open(f'{ARGS.expname}_summary.txt','w') as f:
         if ARGS.n_generate > 0:
             file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
@@ -786,8 +799,8 @@ if __name__ == "__main__":
             else:
                 file_print(f'{generated}: not seen during training',f)
         file_print(f'Total run time: {time()-start_time:.3f}s',f)
-    for dpoint in test_data[:ARGS.n_test]:
-        la.parse(dpoint['words'])
+    #for dpoint in test_data[:ARGS.n_test]:
+        #la.parse(dpoint['words'])
     if ARGS.test_gts:
         for sent,gt in gts.items():
             la.parse(gt[0][0]['words'].split())
