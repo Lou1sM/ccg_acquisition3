@@ -3,7 +3,7 @@ from pprint import pprint as pp
 import numpy as np
 import re
 from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac
-from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs
+from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, premanual_ida_fixes
 
 
 with open('data/hagar_comma_format.txt') as f:
@@ -11,7 +11,6 @@ with open('data/hagar_comma_format.txt') as f:
 cw_words = set(sorted(re.findall(rf'(?<=co\|)[{he_chars}]+(?=\()',d)))
 
 def maybe_detnoun_match(x):
-    #return re.match(r'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{1,2}),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
     return re.match(fr'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{{1,2}}),(n\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def maybe_attrib_noun_match(x):
@@ -69,7 +68,7 @@ def decommafy(parse, debrac=False):
 
 def _decommafy_inner(parse):
     if parse == 'pro:dem|that_1(pro:per|it_3)':
-        return 'equals pro:dem|that_1 pro:per|it_3'
+        return 'equals pro:dem|that pro:per|it'
     if parse.startswith('Q(mod|do_1('):
         breakpoint()
     parse = maybe_debrac(parse)
@@ -77,7 +76,7 @@ def _decommafy_inner(parse):
         det, var, noun = mdm.groups()
         if det != 'BARE':
             if 'that' in det:
-                det = f'det:dem|that_1'
+                det = 'det:dem|that'
             assert det.startswith('det') or det.startswith('qn')
         noun_pos, noun_word = noun.split('|')
         return f'{det} n|{noun_word}'
@@ -138,6 +137,9 @@ def _decommafy_inner(parse):
 def lf_preproc(lf_, sent):
     lf = lf_.rstrip('\n')
     lf = lf[5:] # have already checked it starts with 'Sem: '
+    #if lf == 'lambda $0_{r}.not(co|careful_5(pro:per|you_2,$0),$0)':
+        #breakpoint()
+    lf = premanual_ida_fixes.get(lf, lf)
     lf = lf.replace('co|like', 'v|like')
     lf = lf.replace('co|look', 'v|look')
     if 'lambda $0' in lf.rpartition('.')[0]:
@@ -147,13 +149,14 @@ def lf_preproc(lf_, sent):
         if (wh_word := sent.split()[0] in ['what','who']):
             lf = lf[14:].replace('$1',f'{wh_word.upper()}1')
         elif 'what' in sent:
-            lf = lf[14:].replace('$1',f'WHAT')
+            lf = lf[14:].replace('$1','WHAT')
         elif 'who' in sent:
-            lf = lf[14:].replace('$1',f'WHO')
+            lf = lf[14:].replace('$1','WHO')
     lf = re.sub(r'_\d{1,2}\b','',lf)
-    lf =re.sub(rf',co\|[{he_chars}]+', '', lf)
-    lf =re.sub(rf'co\|[{he_chars}]+,', '', lf)
-    lf =re.sub(rf'co\|[{he_chars}]+', '', lf)
+    lf = re.sub(r'co\|([\w{he_chars}]+\()(?!\$\d|$)',r'v|\1',lf) #'(' inside group to not replace single term
+    lf =re.sub(rf',co\|[\w{he_chars}]+', '', lf)
+    lf =re.sub(rf'co\|[\w{he_chars}]+,', '', lf)
+    lf =re.sub(rf'co\|[\w{he_chars}]+', '', lf)
     lf = lf.replace('()', '')
     if lf in ['Q', 'and', '(you)', '(WHO)', 'aux|~be((WHAT))']:
         return ''
@@ -164,11 +167,14 @@ def lf_preproc(lf_, sent):
         old_dlf = dlf
         dlf = manual_ida_fixes[dlf]
         print(f'fixing {old_dlf} to {dlf}')
+    if 'pro:per|yo' in dlf.replace('(',' ').replace(')',' ').split():
+        breakpoint()
     return dlf
 
 def sent_preproc(sent):
     sent = sent[6:].rstrip('?.!\n')
     sent = [w for w in sent.split() if w not in cw_words]
+    sent = [w for w in sent if w not in ('Adam', 'Paul', 'Hagāri')]
     return sent
 
 if __name__ == '__main__':

@@ -17,7 +17,7 @@ pos_marking_dict = {
                     'det:num':set(['NP|N']),
                     'det:poss':set(['NP|N']),
                     'meta':set([None]),
-                    'mod':set([None]),
+                    'mod':set(['S|NP|(S|NP)']),
                     'mod:aux':set([None]),
                     'n':set(['N']),
                     'n:gerund':set(['NP']),
@@ -80,6 +80,7 @@ full_lfs_to_exclude = [
         'qn|some n|water', # just noun phrase
         'n|tickle WHO pro:obj|me', # 'tickle' pos wrong and sent is malordered
         'n|call you n:prop|robin', # 'call' pos wrong and not clear what sent means
+        'lambda $0_{r}.co|thank_you_1(you,$0)', # unclear semantics, unclear semcat
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         ]
@@ -99,6 +100,7 @@ partial_lfs_to_exclude = [
         '(lambda $1_{r}.', # means embedded S and haven't yet removed the event vars from them
         ',lambda $1_{r}', # means embedded S and haven't yet removed the event vars from them
         'BARE($0,pro:indef|something_1($0))', # sent is wrong
+        'co|oh_1_no_2', # malformed
         # Hagar
         'qn|gam', # wrong pos
         'qn|raq', # wrong pos
@@ -116,6 +118,11 @@ he_chars = "qhvSWl~N?ʔmetṭ   טʕJ!.FbcM_kçGDHwxByQẒLKAgYRPTnoֿ+=CzpšXs
 # he_chars = ''.join(pd.read_csv('hebrew_latin_table.tsv',sep='\t')['Unnamed: 0'])
 exclude_lfs = full_lfs_to_exclude + partial_lfs_to_exclude
 
+premanual_ida_fixes = {
+    'lambda $0_{r}.not(co|careful_5(pro:per|you_2,$0),$0)':'lambda $0_{r}.not(adj|careful_5(pro:per|you_2,$0),$0)', # pos of 'careful' to v
+    'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(co|careful_4(pro:per|you_1,$0),$0))':'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(v|careful_4(pro:per|you_1,$0),$0))', # pos of 'careful' to v
+    'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,co|help_4($1)),$0)':'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,n|help_4($1)),$0)', # pos of 'help' to n
+    }
 manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (v|do-past (n|miss_3 pro:per|you pro:indef|one))': 'Q (v|do-past (v|miss pro:per|you pro:indef|one))', # pos of 'miss' to verb
     'n|stop you pro:dem|that': 'v|stop you pro:dem|that', # pos of 'stop' to verb
