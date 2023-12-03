@@ -3,7 +3,7 @@ from pprint import pprint as pp
 import numpy as np
 import re
 from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac
-from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, premanual_ida_fixes
+from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes
 
 
 with open('data/hagar_comma_format.txt') as f:
@@ -68,7 +68,7 @@ def decommafy(parse, debrac=False):
 
 def _decommafy_inner(parse):
     if parse == 'pro:dem|that_1(pro:per|it_3)':
-        return 'equals pro:dem|that pro:per|it'
+        return 'v|equals pro:dem|that pro:per|it'
     if parse.startswith('Q(mod|do_1('):
         breakpoint()
     parse = maybe_debrac(parse)
@@ -86,7 +86,7 @@ def _decommafy_inner(parse):
         #if noun_pos != 'n':
             #print(noun_pos)
         #return f'equals {subj} {det}(lambda $6.{noun} $6)'# 5 highest that's currently in dset
-        return f'equals {subj} ({det} n|{noun_word})'
+        return f'v|equals {subj} ({det} n|{noun_word})'
     else:
         first_chunk, rest = outermost_first_chunk(parse)
         assert rest == ''
@@ -106,15 +106,15 @@ def _decommafy_inner(parse):
         if len(arg_splits)==1 and is_nplike(arg_splits[0]):
             if is_nplike(pred):
                 if pred.startswith('pro:exist|') or pred in ('WHAT,WHO'):
-                    return f'equals {decommafy(pred)} {decommafy(arg_splits[0])}'
+                    return f'v|equals {decommafy(pred)} {decommafy(arg_splits[0])}'
                 else:
-                    return f'equals {decommafy(arg_splits[0])} {decommafy(pred)}'
+                    return f'v|equals {decommafy(arg_splits[0])} {decommafy(pred)}'
             elif is_adj(pred):
                 #if pred.startswith('n|'):
                     #print(f'hasproperty {decommafy(arg_splits[0])} {decommafy(pred)}')
                 dpred = decommafy(pred)
                 dpred_pos, dpred_word = dpred.split('|')
-                return f'hasproperty {decommafy(arg_splits[0])} adj|{dpred_word}'
+                return f'v|hasproperty {decommafy(arg_splits[0])} adj|{dpred_word}'
         recursed_list = [decommafy(x) for x in arg_splits]
         if pred in ['and', '']: # can be '' because do-support
             debracced_rl = [maybe_debrac(recursed_list[0])] + recursed_list[1:]
@@ -137,7 +137,7 @@ def _decommafy_inner(parse):
 def lf_preproc(lf_, sent):
     lf = lf_.rstrip('\n')
     lf = lf[5:] # have already checked it starts with 'Sem: '
-    #if lf == 'lambda $0_{r}.not(co|careful_5(pro:per|you_2,$0),$0)':
+    #if lf == 'lambda $1_{e}.lambda $0_{r}.$1(pro:rel|that_3,$0)':
         #breakpoint()
     lf = premanual_ida_fixes.get(lf, lf)
     lf = lf.replace('co|like', 'v|like')
@@ -152,12 +152,18 @@ def lf_preproc(lf_, sent):
             lf = lf[14:].replace('$1','WHAT')
         elif 'who' in sent:
             lf = lf[14:].replace('$1','WHO')
-    lf = re.sub(r'_\d{1,2}\b','',lf)
+    lf = re.sub(r'_\d{1,2}\b','',lf) # remove sense numbers, way too fine-grained
     lf = re.sub(r'co\|([\w{he_chars}]+\()(?!\$\d|$)',r'v|\1',lf) #'(' inside group to not replace single term
     lf =re.sub(rf',co\|[\w{he_chars}]+', '', lf)
     lf =re.sub(rf'co\|[\w{he_chars}]+,', '', lf)
     lf =re.sub(rf'co\|[\w{he_chars}]+', '', lf)
     lf = lf.replace('()', '')
+    if '(pro:rel|that)' in lf or ',pro:rel|that)' in lf or '(pro:rel|that,' in lf or 'pro:rel|that,n|' in lf:
+        lf = lf.replace('pro:rel|that','pro:dem|that')
+        print(f"{sent.strip()}: {lf}")
+    if re.search(r'pro:rel\|that\(\$\d,(n|pro:indef)', lf):
+        lf = lf.replace('pro:rel|that','det:dem|that')
+        print(f"{sent.strip()}: {lf}")
     if lf in ['Q', 'and', '(you)', '(WHO)', 'aux|~be((WHAT))']:
         return ''
     dlf = decommafy(lf, debrac=True)
@@ -195,15 +201,11 @@ if __name__ == '__main__':
     assert all([dset_lines[i]=='example_end\n' for i in range(2,len(dset_lines),4)])
     assert all([dset_lines[i]=='\n' for i in range(3,len(dset_lines),4)])
 
-    if ARGS.dset == 'adam':
-        exclude_list = ['don \'t Adam foot', 'who is going to become a spider', 'two Adam', 'a d a m']
-    else:
-        exclude_list = []
     dset_data = []
     for l,s in zip(lfs,sents):
         if any(x in l for x in exclude_lfs):
             continue
-        if s[6:-3] in exclude_list:
+        if s[6:-3] in exclude_sents:
             continue
         ps = sent_preproc(s)
         if ps == []:

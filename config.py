@@ -81,6 +81,7 @@ full_lfs_to_exclude = [
         'n|tickle WHO pro:obj|me', # 'tickle' pos wrong and sent is malordered
         'n|call you n:prop|robin', # 'call' pos wrong and not clear what sent means
         'lambda $0_{r}.co|thank_you_1(you,$0)', # unclear semantics, unclear semcat
+        'lambda $0_{r}.Q(det:art|a_3(pro:rel|that_2,and_comp(n|dragon_4(pro:rel|that_2,$0),n|fly_5(pro:rel|that_2,$0))))', # malformed
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         ]
@@ -118,11 +119,26 @@ he_chars = "qhvSWl~N?ʔmetṭ   טʕJ!.FbcM_kçGDHwxByQẒLKAgYRPTnoֿ+=CzpšXs
 # he_chars = ''.join(pd.read_csv('hebrew_latin_table.tsv',sep='\t')['Unnamed: 0'])
 exclude_lfs = full_lfs_to_exclude + partial_lfs_to_exclude
 
+exclude_sents = [
+    'this is the man who drives the busy bulldozer', # lf doesn't match
+    'that \'s the man who wrote the book', # lf doesn't match
+    'that \'s no the one that has the markings on it', # lf doesn't match
+    'Shadow Gay is the horse that won the Kentucky Derby', # lf doesn't match
+    'the part that you open so_that you can pull the kleenex up through there', # lf doesn't match
+    'Adam whose racket is that', # not sure how to model wh-possessive
+    'don \'t Adam foot',
+    'who is going to become a spider',
+    'two Adam',
+    'a d a m'
+    ]
+
 premanual_ida_fixes = {
     'lambda $0_{r}.not(co|careful_5(pro:per|you_2,$0),$0)':'lambda $0_{r}.not(adj|careful_5(pro:per|you_2,$0),$0)', # pos of 'careful' to v
     'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(co|careful_4(pro:per|you_1,$0),$0))':'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(v|careful_4(pro:per|you_1,$0),$0))', # pos of 'careful' to v
     'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,co|help_4($1)),$0)':'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,n|help_4($1)),$0)', # pos of 'help' to n
+    'lambda $0_{r}.Q(det:art|the_3(pro:rel|that_2,n|kitchen_4(pro:rel|that_2,$0)))':'lambda $0_{r}.Q(det:art|the_3(pro:dem|that_2,n|kitchen_4(pro:dem|that_2,$0)))', # pos of 'that' to pro:dem from pro:rel
     }
+
 manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (v|do-past (n|miss_3 pro:per|you pro:indef|one))': 'Q (v|do-past (v|miss pro:per|you pro:indef|one))', # pos of 'miss' to verb
     'n|stop you pro:dem|that': 'v|stop you pro:dem|that', # pos of 'stop' to verb
