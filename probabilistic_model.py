@@ -28,6 +28,15 @@ def type_raise(cat,direction,out_cat='S'):
     elif direction == 'sem':
         return f'{out_cat}|({out_cat}|{cat})'
 
+def get_root(n):
+    root = n
+    while True:
+        if root.parent is None:
+            break
+        else:
+            root = root.parent
+    return root
+
 class DirichletProcess():
     def __init__(self,alpha):
         self.memory = {'COUNT':0}
@@ -313,16 +322,27 @@ class LanguageAcquirer():
 
     def get_lf(self,lf_str):
         if lf_str in self.full_lfs_cache:
-            return self.full_lfs_cache[lf_str]
+            lf = self.full_lfs_cache[lf_str]
+            lf.set_cats_as_root(lf_str) # in case was in cache as embedded S, so got X
         else:
             lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss)
             self.full_lfs_cache[lf_str] = lf
-            return lf
+        return lf
 
     def train_one_step(self,lf_strs,words):
         prob_cache = {}
         root_prob = 0
         new_problem_list = []
+        #if lf_strs == ['Q (prep|on (BARE n|gun))', 'v|blow pro:per|you pro:per|it', 'mod|can (v|blow pro:per|you)']:
+        #    good=self.make_parse_node(lf_strs[1],words)
+        #    bad=self.make_parse_node(lf_strs[2],words)
+        #    good.propagate_below_probs(self.syntaxl,self.shmeaningl,self.meaningl,self.wordl,{},split_prob=1,is_map=False)
+        #    bad.propagate_below_probs(self.syntaxl,self.shmeaningl,self.meaningl,self.wordl,{},split_prob=1,is_map=False)
+        #    good.propagate_above_probs(1)
+        #    bad.propagate_above_probs(1)
+        #    g1=good.possible_splits[3]['right']
+        #    b1=bad.possible_splits[1]['right']
+        #    breakpoint()
         for lfs in lf_strs:
             try:
                 root = self.make_parse_node(lfs,words) # words is a list
@@ -331,7 +351,7 @@ class LanguageAcquirer():
                            self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
             except CCGLearnerError as e:
                 new_problem_list.append((dpoint,e))
-                print(e)
+                print(lfs, e)
                 continue
             #if lf_str == 'not (mod|will_2 (v|eat_4 pro:per|you_1 (BARE $1 (n|tiger-pl_5 $1))))':
                 #breakpoint()
@@ -352,7 +372,6 @@ class LanguageAcquirer():
                 else:
                     prob_cache[n] = p
             root_prob += new_root_prob
-        print(root_prob)
         for node, prob in prob_cache.items():
             #if node.lf_str == 'lambda $0.det:art|a_3 $0' and node.words==['a']:
                 #breakpoint()
@@ -385,11 +404,29 @@ class LanguageAcquirer():
             self.meaningl.buffer.append((lf,shell_lf,leaf_prob))
             self.wordl.buffer.append((word_str,lf,leaf_prob))
         #print(words,sum([x[2] for x in self.wordl.buffer]))
+            [x.parent.syn_cats for x,y in prob_cache.items() if 'S\\NP/NP' in x.syn_cats]
+            [x.parent.syn_cats for x,y in prob_cache.items() if 'S\\NP\\NP' in x.syn_cats]
+        #if lf_strs == ['v|blow pro:per|you pro:per|it', 'mod|can (v|blow pro:per|you)', 'v|do pro:per|you pro:per|it']:
+        #    good=self.make_parse_node(lf_strs[1],words)
+        #    bad=self.make_parse_node(lf_strs[2],words)
+        #    good.propagate_below_probs(self.syntaxl,self.shmeaningl,self.meaningl,self.wordl,{},split_prob=1,is_map=False)
+        #    bad.propagate_below_probs(self.syntaxl,self.shmeaningl,self.meaningl,self.wordl,{},split_prob=1,is_map=False)
+        #    good.propagate_above_probs(1)
+        #    bad.propagate_above_probs(1)
+        #    g1=good.possible_splits[1]['right']
+        #    b1=bad.possible_splits[3]['right']
+        #    breakpoint()
         bad_prob = sum(x[2] for x in self.syntaxl.buffer if x[0]=='NP + S\\NP\\NP')
         good_prob = sum(x[2] for x in self.syntaxl.buffer if x[0]=='S\\NP/NP + NP')
         if bad_prob > good_prob:
             print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
             print('TOTAL BAD:', self.syntaxl.prob('NP + S\\NP\\NP','S\\NP'), 'TOTAL GOOD:', self.syntaxl.prob('S\\NP/NP + NP','S\\NP'))
+        if bad_prob > 10*good_prob and bad_prob>1e-3:
+            g1 = max([(x,y) for x,y in prob_cache.items() if 'S\\NP/NP' in x.syn_cats], key=lambda x:x[1])[0]
+            good = get_root(g1)
+            b1 = max([(x,y) for x,y in prob_cache.items() if 'S\\NP\\NP' in x.syn_cats], key=lambda x:x[1])[0].parent
+            bad = get_root(b1)
+            print('\nVERY BAD\n')
         self.flush_buffers()
         return new_problem_list
         #print(self.wordl.prob('you','pro:per|you_1'))
@@ -452,6 +489,7 @@ class LanguageAcquirer():
 
     def make_parse_node(self,lf_str,words):
         lf = self.get_lf(lf_str)
+
         if ' '.join([lf_str]+words) in self.parse_node_cache:
             parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
         else:
@@ -674,7 +712,7 @@ if __name__ == "__main__":
     ARGS.add_argument("-t","--is_test", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
     ARGS.add_argument("--show_graphs", action="store_true")
-    ARGS.add_argument("--show_plots", action="store_true")
+    ARGS.add_argument("--show_figures", action="store_true")
     ARGS.add_argument("--db_parse", action="store_true")
     ARGS.add_argument("--db_after", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
@@ -721,12 +759,11 @@ if __name__ == "__main__":
     all_word_order_probs = []
     all_word_order_probs_no_prior = []
     problem_list = []
+    plot_every = 1
     for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
             words = dpoint['words']
-            if words == ['that', 'spells', 'one']:
-                breakpoint()
             if dpoint != all_data[i+ARGS.start_from]:
                 breakpoint()
             if words[-1] == '?':
@@ -770,7 +807,7 @@ if __name__ == "__main__":
     def plot_df(df, info=''):
         if info != '':
             info = f' {info}'
-        xticks = np.arange(len(df)) if ARGS.is_test else 10*np.arange(len(df))
+        xticks = np.arange(len(df)) if ARGS.is_test else plot_every*np.arange(len(df))
         for i,c in enumerate(df.columns):
             plt.plot(xticks, df[c], label=c, color=cs[i])
         plt.legend(loc='upper right')
@@ -780,7 +817,7 @@ if __name__ == "__main__":
         check_dir('plotted_figures')
         fpath = f'plotted_figures/word_order_probs{info.replace(" ","_").lower()}.png'
         plt.savefig(fpath)
-        if ARGS.show_plots:
+        if ARGS.show_figures:
             os.system(f'/usr/bin/xdg-open {fpath}')
         plt.clf()
 
