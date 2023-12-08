@@ -18,7 +18,7 @@ def maybe_attrib_noun_match(x):
     return re.match(fr'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def is_nplike(x):
-    if x in ['WHO', 'WHAT', 'you']:
+    if x in ['WHO', 'WHAT', 'WHOSE', 'you']:
         return True
     if x in ['not', 'and']:
         return False
@@ -98,8 +98,8 @@ def _decommafy_inner(parse):
                 marking = pred.split('-')[1].split('_')[0]
                 args = re.sub(r'v\|([a-zA-Z0-9]+)_',fr'v|\1-{marking}_', args)
                 pred = ''
-            elif args.startswith('v|'): # removing 'do'
-                pred = ''
+            #elif args.startswith('v|'): # removing 'do'
+                #pred = ''
         arg_splits = split_respecting_brackets(args,sep=',')
 
             #breakpoint()
@@ -145,13 +145,25 @@ def lf_preproc(lf_, sent):
     if 'lambda $0' in lf.rpartition('.')[0]:
         lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
-    if lf.startswith('lambda $1_{e}'):
-        if (wh_word := sent.split()[0] in ['what','who']):
-            lf = lf[14:].replace('$1',f'{wh_word.upper()}1')
-        elif 'what' in sent:
-            lf = lf[14:].replace('$1','WHAT')
-        elif 'who' in sent:
-            lf = lf[14:].replace('$1','WHO')
+    if is_wh:=lf.startswith('lambda $1_{e}'):
+        if ((wh_word := sent.split()[1]) in ['what','who']):
+            replacer = wh_word.upper()
+        elif wh_word == 'which':
+            replacer = 'det:dem|WHICH'
+        elif 'what' in sent: # for in-situs
+            replacer = 'WHAT'
+        elif 'who' in sent: # for in-situs
+            replacer = 'WHO'
+        elif 'which' in sent: # for in-situs
+            replacer = 'det:dem|WHICH'
+        elif wh_word not in ['why', 'how']:
+            breakpoint()
+        if wh_word not in ['why', 'how']:
+            lf = 'Q(' + lf[14:].replace('$1',f'pro:int|replacer') + ')'
+
+    if is_wh or sent.split()[1] in ('did','do','does'):
+        lf = lf.replace('v|do','mod|do').replace('part|do','mod|do')
+
     lf = re.sub(r'_\d{1,2}\b','',lf) # remove sense numbers, way too fine-grained
     lf = re.sub(r'co\|([\w{he_chars}]+\()(?!\$\d|$)',r'v|\1',lf) #'(' inside group to not replace single term
     lf =re.sub(rf',co\|[\w{he_chars}]+', '', lf)
@@ -160,10 +172,8 @@ def lf_preproc(lf_, sent):
     lf = lf.replace('()', '')
     if '(pro:rel|that)' in lf or ',pro:rel|that)' in lf or '(pro:rel|that,' in lf or 'pro:rel|that,n|' in lf:
         lf = lf.replace('pro:rel|that','pro:dem|that')
-        print(f"{sent.strip()}: {lf}")
     if re.search(r'pro:rel\|that\(\$\d,(n|pro:indef)', lf):
         lf = lf.replace('pro:rel|that','det:dem|that')
-        print(f"{sent.strip()}: {lf}")
     if lf in ['Q', 'and', '(you)', '(WHO)', 'aux|~be((WHAT))']:
         return ''
     dlf = decommafy(lf, debrac=True)
