@@ -5,13 +5,12 @@ from gt_parse_graphs import gts
 import os
 import networkx as nx
 import matplotlib.pyplot as plt
-import math
 from pprint import pprint
 from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, is_fit_by_type_raise, combine_lfs, logical_type_raise, maybe_de_type_raise, split_respecting_brackets, n_lambda_binders, possible_syn_cats, infer_slash, lf_sem_congruent, CCGLearnerError
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_sem_congruent, CCGLearnerError
 from time import time
 import argparse
 from abc import ABC
@@ -231,12 +230,10 @@ class LanguageAcquirer():
 
     @property
     def lf_vocab(self):
-        #return self.wordl.memory.keys()
         return [k for k,v in self.wordl.memory.items() if v['COUNT']>self.vocab_thresh]
 
     @property
     def shell_lf_vocab(self):
-        #return self.meaningl.memory.keys()
         return [k for k,v in self.meaningl.memory.items() if v['COUNT']>self.vocab_thresh]
 
     @property
@@ -245,7 +242,6 @@ class LanguageAcquirer():
 
     @property
     def syn_cat_vocab(self):
-        #return self.syntaxl.memory.keys()
         return [k for k,v in self.syntaxl.memory.items() if v['COUNT']>self.vocab_thresh]
 
     @property
@@ -269,29 +265,32 @@ class LanguageAcquirer():
         self.shmeaningl.set_from_dict(to_load['shmeaningl'])
         self.meaningl.set_from_dict(to_load['meaning'])
         self.wordl.set_from_dict(to_load['word'])
+        self.root_sem_cat_memory.memory = to_load['root_sem_cat']
 
         self.word_to_lf_probs = pd.read_pickle(join(fpath,'word_to_lf_probs.pkl'))
         self.lf_to_lf_shell_probs = pd.read_pickle(join(fpath,'lf_to_lf_shell_probs.pkl'))
         self.lf_shell_to_sem_probs = pd.read_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
-        self.word_to_sem_probs = pd.read_pickle(join(fpath,'word_to_sem_probs.pkl'))
+        #self.word_to_sem_probs = pd.read_pickle(join(fpath,'word_to_sem_probs.pkl'))
 
     def save_to(self,fpath):
         to_dump = {'syntax': {'memory':self.syntaxl.memory,
-                   'base_distribution_cache':self.syntaxl.base_distribution_cache},
+                  'base_distribution_cache':self.syntaxl.base_distribution_cache},
                   'shmeaningl': {'memory':self.shmeaningl.memory,
-                   'base_distribution_cache':self.shmeaningl.base_distribution_cache},
+                  'base_distribution_cache':self.shmeaningl.base_distribution_cache},
                   'meaning': {'memory':self.meaningl.memory,
-                   'base_distribution_cache':self.meaningl.base_distribution_cache},
+                  'base_distribution_cache':self.meaningl.base_distribution_cache},
                   'word': {'memory':self.wordl.memory,
-                   'base_distribution_cache':self.wordl.base_distribution_cache}}
+                  'base_distribution_cache':self.wordl.base_distribution_cache},
+                  'root_sem_cat': self.root_sem_cat_memory.memory}
 
         distributions_fpath = join(fpath,'distributions.json')
         with open(distributions_fpath,'w') as f:
             json.dump(to_dump,f)
 
         self.word_to_lf_probs.to_pickle(join(fpath,'word_to_lf_probs.pkl'))
-        self.lf_to_lf_shell_probs.to_pickle(join(fpath,'sem_to_sem_shell.pkl'))
+        self.lf_to_lf_shell_probs.to_pickle(join(fpath,'lf_to_lf_shell_probs.pkl'))
         self.lf_shell_to_sem_probs.to_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
+        #self.word_to_sem_probs.to_pickle(join(fpath,'word_to_sem_probs.pkl'))
 
     def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
         distr = self.wordl.inverse_distribution(word)
@@ -304,9 +303,9 @@ class LanguageAcquirer():
         file_print(f'\nLearned meanings for \'{word}\'',f)
         file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in meanings.items() if prob > 1e-4]),f)
 
-        syn_cats = self.word_to_sem_probs.loc[word].sort_values()[-10:]
-        file_print(f'\nLearned syntactic categories for \'{word}\'',f)
-        file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in syn_cats.items() if prob > 1e-4]),f)
+        #syn_cats = self.word_to_sem_probs.loc[word].sort_values()[-10:]
+        #file_print(f'\nLearned syntactic categories for \'{word}\'',f)
+        #file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in syn_cats.items() if prob > 1e-4]),f)
 
     def show_splits(self,syn_cat,f):
         file_print(f'Learned splits for category {syn_cat}',f)
@@ -338,8 +337,6 @@ class LanguageAcquirer():
                 new_problem_list.append((dpoint,e))
                 print(lfs, e)
                 continue
-            #if lf_str == 'not (mod|will_2 (v|eat_4 pro:per|you_1 (BARE $1 (n|tiger-pl_5 $1))))':
-                #breakpoint()
             if root.possible_splits == []:
                 print('no splits :(')
             if new_root_prob==0:
@@ -362,10 +359,6 @@ class LanguageAcquirer():
         new_meaningl_buffer = []
         new_wordl_buffer = []
         for node, prob in prob_cache.items():
-            #if node.lf_str == 'lambda $0.det:art|a_3 $0' and node.words==['a']:
-                #breakpoint()
-            #if lf_str == 'Q (v|do-past_1 (v|miss_3 pro:per|you_2 pro:indef|one_4))' and node.words==['you'] and node.lf_str == 'pro:per|you_2':
-                #breakpoint()
             if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $1 $0':
                 breakpoint()
             if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $0 $1':
@@ -411,11 +404,6 @@ class LanguageAcquirer():
         else:
             assert all(len(x.buffers) <= ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
         return new_problem_list
-        #print(self.wordl.prob('you','pro:per|you_1'))
-        #if 'pro:per|you_1' in self.wordl.memory:
-            #print(self.wordl.memory['pro:per|you_1'].get('you',0), self.wordl.memory['pro:per|you_1']['COUNT'])
-        #if words == 'you want one what'.split():
-        #    breakpoint()
 
     def probs_of_word_orders(self, ignore_prior):
         if ignore_prior:
@@ -486,6 +474,7 @@ class LanguageAcquirer():
 
         self.lf_to_lf_shell_probs = pd.DataFrame([{y:self.meaningl.prob(x,y) for y in self.shell_lf_vocab} for x in self.lf_vocab],index=self.lf_vocab)
         self.lf_shell_to_sem_probs = pd.DataFrame([{y:self.shmeaningl.prob(x,y) for y in self.sem_cat_vocab} for x in self.shell_lf_vocab],index=self.shell_lf_vocab)
+        #self.word_to_sem_probs = la.word_to_lf_probs.dot(la.lf_to_lf_shell_probs).dot(la.lf_shell_to_sem_probs)
 
     def leaf_probs_of_word_span(self,words,beam_size):
         if words not in self.mwe_vocab and ' ' not in words:
@@ -549,8 +538,6 @@ class LanguageAcquirer():
             to_add =sorted(possible_nexts,key=lambda x:x['prob'])[-beam_size:]
             probs_table[i-1,j] = to_add
 
-        #if words == 'maryland buys a dog'.split():
-            #breakpoint()
         for a in range(2,N+1):
             for b in range(N-a+1):
                 add_prob_of_span(a,b)
@@ -593,7 +580,6 @@ class LanguageAcquirer():
         self.draw_graph(favourite_all_syntax_tree_levels)
 
         if ARGS.db_parse:
-            #self.make_parse_node('Q (talk (a lake))','does a lake talk'.split()).possible_split
             breakpoint()
 
     def draw_graph(self,all_syntax_tree_levels,is_gt=False):
@@ -676,7 +662,7 @@ class LanguageAcquirer():
         plt.savefig(f'{graph_dir}/{fname}.png')
         plt.clf()
         if ARGS.show_graphs:
-            os.system(f'/usr/bin/xdg-open plotted_graphs/{fname}.png')
+            os.system(f'/usr/bin/xdg-open experiments/{ARGS.expname}/plotted_graphs/{fname}.png')
 
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
@@ -757,21 +743,13 @@ if __name__ == "__main__":
             stop = min(len(train_data)-1, i+((ARGS.n_distractors+1)//2)+1)
             lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
             print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
-            #try:
             apply_buffers = i>=ARGS.n_distractors
             problem_list += la.train_one_step(lf_strs_incl_distractors,words,apply_buffers)
-            #except CCGLearnerError as e:
-                #problem_list.append((dpoint,e))
-                #print(e)
-            if ((i+1)%1 == 0 or ARGS.is_test):
+            if ((i+1)%plot_every == 0 or ARGS.is_test):
                 la.eval()
                 all_word_order_probs.append(la.probs_of_word_orders(False))
                 all_word_order_probs_no_prior.append(la.probs_of_word_orders(True))
                 la.train()
-                #if i > 50:
-                #    x = all_word_order_probs[-1]
-                #    if not x['svo'] >= x.values.max():
-                #        breakpoint()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
         la.show_splits(ARGS.cat_to_sample_from,f)
@@ -820,6 +798,7 @@ if __name__ == "__main__":
             else:
                 file_print(f'{generated}: not seen during training',f)
         file_print(f'Total run time: {time()-start_time:.3f}s',f)
+    la.parse('you missed it'.split())
     for dpoint in test_data[:ARGS.n_test]:
         la.parse(dpoint['words'])
     if ARGS.test_gts:

@@ -1,8 +1,0 @@
-0.002: S/(S|NP) + S|NP
-0.002: S\NP + NP
-0.005: S/(S|NP|NP) + S|NP|NP
-0.006: leaf
-0.023: S\(S|NP|NP) + S|NP|NP
-0.119: S\(S|NP) + S|NP
-0.844: S/NP + NP
-Time to compute inverse probs: 0.039s
