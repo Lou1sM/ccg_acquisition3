@@ -17,7 +17,7 @@ pos_marking_dict = {
                     'det:num':set(['NP|N']),
                     'det:poss':set(['NP|N']),
                     'meta':set([None]),
-                    'mod':set(['S|NP|(S|NP)']),
+                    'mod':set(['S|NP|(S|NP)','Sq|(S|NP)|NP']),
                     'mod:aux':set([None]),
                     'n':set(['N']),
                     'n:gerund':set(['NP']),
@@ -82,6 +82,10 @@ full_lfs_to_exclude = [
         'n|call you n:prop|robin', # 'call' pos wrong and not clear what sent means
         'lambda $0_{r}.co|thank_you_1(you,$0)', # unclear semantics, unclear semcat
         'lambda $0_{r}.Q(det:art|a_3(pro:rel|that_2,and_comp(n|dragon_4(pro:rel|that_2,$0),n|fly_5(pro:rel|that_2,$0))))', # malformed
+        'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_4,$0)', # dum_dum wrong pos and no 'or' as in sent
+        'lambda $1_{e}.lambda $0_{r}.$1(qn|many_3(BARE($2,n|bear-pl_4($2)),$0))', # not well-formed
+        'lambda $0_{r}.mod|~will_2(adj|soon_5(adj|ready_4(pro:per|it_1,$0)),$0)', # don't know how to model
+        'aux|have (mod|must (adv|so (v|hasproperty pro:per|you adj|hungry)))', # don't know how to model
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         ]
@@ -120,16 +124,49 @@ he_chars = "qhvSWl~N?ʔmetṭ   טʕJ!.FbcM_kçGDHwxByQẒLKAgYRPTnoֿ+=CzpšXs
 exclude_lfs = full_lfs_to_exclude + partial_lfs_to_exclude
 
 exclude_sents = [
+    "he doesn 't know dogs and boys", # lf doesn't match
     'this is the man who drives the busy bulldozer', # lf doesn't match
     'that \'s the man who wrote the book', # lf doesn't match
     'that \'s no the one that has the markings on it', # lf doesn't match
-    'Shadow Gay is the horse that won the Kentucky Derby', # lf doesn't match
+    #'that \'s the stool I use when I wash dishes', # lf doesn't match
+    #'Shadow Gay is the horse that won the Kentucky Derby', # lf doesn't match
     'the part that you open so_that you can pull the kleenex up through there', # lf doesn't match
+    "do you have a tractor that s smaller than that one", # lf doesn't match
+    "those are Cinderella s sisters trying the slipper on", # lf doesn't match
+    'this is the cheese Adam always picks out at the grocery store', # lf doesn't match
     'Adam whose racket is that', # not sure how to model wh-possessive
     'don \'t Adam foot',
     'who is going to become a spider',
     'two Adam',
     'a d a m'
+    "he doesn 't know dogs and boys", # lf doesn't match
+    "see the eggs the milk the butter", # lf doesn't match
+    "it 's the cover that came off the puzzle", # lf doesn't match
+    'Shadow_Gay is the horse that won the Kentucky Derby', # lf doesn't match
+    "that 's the stool I use when I wash dishes", # lf doesn't match
+    "one of the members of George Washington 's army", # lf doesn't match
+    'I see some pennies that you dropped from your pocket', # lf doesn't match
+    "that 's because I had a cold but I don 't any more", # lf doesn't match
+    "do you have a tractor that 's smaller than that one", # lf doesn't match
+    "those are Cinderella 's sisters trying the slipper on", # lf doesn't match
+    "the man who 's standing up has a guitar", # lf doesn't match
+    'this is the cheese always picks out at the grocery store', # lf doesn't match
+    'did you like the balloon that you blow up', # lf doesn't match
+    "there 's a dot that says cross your printing set", # lf doesn't match
+    "but it 's something that goes along with the train", # lf doesn't match
+    'for the cars that are waiting to cross the track maybe', # lf doesn't match
+    "no it 's more fun when it 's bigger", # lf doesn't match
+    'in the refrigerator so it will be nice and warm', # lf doesn't match
+    "I don 't want any butter that might fall off the truck", # lf doesn't match
+    'did you show Urs your name embroidered on your sunsuit', # lf doesn't match
+    'I see two shapes that look just like that', # lf doesn't match
+    "isn 't that a shirt that 's hanging on the line", # lf doesn't match
+    "wouldn 't know what to do with an airplane", # lf doesn't match
+    'can you find a key that fits the lock', # lf doesn't match
+    "I 'm breaking the stick that the motor of I made", # lf doesn't match
+    'did you tell Ursula what happened in the barber shop', # lf doesn't match
+    'this is a q with the little thing sticking out' # lf doesn't match
+    'the one you were singing at the table' # lf doesn't match
     ]
 
 premanual_ida_fixes = {
@@ -137,6 +174,7 @@ premanual_ida_fixes = {
     'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(co|careful_4(pro:per|you_1,$0),$0))':'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(v|careful_4(pro:per|you_1,$0),$0))', # pos of 'careful' to v
     'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,co|help_4($1)),$0)':'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,n|help_4($1)),$0)', # pos of 'help' to n
     'lambda $0_{r}.Q(det:art|the_3(pro:rel|that_2,n|kitchen_4(pro:rel|that_2,$0)))':'lambda $0_{r}.Q(det:art|the_3(pro:dem|that_2,n|kitchen_4(pro:dem|that_2,$0)))', # pos of 'that' to pro:dem from pro:rel
+    'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
     }
 
 manual_ida_fixes = { # applied after conversion to no-comma form
@@ -148,6 +186,8 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'hasproperty you n|stop': 'v|stop you', # add 'Q'
     'n|stop you pro:dem|that': 'v|stop you pro:dem|that', # pos of 'stop' to verb
     'n|stop you pro:rel|that': 'v|stop you pro:rel|that', # pos of 'stop' to verb
+    'cop|be-3s_3_there_1_it you': 'v|equals', # pos of 'stop' to verb
+    'Q (mod|do-past (n|miss pro:per|you pro:indef|one))': 'Q (mod|do-past (v|miss pro:per|you pro:indef|one))', # pos of 'miss' to verb
     }
 
 hagar_svo_sentences = {

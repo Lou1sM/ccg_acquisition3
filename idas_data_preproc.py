@@ -159,7 +159,7 @@ def lf_preproc(lf_, sent):
         elif wh_word not in ['why', 'how']:
             breakpoint()
         if wh_word not in ['why', 'how']:
-            lf = 'Q(' + lf[14:].replace('$1',f'pro:int|replacer') + ')'
+            lf = 'Q(' + lf[14:].replace('$1',f'pro:int|{replacer}') + ')'
 
     if is_wh or sent.split()[1] in ('did','do','does'):
         lf = lf.replace('v|do','mod|do').replace('part|do','mod|do')
