@@ -61,7 +61,7 @@ class BaseDirichletProcessLearner(ABC):
         self.alpha = alpha
         self.memory = {}
         self.base_distribution_cache = {}
-        self.buffer = []
+        self.buffers = []
         self.is_training = True
 
     def base_distribution_(self,x):
@@ -96,11 +96,12 @@ class BaseDirichletProcessLearner(ABC):
         """Can be overwritten if necessary."""
         return self._observe(*args,**kwargs)
 
-    def flush_buffer(self, lr=1.0):
-        for _ in range(len(self.buffer)):
-            y, x, weight = self.buffer.pop()
+    def flush_top_buffer(self, lr=1.0):
+        top_buffer = self.buffers.pop(0)
+        for _ in range(len(top_buffer)):
+            y, x, weight = top_buffer.pop()
             self.observe(y, x, weight*lr)
-        assert len(self.buffer) == 0
+        assert len(top_buffer) == 0
 
     def inverse_distribution(self,y): # conditional on y
         seen_before = any([y in d for d in self.memory.values()])
@@ -292,12 +293,6 @@ class LanguageAcquirer():
         self.lf_to_lf_shell_probs.to_pickle(join(fpath,'sem_to_sem_shell.pkl'))
         self.lf_shell_to_sem_probs.to_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
 
-    def flush_buffers(self):
-        self.syntaxl.flush_buffer(self.lr)
-        self.shmeaningl.flush_buffer(self.lr)
-        self.meaningl.flush_buffer(self.lr)
-        self.wordl.flush_buffer(self.lr)
-
     def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
         distr = self.wordl.inverse_distribution(word)
         probs = sorted(distr.items(), key=lambda x:x[1])[-15:]
@@ -329,20 +324,10 @@ class LanguageAcquirer():
             self.full_lfs_cache[lf_str] = lf
         return lf
 
-    def train_one_step(self,lf_strs,words):
+    def train_one_step(self,lf_strs,words,apply_buffers):
         prob_cache = {}
         root_prob = 0
         new_problem_list = []
-        #if lf_strs == ['Q (prep|on (BARE n|gun))', 'v|blow pro:per|you pro:per|it', 'mod|can (v|blow pro:per|you)']:
-        #    good=self.make_parse_node(lf_strs[1],words)
-        #    bad=self.make_parse_node(lf_strs[2],words)
-        #    good.propagate_below_probs(self.syntaxl,self.shmeaningl,self.meaningl,self.wordl,{},split_prob=1,is_map=False)
-        #    bad.propagate_below_probs(self.syntaxl,self.shmeaningl,self.meaningl,self.wordl,{},split_prob=1,is_map=False)
-        #    good.propagate_above_probs(1)
-        #    bad.propagate_above_probs(1)
-        #    g1=good.possible_splits[3]['right']
-        #    b1=bad.possible_splits[1]['right']
-        #    breakpoint()
         for lfs in lf_strs:
             try:
                 root = self.make_parse_node(lfs,words) # words is a list
@@ -372,6 +357,10 @@ class LanguageAcquirer():
                 else:
                     prob_cache[n] = p
             root_prob += new_root_prob
+        new_syntaxl_buffer = []
+        new_shmeaningl_buffer = []
+        new_meaningl_buffer = []
+        new_wordl_buffer = []
         for node, prob in prob_cache.items():
             #if node.lf_str == 'lambda $0.det:art|a_3 $0' and node.words==['a']:
                 #breakpoint()
@@ -384,40 +373,22 @@ class LanguageAcquirer():
             if node.parent is not None and not node.is_g:
                 update_weight = node.below_prob * node.above_prob / root_prob # for conditional
                 if node.is_fwd:
-                    #syntax_split = node.syn_cat + ' + ' + node.sibling.syn_cat
-                    self.syntaxl.buffer += [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
+                    new_syntaxl_buffer += [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
                 else:
-                    #syntax_split = node.sibling.syn_cat + ' + ' + node.syn_cat
-                    self.syntaxl.buffer += [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
-                #self.syntaxl.observe(syntax_split,node.parent.syn_cat,weight=update_weight)
+                    new_syntaxl_buffer += [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
             if not leaf_prob > 0:
                 print(node)
             lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cats, syn_cats = node.info_if_leaf()
-            #if len(sem_cats) > 1 or len(syn_cats)>1:
-                #breakpoint()
-            self.syntaxl.buffer += [('leaf',sync,leaf_prob) for sync in syn_cats]
-            #if shell_lf == 'lambda $0.quant $0' and sem_cat == 'NP|N':
-                #breakpoint()
-            self.shmeaningl.buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
-            self.meaningl.buffer.append((lf,shell_lf,leaf_prob))
-            self.wordl.buffer.append((word_str,lf,leaf_prob))
-        #print(words,sum([x[2] for x in self.wordl.buffer]))
+            new_syntaxl_buffer += [('leaf',sync,leaf_prob) for sync in syn_cats]
+            new_shmeaningl_buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
+            new_meaningl_buffer.append((lf,shell_lf,leaf_prob))
+            new_wordl_buffer.append((word_str,lf,leaf_prob))
             [x.parent.syn_cats for x,y in prob_cache.items() if 'S\\NP/NP' in x.syn_cats]
             [x.parent.syn_cats for x,y in prob_cache.items() if 'S\\NP\\NP' in x.syn_cats]
-        #if lf_strs == ['v|blow pro:per|you pro:per|it', 'mod|can (v|blow pro:per|you)', 'v|do pro:per|you pro:per|it']:
-        #    good=self.make_parse_node(lf_strs[1],words)
-        #    bad=self.make_parse_node(lf_strs[2],words)
-        #    good.propagate_below_probs(self.syntaxl,self.shmeaningl,self.meaningl,self.wordl,{},split_prob=1,is_map=False)
-        #    bad.propagate_below_probs(self.syntaxl,self.shmeaningl,self.meaningl,self.wordl,{},split_prob=1,is_map=False)
-        #    good.propagate_above_probs(1)
-        #    bad.propagate_above_probs(1)
-        #    g1=good.possible_splits[1]['right']
-        #    b1=bad.possible_splits[3]['right']
-        #    breakpoint()
-        bad_prob = sum(x[2] for x in self.syntaxl.buffer if x[0]=='NP + S\\NP\\NP')
-        good_prob = sum(x[2] for x in self.syntaxl.buffer if x[0]=='S\\NP/NP + NP')
+        bad_prob = sum(x[2] for x in new_syntaxl_buffer if x[0]=='NP + S\\NP\\NP')
+        good_prob = sum(x[2] for x in new_syntaxl_buffer if x[0]=='S\\NP/NP + NP')
         if bad_prob > good_prob:
             print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
             print('TOTAL BAD:', self.syntaxl.prob('NP + S\\NP\\NP','S\\NP'), 'TOTAL GOOD:', self.syntaxl.prob('S\\NP/NP + NP','S\\NP'))
@@ -427,7 +398,18 @@ class LanguageAcquirer():
             b1 = max([(x,y) for x,y in prob_cache.items() if 'S\\NP\\NP' in x.syn_cats], key=lambda x:x[1])[0].parent
             bad = get_root(b1)
             print('\nVERY BAD\n')
-        self.flush_buffers()
+        self.syntaxl.buffers.append(new_syntaxl_buffer)
+        self.shmeaningl.buffers.append(new_shmeaningl_buffer)
+        self.meaningl.buffers.append(new_meaningl_buffer)
+        self.wordl.buffers.append(new_wordl_buffer)
+        if apply_buffers:
+            self.syntaxl.flush_top_buffer()
+            self.shmeaningl.flush_top_buffer()
+            self.meaningl.flush_top_buffer()
+            self.wordl.flush_top_buffer()
+            assert all(len(x.buffers) == ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
+        else:
+            assert all(len(x.buffers) <= ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
         return new_problem_list
         #print(self.wordl.prob('you','pro:per|you_1'))
         #if 'pro:per|you_1' in self.wordl.memory:
@@ -690,7 +672,8 @@ class LanguageAcquirer():
             plt.title('GT')
         else:
             plt.title('PRED')
-        plt.savefig(f'plotted_graphs/{fname}.png')
+        check_dir(graph_dir:=f'experiments/{ARGS.expname}/plotted_graphs')
+        plt.savefig(f'{graph_dir}/{fname}.png')
         plt.clf()
         if ARGS.show_graphs:
             os.system(f'/usr/bin/xdg-open plotted_graphs/{fname}.png')
@@ -775,7 +758,8 @@ if __name__ == "__main__":
             lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
             print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
             #try:
-            problem_list += la.train_one_step(lf_strs_incl_distractors,words)
+            apply_buffers = i>=ARGS.n_distractors
+            problem_list += la.train_one_step(lf_strs_incl_distractors,words,apply_buffers)
             #except CCGLearnerError as e:
                 #problem_list.append((dpoint,e))
                 #print(e)
@@ -815,7 +799,7 @@ if __name__ == "__main__":
         plt.ylabel('Relative Probability')
         plt.title(f'Word Order Probs{info}')
         check_dir('plotted_figures')
-        fpath = f'plotted_figures/word_order_probs{info.replace(" ","_").lower()}.png'
+        fpath = f'experiments/{ARGS.expname}/word_order_probs{info.replace(" ","_").lower()}.png'
         plt.savefig(fpath)
         if ARGS.show_figures:
             os.system(f'/usr/bin/xdg-open {fpath}')
@@ -836,8 +820,8 @@ if __name__ == "__main__":
             else:
                 file_print(f'{generated}: not seen during training',f)
         file_print(f'Total run time: {time()-start_time:.3f}s',f)
-    #for dpoint in test_data[:ARGS.n_test]:
-        #la.parse(dpoint['words'])
+    for dpoint in test_data[:ARGS.n_test]:
+        la.parse(dpoint['words'])
     if ARGS.test_gts:
         for sent,gt in gts.items():
             la.parse(gt[0][0]['words'].split())
