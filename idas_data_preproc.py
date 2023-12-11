@@ -14,7 +14,6 @@ def maybe_detnoun_match(x):
     return re.match(fr'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{{1,2}}),(n\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def maybe_attrib_noun_match(x):
-    #return re.match(r'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[a-z0-9_-]*)\(\2\)\)',x)
     return re.match(fr'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def is_nplike(x):
@@ -35,7 +34,6 @@ def is_adj(x):
     if bool(maybe_detnoun_match(x)):
         return False
     else:
-        #return x.split('|')[0] in ['part', 'adj']
         return x.split('|')[0] in ['adj', 'n']
 
 def decommafy(parse, debrac=False):
@@ -83,9 +81,6 @@ def _decommafy_inner(parse):
     if bool(mam := maybe_attrib_noun_match(parse)):
         det, subj, _, noun = mam.groups()
         noun_pos, noun_word = noun.split('|')
-        #if noun_pos != 'n':
-            #print(noun_pos)
-        #return f'equals {subj} {det}(lambda $6.{noun} $6)'# 5 highest that's currently in dset
         return f'v|equals {subj} ({det} n|{noun_word})'
     else:
         first_chunk, rest = outermost_first_chunk(parse)
@@ -98,11 +93,8 @@ def _decommafy_inner(parse):
                 marking = pred.split('-')[1].split('_')[0]
                 args = re.sub(r'v\|([a-zA-Z0-9]+)_',fr'v|\1-{marking}_', args)
                 pred = ''
-            #elif args.startswith('v|'): # removing 'do'
-                #pred = ''
         arg_splits = split_respecting_brackets(args,sep=',')
 
-            #breakpoint()
         if len(arg_splits)==1 and is_nplike(arg_splits[0]):
             if is_nplike(pred):
                 if pred.startswith('pro:exist|') or pred in ('WHAT,WHO'):
@@ -110,8 +102,6 @@ def _decommafy_inner(parse):
                 else:
                     return f'v|equals {decommafy(arg_splits[0])} {decommafy(pred)}'
             elif is_adj(pred):
-                #if pred.startswith('n|'):
-                    #print(f'hasproperty {decommafy(arg_splits[0])} {decommafy(pred)}')
                 dpred = decommafy(pred)
                 dpred_pos, dpred_word = dpred.split('|')
                 return f'v|hasproperty {decommafy(arg_splits[0])} adj|{dpred_word}'
@@ -122,14 +112,6 @@ def _decommafy_inner(parse):
         else:
             recursed = ' '.join(recursed_list)
             lf = f'{pred} {recursed}'
-        #converted_rest = decommafy(rest)
-        #if len(converted_rest) > 0:
-        #    breakpoint()
-        #    if converted.startswith('and'):
-        #        converted = f'({converted}) ({converted_rest})'
-        #    else:
-        #        converted = f'{converted} ({converted_rest})'
-        #assert ' )' not in converted
         if not ( ',' not in lf or re.search(r'lambda \$\d{1,2}_\{<[ert,<>]+>\}',lf)):
             breakpoint()
         return lf
@@ -137,8 +119,6 @@ def _decommafy_inner(parse):
 def lf_preproc(lf_, sent):
     lf = lf_.rstrip('\n')
     lf = lf[5:] # have already checked it starts with 'Sem: '
-    #if lf == 'lambda $1_{e}.lambda $0_{r}.$1(pro:rel|that_3,$0)':
-        #breakpoint()
     lf = premanual_ida_fixes.get(lf, lf)
     lf = lf.replace('co|like', 'v|like')
     lf = lf.replace('conj|like', 'v|like')
@@ -146,9 +126,6 @@ def lf_preproc(lf_, sent):
     if 'lambda $0' in lf.rpartition('.')[0]:
         lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
-    #if is_wh:=lf.startswith('lambda $1_{e}'):
-    #if lf=='lambda $1_{<<e,e>,e>}.pro:dem|that_4($1($2,n|color_2($2)))':
-        #breakpoint()
     maybe_wh_lambda_match = re.match(r'^lambda (\$\d)_\{(e|<<e,e>,e>)}\.',lf)
     if is_wh:=(bool(maybe_wh_lambda_match)):
         wh_var_with_num = maybe_wh_lambda_match.groups()[0]
@@ -167,11 +144,8 @@ def lf_preproc(lf_, sent):
         if wh_word not in ['why', 'how']:
             matched = maybe_wh_lambda_match.group()
             lf = lf.replace(matched,'')
-            #lf = 'Q(' + lf[14:].replace(wh_var_with_num,f'pro:int|{replacer}') + ')'
             lf = 'Q(' + lf.replace(wh_var_with_num,f'pro:int|{replacer}') + ')'
 
-    #if is_wh or sent.split()[1] in ('did','do','does'):
-        #lf = lf.replace('v|do','mod|do').replace('part|do','mod|do')
     if re.search(r'(?<![a-zA-Z])v\|(?!do)', lf):
         lf = re.sub(r'(?<![a-zA-Z])v\|do(?![a-zA-Z])','mod|do',lf)
 
@@ -236,8 +210,6 @@ if __name__ == '__main__':
         ps = sent_preproc(s)
         if ARGS.db_sent is not None and ps == ARGS.db_sent.split():
             breakpoint()
-        #if ps == 'what color is that'.split():
-            #breakpoint()
         if ps == []:
             continue
         pl = lf_preproc(l,s)

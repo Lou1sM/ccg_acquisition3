@@ -156,18 +156,11 @@ class LogicalForm:
             ss = self.stripped_subtree_string
             if debug_set_cats is not None and debug_set_cats==self.subtree_string(recompute=True):
                 breakpoint()
-            #if 'Q (mod|do-past' in self.subtree_string(recompute=True):
-                #breakpoint()
             assert ss not in ['v|show_3','v|show-past_3','v|show_5',]
-                #self.is_semantic_leaf = True
-                #self.sem_cats = set(['S|NP|NP|NP'])
             if ss == 'not':
                 self.is_semantic_leaf = True
                 self.sem_cats = set(['X'])
                 had_initial_q = False
-            #elif ss == 'v|equals':
-            #    self.is_semantic_leaf = True
-            #    self.sem_cats = set('S|NP|NP','Sq|(S|NP)|NP')
             elif ss == 'Q':
                 self.is_semantic_leaf = True
                 self.sem_cats = set(['X'])
@@ -183,12 +176,9 @@ class LogicalForm:
                     if not is_bracketed(ss):
                         breakpoint()
                     ss = ss[1:-1].strip()
-                #if self.lf_str == 'lambda $0.not (mod|will $0)':
-                    #breakpoint()
                 ss = maybe_debrac(ss[4:]) if (notstart:=ss.startswith('not ')) else ss
                 self.is_semantic_leaf = self.node_type=='barenoun' or ' ' not in ss
                 if not self.is_semantic_leaf:
-                #if ' ' in ss:
                     self.sem_cats = set(['X'])
                 elif ss == 'v|hasproperty':
                     self.is_semantic_leaf = True
@@ -208,22 +198,14 @@ class LogicalForm:
                     if word_level_form.startswith('Q '):
                         word_level_form = word_level_form[2:]
                     self.sem_cats = base_lexicon.get(word_level_form,set(['X']))
-                    #if self.sem_cats != set(['X']):
-                        #self.is_semantic_leaf = True # ...but not necessary
                 if had_initial_q:
                     self.sem_cats = set('Sq'+sc[1:] if sc.startswith('S|') else sc for sc in self.sem_cats)
-            #if had_initial_q:
-                #print(self.lf_str, self.sem_cats)
-            #if self.lf_str == 'lambda $2.lambda $1.lambda $0.Q (equals $1 ($2 $0))':
-                #breakpoint()
         assert self.sem_cats!=''
         assert self.sem_cats is not None
         assert not any(sc is None for sc in self.sem_cats)
         assert isinstance(self.sem_cats,set)
         is_congruent = self.is_type_congruent()
         self.caches['cats'][self.lf_str] = self.sem_cats, self.is_semantic_leaf, is_congruent
-        #if 'v|equals' in self.caches['cats'].keys():
-            #breakpoint()
         return is_congruent
 
     def is_type_congruent(self):
@@ -255,29 +237,19 @@ class LogicalForm:
         for ridxs in all_sublists(pridxs):
             n_removees = len(ridxs)
             if n_removees == 0: continue
-            #if self.lf_str == 'lambda $2.not (mod|will_2 (v|eat_4 $2 (BARE $1 (n|tiger-pl_5 $1))))' and ridxs==[8]:
-                #breakpoint()
             if n_removees == len(pridxs):
-                #if self.node_type == 'Q': # in that case, only split if self is a Q node
-                #    f = LogicalForm('lambda $0.Q ($0)', caches=self.caches)
-                #    g = self.descs[1].copy()
-                #    self.add_split(f,g,'app')
                 continue
             if self.sem_cats.intersection({'S','S|NP'}) and \
                 all(self.descs[ri].sem_cats.intersection({'N'}) for ri in ridxs):
-                    #print('skipping', ridxs, 'because noun')
                     continue # this would result in illegitimate cats, like S|N or S|NP|N
             not_removees = [d for i,d in enumerate(self.descs) if i not in ridxs]
             if any(self.descs[i].lf_str==d.lf_str for i in ridxs for d in not_removees):
-                #print('skipping', ridxs, 'because all-or-nothing')
                 continue # all or nothing rule
             f = self.copy()
             f.parent = self
             to_remove = [f.descs[i] for i in ridxs]
             if has_q and main_verb in to_remove:
                 ridxs.append(qidx)
-            #if any([x.node_type in ('const','detnoun') and x in not_removees for x in to_remove]):
-            #if any([x in not_removees and self.descs.count(x)==1 for x in to_remove]):
             if any(x in not_removees for x in to_remove):
                 breakpoint()
                 continue
@@ -300,12 +272,6 @@ class LogicalForm:
             if entry_point.sem_cats in [{'S|NP'}, {'S|NP|NP'}] and len(entry_point.parent.children) == len(entry_point.parent.var_descs)+1:
                 print('stepping up to get vars')
                 entry_point = entry_point.parent
-            #if entry_point.node_type == 'Q':
-            #    g = self.spawn_self_like(' '.join([maybe_brac(c.lf_str,sep=' ')
-            #        for c in entry_point.children]),idx_in_tree=entry_point.idx_in_tree)
-            #    assert all([c1.lf_str==c2.lf_str for c1,c2 in zip(g.descs,entry_point.descs)][1:])
-            #    assert entry_point.descs[0].lf_str != g.descs[0].lf_str
-            #else:
             g = entry_point.copy()
             to_present_as_args_to_g = '' if len(to_remove)==1 and to_remove[0].node_type=='detnoun' else [d for d in entry_point.leaf_descs if d not in to_remove]
             have_embedded_binders = [d for d in to_present_as_args_to_g if d.node_type=='bound_var' and d.binder in entry_point.descs]
@@ -323,8 +289,6 @@ class LogicalForm:
             f = f.lambda_abstract(g_sub_var_num)
             if not f.set_cats_from_string():
                 continue
-            #if ridxs == [4,6]:
-                #breakpoint()
             if 'S|NP|(S|NP)' in f.sem_cats and g.is_leaf and g.lf_str.startswith('v|'):
                 g = g.spawn_self_like(f'lambda $0.{g.subtree_string()} $0')
             self.add_split(f,g,'app')
@@ -344,7 +308,6 @@ class LogicalForm:
                     self.add_split(f_cmp,g_cmp,'cmp')
         if '|' in self.sem_cats:
             assert self.subtree_string().startswith('lambda')
-        #self.caches['splits'][self.lf_str] = self.possible_app_splits
         if self.sem_cats == set():
             raise SemCatError('empty semcats after inferring splits')
         self.caches['splits'][self.lf_str] = self.possible_app_splits, self.possible_cmp_splits, self.sem_cats
@@ -439,8 +402,6 @@ class LogicalForm:
             new_inferred_sem_cats = set(f_cmp_from_parent_and_g(ssc,gsc,sem_only=True)[0] for ssc in self.sem_cats for gsc in g.sem_cats)
             new_inferred_sem_cats = set(x for x in new_inferred_sem_cats if x is not None)
         assert not any(x.startswith('|') for x in new_inferred_sem_cats)
-        #if f.lf_str == 'lambda $0.Q (equals pro:sub|he_1 $0)':
-            #breakpoint()
         if new_inferred_sem_cats.intersection(set(['S|N','S|NP|N'])):
             return
         old_fsc = f.sem_cats
@@ -471,15 +432,12 @@ class LogicalForm:
         return new
 
     def is_type_raised(self):
-        #return is_type_raised(self.subtree_string(as_shell=True,alpha_normalized=True))
         is_tr = any(is_cat_type_raised(ssc) for ssc in self.sem_cats)
         assert is_tr == any(is_cat_type_raised(ssc) for ssc in self.sem_cats)
         return is_tr
 
     @property
     def stripped_subtree_string(self):
-        #ss = re.sub(r'(lambda \$\d{1,2})+\.','',self.subtree_string())
-        #ss = re.sub(r'\$\d{1,2}( )*','',self.subtree_string()).replace('()','')
         # allowed to have trailing bound variables
         return strip_string(self.subtree_string())
 
