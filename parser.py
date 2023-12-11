@@ -150,8 +150,8 @@ class LogicalForm:
         if self.parent == 'START':
             self.is_semantic_leaf = False
         elif self.lf_str in self.caches['cats']:
-            self.sem_cats, self.is_semantic_leaf = self.caches['cats'][self.lf_str]
-            return self.sem_cats != set()
+            self.sem_cats, self.is_semantic_leaf, is_congruent = self.caches['cats'][self.lf_str]
+            return is_congruent
         else:
             ss = self.stripped_subtree_string
             if debug_set_cats is not None and debug_set_cats==self.subtree_string(recompute=True):
@@ -166,9 +166,6 @@ class LogicalForm:
                 self.sem_cats = set(['X'])
                 had_initial_q = False
             #elif ss == 'v|equals':
-            #    self.is_semantic_leaf = True
-            #    self.sem_cats = set('S|NP|NP','Sq|(S|NP)|NP')
-            #elif ss == 'v|hasproperty':
             #    self.is_semantic_leaf = True
             #    self.sem_cats = set('S|NP|NP','Sq|(S|NP)|NP')
             elif ss == 'Q':
@@ -193,6 +190,9 @@ class LogicalForm:
                 if not self.is_semantic_leaf:
                 #if ' ' in ss:
                     self.sem_cats = set(['X'])
+                elif ss == 'v|hasproperty':
+                    self.is_semantic_leaf = True
+                    self.sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
                 elif self.node_type in ['barenoun','detnoun']:
                     self.sem_cats = set(['NP'])
                 elif '|' in ss:
@@ -221,7 +221,9 @@ class LogicalForm:
         assert not any(sc is None for sc in self.sem_cats)
         assert isinstance(self.sem_cats,set)
         is_congruent = self.is_type_congruent()
-        self.caches['cats'][self.lf_str] = self.sem_cats, self.is_semantic_leaf
+        self.caches['cats'][self.lf_str] = self.sem_cats, self.is_semantic_leaf, is_congruent
+        #if 'v|equals' in self.caches['cats'].keys():
+            #breakpoint()
         return is_congruent
 
     def is_type_congruent(self):
@@ -238,6 +240,14 @@ class LogicalForm:
             self.possible_app_splits, self.possible_cmp_splits, self.sem_cats = self.caches['splits'][self.lf_str]
             self.was_cached = True
             return self.possible_app_splits
+        if has_q:=any(x.node_type=='Q' for x in self.descs):
+            qidx = [i for i,x in enumerate(self.descs) if x.node_type=='Q'][0]
+            verbs = [x for x in self.leaf_descs if x.string.startswith('v|') or x.string.startswith('mod|')]
+            if len(verbs)==0:
+                self.possible_app_splits = []
+                self.possible_cmp_splits = []
+                return self.possible_app_splits
+            main_verb = verbs[0]
         remove_types = ['const','noun','quant','barenoun','neg','raise']
         pridxs = [i for i,d in enumerate(self.descs) if d.node_type in remove_types]
         if debug_split_lf is not None and debug_split_lf == self.subtree_string(recompute=True):
@@ -248,10 +258,10 @@ class LogicalForm:
             #if self.lf_str == 'lambda $2.not (mod|will_2 (v|eat_4 $2 (BARE $1 (n|tiger-pl_5 $1))))' and ridxs==[8]:
                 #breakpoint()
             if n_removees == len(pridxs):
-                if self.node_type == 'Q': # in that case, only split if self is a Q node
-                    f = LogicalForm('lambda $0.Q ($0)', caches=self.caches)
-                    g = self.descs[1].copy()
-                    self.add_split(f,g,'app')
+                #if self.node_type == 'Q': # in that case, only split if self is a Q node
+                #    f = LogicalForm('lambda $0.Q ($0)', caches=self.caches)
+                #    g = self.descs[1].copy()
+                #    self.add_split(f,g,'app')
                 continue
             if self.sem_cats.intersection({'S','S|NP'}) and \
                 all(self.descs[ri].sem_cats.intersection({'N'}) for ri in ridxs):
@@ -264,6 +274,8 @@ class LogicalForm:
             f = self.copy()
             f.parent = self
             to_remove = [f.descs[i] for i in ridxs]
+            if has_q and main_verb in to_remove:
+                ridxs.append(qidx)
             #if any([x.node_type in ('const','detnoun') and x in not_removees for x in to_remove]):
             #if any([x in not_removees and self.descs.count(x)==1 for x in to_remove]):
             if any(x in not_removees for x in to_remove):
@@ -288,13 +300,13 @@ class LogicalForm:
             if entry_point.sem_cats in [{'S|NP'}, {'S|NP|NP'}] and len(entry_point.parent.children) == len(entry_point.parent.var_descs)+1:
                 print('stepping up to get vars')
                 entry_point = entry_point.parent
-            if entry_point.node_type == 'Q':
-                g = self.spawn_self_like(' '.join([maybe_brac(c.lf_str,sep=' ')
-                    for c in entry_point.children]),idx_in_tree=entry_point.idx_in_tree)
-                assert all([c1.lf_str==c2.lf_str for c1,c2 in zip(g.descs,entry_point.descs)][1:])
-                assert entry_point.descs[0].lf_str != g.descs[0].lf_str
-            else:
-                g = entry_point.copy()
+            #if entry_point.node_type == 'Q':
+            #    g = self.spawn_self_like(' '.join([maybe_brac(c.lf_str,sep=' ')
+            #        for c in entry_point.children]),idx_in_tree=entry_point.idx_in_tree)
+            #    assert all([c1.lf_str==c2.lf_str for c1,c2 in zip(g.descs,entry_point.descs)][1:])
+            #    assert entry_point.descs[0].lf_str != g.descs[0].lf_str
+            #else:
+            g = entry_point.copy()
             to_present_as_args_to_g = '' if len(to_remove)==1 and to_remove[0].node_type=='detnoun' else [d for d in entry_point.leaf_descs if d not in to_remove]
             have_embedded_binders = [d for d in to_present_as_args_to_g if d.node_type=='bound_var' and d.binder in entry_point.descs]
             to_present_as_args_to_g = [x for x in to_present_as_args_to_g if x not in have_embedded_binders]
@@ -737,12 +749,12 @@ class ParseNode():
         shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
         lf = self.logical_form.subtree_string(alpha_normalized=True)
         word_str = ' '.join(self.words)
-        sem_cats = set(maybe_de_type_raise(ssc) for ssc in self.sem_cats)
-        syn_cats = set(maybe_de_type_raise(ssc) for ssc in self.syn_cats)
+        sem_cats = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.sem_cats)
+        syn_cats = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.syn_cats)
         if sem_cats != self.sem_cats: # has been de-type-raised
             assert syn_cats != self.syn_cats
-            assert all(any(maybe_de_type_raise(s1)==s2 for s1 in self.sem_cats) for s2 in sem_cats)
-            assert all(any(maybe_de_type_raise(s1)==s2 for s1 in self.syn_cats) for s2 in syn_cats)
+            assert all(any(maybe_debrac(maybe_de_type_raise(s1))==s2 for s1 in self.sem_cats) for s2 in sem_cats)
+            assert all(any(maybe_debrac(maybe_de_type_raise(s1))==s2 for s1 in self.syn_cats) for s2 in syn_cats)
             shell_lf = alpha_normalize(logical_de_type_raise(shell_lf))
             lf = alpha_normalize(logical_de_type_raise(lf))
         return word_str, lf, shell_lf, sem_cats, syn_cats

@@ -3,7 +3,7 @@ from pprint import pprint as pp
 import numpy as np
 import re
 from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac
-from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes
+from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes
 
 
 with open('data/hagar_comma_format.txt') as f:
@@ -141,11 +141,17 @@ def lf_preproc(lf_, sent):
         #breakpoint()
     lf = premanual_ida_fixes.get(lf, lf)
     lf = lf.replace('co|like', 'v|like')
+    lf = lf.replace('conj|like', 'v|like')
     lf = lf.replace('co|look', 'v|look')
     if 'lambda $0' in lf.rpartition('.')[0]:
         lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
-    if is_wh:=lf.startswith('lambda $1_{e}'):
+    #if is_wh:=lf.startswith('lambda $1_{e}'):
+    #if lf=='lambda $1_{<<e,e>,e>}.pro:dem|that_4($1($2,n|color_2($2)))':
+        #breakpoint()
+    maybe_wh_lambda_match = re.match(r'^lambda (\$\d)_\{(e|<<e,e>,e>)}\.',lf)
+    if is_wh:=(bool(maybe_wh_lambda_match)):
+        wh_var_with_num = maybe_wh_lambda_match.groups()[0]
         if ((wh_word := sent.split()[1]) in ['what','who']):
             replacer = wh_word.upper()
         elif wh_word == 'which':
@@ -159,10 +165,15 @@ def lf_preproc(lf_, sent):
         elif wh_word not in ['why', 'how']:
             breakpoint()
         if wh_word not in ['why', 'how']:
-            lf = 'Q(' + lf[14:].replace('$1',f'pro:int|{replacer}') + ')'
+            matched = maybe_wh_lambda_match.group()
+            lf = lf.replace(matched,'')
+            #lf = 'Q(' + lf[14:].replace(wh_var_with_num,f'pro:int|{replacer}') + ')'
+            lf = 'Q(' + lf.replace(wh_var_with_num,f'pro:int|{replacer}') + ')'
 
-    if is_wh or sent.split()[1] in ('did','do','does'):
-        lf = lf.replace('v|do','mod|do').replace('part|do','mod|do')
+    #if is_wh or sent.split()[1] in ('did','do','does'):
+        #lf = lf.replace('v|do','mod|do').replace('part|do','mod|do')
+    if re.search(r'(?<![a-zA-Z])v\|(?!do)', lf):
+        lf = re.sub(r'(?<![a-zA-Z])v\|do(?![a-zA-Z])','mod|do',lf)
 
     lf = re.sub(r'_\d{1,2}\b','',lf) # remove sense numbers, way too fine-grained
     lf = re.sub(r'co\|([\w{he_chars}]+\()(?!\$\d|$)',r'v|\1',lf) #'(' inside group to not replace single term
@@ -191,6 +202,10 @@ def sent_preproc(sent):
     sent = sent[6:].rstrip('?.!\n')
     sent = [w for w in sent.split() if w not in cw_words]
     sent = [w for w in sent if w not in ('Adam', 'Paul', 'Hagāri')]
+    if ' '.join(sent) in manual_sent_fixes:
+        print('fixing', sent, 'to ',end='')
+        sent = manual_sent_fixes[' '.join(sent)].split()
+        print(sent)
     return sent
 
 if __name__ == '__main__':
@@ -198,6 +213,7 @@ if __name__ == '__main__':
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("-d", "--dset", type=str, choices=['adam', 'hagar'], required=True)
     ARGS.add_argument("--db", type=str)
+    ARGS.add_argument("--db_sent", type=str)
     ARGS.add_argument("-p", "--print_conversions", action='store_true')
     ARGS = ARGS.parse_args()
 
@@ -218,6 +234,10 @@ if __name__ == '__main__':
         if s[6:-3] in exclude_sents:
             continue
         ps = sent_preproc(s)
+        if ARGS.db_sent is not None and ps == ARGS.db_sent.split():
+            breakpoint()
+        #if ps == 'what color is that'.split():
+            #breakpoint()
         if ps == []:
             continue
         pl = lf_preproc(l,s)

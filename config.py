@@ -17,7 +17,7 @@ pos_marking_dict = {
                     'det:num':set(['NP|N']),
                     'det:poss':set(['NP|N']),
                     'meta':set([None]),
-                    'mod':set(['S|NP|(S|NP)','Sq|(S|NP)|NP']),
+                    'mod':set(['S|NP|(S|NP)','S|(S|NP)|NP','S|NP|(S|NP)','S|(S|NP)|NP']),
                     'mod:aux':set([None]),
                     'n':set(['N']),
                     'n:gerund':set(['NP']),
@@ -86,6 +86,7 @@ full_lfs_to_exclude = [
         'lambda $1_{e}.lambda $0_{r}.$1(qn|many_3(BARE($2,n|bear-pl_4($2)),$0))', # not well-formed
         'lambda $0_{r}.mod|~will_2(adj|soon_5(adj|ready_4(pro:per|it_1,$0)),$0)', # don't know how to model
         'aux|have (mod|must (adv|so (v|hasproperty pro:per|you adj|hungry)))', # don't know how to model
+        'lambda $0_{r}.cop|be-3s_3_there_1_it_2(you,$0)', # don't know how to model but seems wrong
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         ]
@@ -165,8 +166,19 @@ exclude_sents = [
     'can you find a key that fits the lock', # lf doesn't match
     "I 'm breaking the stick that the motor of I made", # lf doesn't match
     'did you tell Ursula what happened in the barber shop', # lf doesn't match
-    'this is a q with the little thing sticking out' # lf doesn't match
-    'the one you were singing at the table' # lf doesn't match
+    'this is a q with the little thing sticking out', # lf doesn't match
+    'the one you were singing at the table', # lf doesn't match
+    "don 't you have something to show her", # lf doesn't match
+    "no more", # lf doesn't match
+    "now no more", # lf doesn't match
+    "no d ", # lf doesn't match
+    "where is the a", # lf doesn't match
+    "isn 't that what your Daddy does", # lf doesn't match
+    "they 're not the kind that you eat", # lf doesn't match
+    "you have some thing to show me", # lf doesn't match
+    "the kind the policeman carry", # lf doesn't match
+    "because that 's what he wants", # lf doesn't match
+    "because you might fall and hurt yourself", # lf doesn't match
     ]
 
 premanual_ida_fixes = {
@@ -188,6 +200,14 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'n|stop you pro:rel|that': 'v|stop you pro:rel|that', # pos of 'stop' to verb
     'cop|be-3s_3_there_1_it you': 'v|equals', # pos of 'stop' to verb
     'Q (mod|do-past (n|miss pro:per|you pro:indef|one))': 'Q (mod|do-past (v|miss pro:per|you pro:indef|one))', # pos of 'miss' to verb
+    'Q (mod|will-cond (conj|like pro:per|you (det:art|a n|piece)))': 'Q (mod|will-cond (v|like pro:per|you (det:art|a n|piece)))', # pos of 'like' to verb
+    'qn|another $0 (pro:indef|one $0)': 'qn|another pro:indef|one', # missed 'one' as noun
+    'Q (mod|do (v|see pro:per|you n|thing_5_any))': 'Q (mod|do (v|see pro:per|you (qn|any n|thing)))', # split anything into two words like it is in the sent (which may well be mistranscribed)
+    }
+
+manual_sent_fixes = {
+    "'s busy": "Adam 's busy", # my fault, my preproc removes all 'Adam's
+    "is a clown": "Adam is a clown", # my fault, my preproc removes all 'Adam's
     }
 
 hagar_svo_sentences = {

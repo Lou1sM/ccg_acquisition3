@@ -375,6 +375,8 @@ class LanguageAcquirer():
             lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cats, syn_cats = node.info_if_leaf()
             new_syntaxl_buffer += [('leaf',sync,leaf_prob) for sync in syn_cats]
+            if any(x[1]=='(N|N)' for x in new_syntaxl_buffer):
+                breakpoint()
             new_shmeaningl_buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
             new_meaningl_buffer.append((lf,shell_lf,leaf_prob))
             new_wordl_buffer.append((word_str,lf,leaf_prob))
@@ -382,6 +384,16 @@ class LanguageAcquirer():
             [x.parent.syn_cats for x,y in prob_cache.items() if 'S\\NP\\NP' in x.syn_cats]
         bad_prob = sum(x[2] for x in new_syntaxl_buffer if x[0]=='NP + S\\NP\\NP')
         good_prob = sum(x[2] for x in new_syntaxl_buffer if x[0]=='S\\NP/NP + NP')
+        et_updates = [x for x in new_shmeaningl_buffer if x[1]=='S|NP']
+        bad_updates = [x for x in et_updates if x[0]=='lambda $0.const const $0']
+        good_updates1 = [x for x in et_updates if x[0]=='lambda $0.const $0']
+        good_updates2 = [x for x in et_updates if x[0]=='lambda $0.const $0 const']
+        print(self.shmeaningl.prob('lambda $0.const const $0','S|NP'),self.shmeaningl.prob('lambda $0.const $0 const','S|NP'))
+        if len(et_updates) > 0:
+            max_etu = max(et_updates, key=lambda x:x[2])
+            #if max_etu[0] == 'lambda $0.const const $0':
+                #breakpoint()
+
         if bad_prob > good_prob:
             print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
             print('TOTAL BAD:', self.syntaxl.prob('NP + S\\NP\\NP','S\\NP'), 'TOTAL GOOD:', self.syntaxl.prob('S\\NP/NP + NP','S\\NP'))
@@ -681,7 +693,7 @@ if __name__ == "__main__":
     ARGS.add_argument("-t","--is_test", action="store_true")
     ARGS.add_argument("--show_splits", action="store_true")
     ARGS.add_argument("--show_graphs", action="store_true")
-    ARGS.add_argument("--show_figures", action="store_true")
+    ARGS.add_argument("--show_plots", action="store_true")
     ARGS.add_argument("--db_parse", action="store_true")
     ARGS.add_argument("--db_after", action="store_true")
     ARGS.add_argument("--overwrite", action="store_true")
@@ -779,7 +791,7 @@ if __name__ == "__main__":
         check_dir('plotted_figures')
         fpath = f'experiments/{ARGS.expname}/word_order_probs{info.replace(" ","_").lower()}.png'
         plt.savefig(fpath)
-        if ARGS.show_figures:
+        if ARGS.show_plots:
             os.system(f'/usr/bin/xdg-open {fpath}')
         plt.clf()
 
