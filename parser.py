@@ -501,6 +501,8 @@ class LogicalForm:
         x = self.get_stored_subtree_string(as_shell,alpha_normalized)
         if x == '' or recompute:
             x = self.subtree_string_(show_treelike=show_treelike,as_shell=as_shell,recompute=recompute)
+            if not is_bracket_balanced(x):
+                breakpoint()
             assert is_bracketed(x) or ' ' not in x or self.node_type in ['noun','lmbda','Q','detnoun','barenoun']
             x = maybe_debrac(x)
             if alpha_normalized:
@@ -533,6 +535,8 @@ class LogicalForm:
                 x = f'{self.string}({subtree_string})'
         elif (not as_shell) or self.node_type in ['bound_var','unbound_var']:
             x = self.string
+        elif self.string.startswith('v|'):
+            x = 'vconst'
         else:
             x = self.node_type
 
@@ -696,6 +700,10 @@ class ParseNode():
         return self.node_type in ['right_fwd_app','left_bck_app','right_fwd_cmp','left_bck_cmp']
 
     @property
+    def prob(self):
+        return self.above_prob*self.below_prob
+
+    @property
     def is_fwd(self):
         return self.node_type in ['right_fwd_app','left_fwd_app','right_fwd_cmp','left_fwd_cmp']
 
@@ -743,20 +751,21 @@ class ParseNode():
     def siblingify(self,other):
         self.sibling = other
         other.sibling = self
+#
 
-    def propagate_below_probs(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner,prob_cache,split_prob,is_map):
+    def propagate_below_probs(self,syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map):
         self.split_prob = split_prob
         if self in prob_cache:
             return prob_cache[self]
-        all_probs = [self.prob_as_leaf(syntax_learner,shell_meaning_learner,meaning_learner,word_learner)]
+        all_probs = [self.prob_as_leaf(syntaxl,shell_meaningl,meaningl,wordl)]
         for ps in self.possible_splits:
             #syntax_split = ps['left'].syn_cat + ' + ' + ps['right'].syn_cat
-            #split_prob = syntax_learner.prob(syntax_split,self.syn_cats)
-            split_prob = max(syntax_learner.prob(f'{psl} + {psr}',ss) for psl in ps['left'].syn_cats for psr in ps['right'].syn_cats for ss in self.syn_cats)
+            #split_prob = syntaxl.prob(syntax_split,self.syn_cats)
+            split_prob = max(syntaxl.prob(f'{psl} + {psr}',ss) for psl in ps['left'].syn_cats for psr in ps['right'].syn_cats for ss in self.syn_cats)
             if split_prob == 0:
                 breakpoint()
-            left_below_prob = ps['left'].propagate_below_probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,prob_cache,split_prob,is_map)
-            right_below_prob = ps['right'].propagate_below_probs(syntax_learner,shell_meaning_learner,meaning_learner,word_learner,prob_cache,split_prob,is_map)
+            left_below_prob = ps['left'].propagate_below_probs(syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map)
+            right_below_prob = ps['right'].propagate_below_probs(syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map)
             all_probs.append(left_below_prob*right_below_prob*split_prob)
 
         below_prob = max(all_probs) if is_map else sum(all_probs)
@@ -779,22 +788,25 @@ class ParseNode():
             if not self.above_prob > max([z.above_prob for ps in self.possible_splits for z in (ps['right'],ps['left'])]):
                 breakpoint()
 
-    def prob_as_leaf(self,syntax_learner,shell_meaning_learner,meaning_learner,word_learner):
+    def prob_as_leaf(self,syntaxl,shell_meaningl,meaningl,wordl,print_components=False):
         word_str, lf, shell_lf, sem_cats, syn_cats = self.info_if_leaf()
         #word_str, lf, shell_lf, = self.info_if_leaf()
         if sem_cats not in ({'Sq|NP','Sq|(S|NP)'},{'Sq|NP','Sq|(S|NP'}):
             for sc in sem_cats:
                 if not any(is_congruent(ssync,sc) for ssync in syn_cats):
                     raise SemCatError('Some syncat is not consistent with any semcat')
-        self.stored_prob_as_leaf = max(syntax_learner.prob('leaf',ssync) for ssync in syn_cats) * \
-                                   max(shell_meaning_learner.prob(shell_lf,sc) for sc in sem_cats) * \
-                                   meaning_learner.prob(lf,shell_lf) * \
-                                   word_learner.prob(word_str,lf)
-                            # will use stored value in train_one_step()
-        if self.syn_cats == {'S\\NP/NP'} and self.lf_str == 'lambda $0.lambda $1.v|racā $1 $0':
-            breakpoint()
-        if self.syn_cats == {'S\\NP/NP'} and self.lf_str == 'lambda $0.lambda $1.v|racā $0 $1':
-            breakpoint()
+        syntax_prob = max(syntaxl.prob('leaf',ssync) for ssync in syn_cats)
+        shmeaning_prob = max(shell_meaningl.prob(shell_lf, sc) for sc in sem_cats)
+        meaning_prob = meaningl.prob(lf, shell_lf)
+        word_prob = wordl.prob(word_str,lf)
+        if print_components:
+            for p in ('syntax_prob','shmeaning_prob','meaning_prob','word_prob'):
+                exec(f'print("{p}:",round({p},5))')
+        self.stored_prob_as_leaf = syntax_prob*shmeaning_prob*meaning_prob*word_prob
+        #if self.syn_cats == {'S\\NP/NP'} and self.lf_str == 'lambda $0.lambda $1.v|racā $1 $0':
+            #breakpoint()
+        #if self.syn_cats == {'S\\NP/NP'} and self.lf_str == 'lambda $0.lambda $1.v|racā $0 $1':
+            #breakpoint()
         if self.stored_prob_as_leaf==0:
             raise ZeroProbError
         return self.stored_prob_as_leaf

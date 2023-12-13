@@ -142,11 +142,11 @@ class BaseDirichletProcessLearner(ABC):
 
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        if self.is_training:
-            return 1
-        else:
-            n_slashes = len(re.findall(r'[\\/\|]',x))
-            return (0.5555)*0.9**(n_slashes+1) # Omri 2017 had 0.2
+        #if self.is_training:
+            #return 1
+        #else:
+        n_slashes = len(re.findall(r'[\\/\|]',x))
+        return (0.5555)*0.9**(n_slashes+1) # Omri 2017 had 0.2
 
     def observe(self,y,x,weight):
         if y == 'leaf':
@@ -359,12 +359,12 @@ class LanguageAcquirer():
         new_meaningl_buffer = []
         new_wordl_buffer = []
         for node, prob in prob_cache.items():
-            if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $1 $0':
-                breakpoint()
-            if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $0 $1':
-                breakpoint()
+            #if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $1 $0':
+                #breakpoint()
+            #if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $0 $1':
+                #breakpoint()
             if node.parent is not None and not node.is_g:
-                update_weight = node.below_prob * node.above_prob / root_prob # for conditional
+                update_weight = node.prob / root_prob # for conditional
                 if node.is_fwd:
                     new_syntaxl_buffer += [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
                 else:
@@ -380,29 +380,21 @@ class LanguageAcquirer():
             new_shmeaningl_buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
             new_meaningl_buffer.append((lf,shell_lf,leaf_prob))
             new_wordl_buffer.append((word_str,lf,leaf_prob))
-            [x.parent.syn_cats for x,y in prob_cache.items() if 'S\\NP/NP' in x.syn_cats]
-            [x.parent.syn_cats for x,y in prob_cache.items() if 'S\\NP\\NP' in x.syn_cats]
-        bad_prob = sum(x[2] for x in new_syntaxl_buffer if x[0]=='NP + S\\NP\\NP')
-        good_prob = sum(x[2] for x in new_syntaxl_buffer if x[0]=='S\\NP/NP + NP')
-        et_updates = [x for x in new_shmeaningl_buffer if x[1]=='S|NP']
-        bad_updates = [x for x in et_updates if x[0]=='lambda $0.const const $0']
-        good_updates1 = [x for x in et_updates if x[0]=='lambda $0.const $0']
-        good_updates2 = [x for x in et_updates if x[0]=='lambda $0.const $0 const']
-        print(self.shmeaningl.prob('lambda $0.const const $0','S|NP'),self.shmeaningl.prob('lambda $0.const $0 const','S|NP'))
-        if len(et_updates) > 0:
-            max_etu = max(et_updates, key=lambda x:x[2])
-            #if max_etu[0] == 'lambda $0.const const $0':
-                #breakpoint()
-
+        bad_prob = sum(x[2] for x in new_shmeaningl_buffer if x[0]=='lambda $0.lambda $1.vconst $0 $1')
+        good_prob = sum(x[2] for x in new_shmeaningl_buffer if x[0]=='lambda $0.lambda $1.vconst $1 $0')
+        #print(bad_prob, good_prob)
+        #if ARGS.dset == 'adam': # still dealing with this on Adam, extended shell_lfs should help
+            #print(self.shmeaningl.prob('lambda $0.const const $0','S|NP'),self.shmeaningl.prob('lambda $0.const $0 const','S|NP'))
+        #else:
+        #print(self.shmeaningl.prob('lambda $0.lambda $1.vconst $0 $1','S|NP|NP'),self.shmeaningl.prob('lambda $0.lambda $1.vconst $1 $0','S|NP|NP'))
         if bad_prob > good_prob:
             print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
-            print('TOTAL BAD:', self.syntaxl.prob('NP + S\\NP\\NP','S\\NP'), 'TOTAL GOOD:', self.syntaxl.prob('S\\NP/NP + NP','S\\NP'))
-        if bad_prob > 10*good_prob and bad_prob>1e-3:
-            g1 = max([(x,y) for x,y in prob_cache.items() if 'S\\NP/NP' in x.syn_cats], key=lambda x:x[1])[0]
-            good = get_root(g1)
-            b1 = max([(x,y) for x,y in prob_cache.items() if 'S\\NP\\NP' in x.syn_cats], key=lambda x:x[1])[0].parent
-            bad = get_root(b1)
-            print('\nVERY BAD\n')
+            print('TOTAL BAD:', self.shmeaningl.prob('lambda $0.lambda $1.vconst $0 $1','S|NP|NP'), 'TOTAL GOOD:', self.shmeaningl.prob('lambda $0.lambda $1.vconst $1 $0','S|NP|NP'))
+            #g1 = max([(x,y) for x,y in prob_cache.items() if 'S\\NP/NP' in x.syn_cats], key=lambda x:x[1])[0]
+            #good = get_root(g1)
+            #b1 = max([(x,y) for x,y in prob_cache.items() if 'S|NP|NP' in x.sem_cats], key=lambda x:x[1])[0]
+            #bad = get_root(b1)
+            #self.as_leaf(g1)
         self.syntaxl.buffers.append(new_syntaxl_buffer)
         self.shmeaningl.buffers.append(new_shmeaningl_buffer)
         self.meaningl.buffers.append(new_meaningl_buffer)
@@ -416,6 +408,9 @@ class LanguageAcquirer():
         else:
             assert all(len(x.buffers) <= ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
         return new_problem_list
+
+    def as_leaf(self, node):
+        node.prob_as_leaf(self.syntaxl, self.shmeaningl, self.meaningl, self.wordl, True)
 
     def probs_of_word_orders(self, ignore_prior):
         if ignore_prior:
@@ -438,8 +433,8 @@ class LanguageAcquirer():
         # it will never have seen this split because disallowed during training
         # so only option is to include prior
         ovs_ = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('NP + S/NP\\NP', 'S/NP')
-        comb_obj_first = shm_prob_func('lambda $0.lambda $1.const $1 $0', 'S|NP|NP')
-        comb_subj_first = shm_prob_func('lambda $0.lambda $1.const $0 $1', 'S|NP|NP')
+        comb_obj_first = shm_prob_func('lambda $0.lambda $1.vconst $1 $0', 'S|NP|NP')
+        comb_subj_first = shm_prob_func('lambda $0.lambda $1.vconst $0 $1', 'S|NP|NP')
         unnormed_probs = pd.Series({
         'sov': sov_or_osv*comb_obj_first,
         'svo': svo_*comb_obj_first,
@@ -558,7 +553,6 @@ class LanguageAcquirer():
 
         def show_parse(num):
             syntax_tree_level = [dict(probs_table[N-1,0][num],idx='1',hor_pos=0)]
-            #syntax_tree_level[0]['hor_pos'] = len(syntax_tree_level[0]['words'].split())/2
             all_syntax_tree_levels = []
             for i in range(N):
                 new_syntax_tree_level = []
@@ -709,6 +703,7 @@ if __name__ == "__main__":
 
     ARGS.is_test = ARGS.is_test or ARGS.is_short_test
 
+    expdir = f'experiments/{ARGS.dset}'
     if ARGS.is_test:
         ARGS.expname = 'tmp'
         if ARGS.n_dpoints == -1:
