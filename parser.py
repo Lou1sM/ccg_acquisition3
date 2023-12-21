@@ -1,5 +1,5 @@
 import numpy as np
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_sem_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced, SemCatError, ZeroProbError
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced, SemCatError, ZeroProbError
 import re
 import sys; sys.setrecursionlimit(500)
 from config import pos_marking_dict, base_lexicon
@@ -210,7 +210,7 @@ class LogicalForm:
 
     def is_type_congruent(self):
         lf_str = logical_de_type_raise(self.lf_str) if self.is_type_raised() else self.lf_str
-        self.sem_cats = set(ssc for ssc in self.sem_cats if ssc == 'X' or lf_sem_congruent(lf_str,maybe_de_type_raise(ssc)))
+        self.sem_cats = set(ssc for ssc in self.sem_cats if ssc == 'X' or lf_cat_congruent(lf_str,maybe_de_type_raise(ssc)))
         return self.sem_cats != set([])
 
     def infer_splits(self):

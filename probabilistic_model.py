@@ -10,7 +10,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_sem_congruent, CCGLearnerError
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_cat_congruent, CCGLearnerError
 from time import time
 import argparse
 from abc import ABC
@@ -180,7 +180,7 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
 
     def prob(self,y,x):
         #if x not in ['N','Swhq'] and len(split_respecting_brackets(x,sep=['/','\\','|'])) != n_lambda_binders(y)+1:
-        if not lf_sem_congruent(y,x):
+        if not lf_cat_congruent(y,x):
             #print(y,x)
             return 0
         #y = maybe_de_type_raise(y_)
@@ -377,7 +377,10 @@ class LanguageAcquirer():
             new_syntaxl_buffer += [('leaf',sync,leaf_prob) for sync in syn_cats]
             if any(x[1]=='(N|N)' for x in new_syntaxl_buffer):
                 breakpoint()
-            new_shmeaningl_buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
+            if ARGS.condition_on_syncats:
+                new_shmeaningl_buffer += [(shell_lf,sync,leaf_prob) for sync in syn_cats]
+            else:
+                new_shmeaningl_buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
             new_meaningl_buffer.append((lf,shell_lf,leaf_prob))
             new_wordl_buffer.append((word_str,lf,leaf_prob))
         bad_prob = sum(x[2] for x in new_shmeaningl_buffer if x[0]=='lambda $0.lambda $1.vconst $0 $1')
@@ -387,9 +390,9 @@ class LanguageAcquirer():
             #print(self.shmeaningl.prob('lambda $0.const const $0','S|NP'),self.shmeaningl.prob('lambda $0.const $0 const','S|NP'))
         #else:
         #print(self.shmeaningl.prob('lambda $0.lambda $1.vconst $0 $1','S|NP|NP'),self.shmeaningl.prob('lambda $0.lambda $1.vconst $1 $0','S|NP|NP'))
-        if bad_prob > good_prob:
-            print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
-            print('TOTAL BAD:', self.shmeaningl.prob('lambda $0.lambda $1.vconst $0 $1','S|NP|NP'), 'TOTAL GOOD:', self.shmeaningl.prob('lambda $0.lambda $1.vconst $1 $0','S|NP|NP'))
+        #if bad_prob > good_prob:
+            #print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
+            #print('TOTAL BAD:', self.shmeaningl.prob('lambda $0.lambda $1.vconst $0 $1','S|NP|NP'), 'TOTAL GOOD:', self.shmeaningl.prob('lambda $0.lambda $1.vconst $1 $0','S|NP|NP'))
             #g1 = max([(x,y) for x,y in prob_cache.items() if 'S\\NP/NP' in x.syn_cats], key=lambda x:x[1])[0]
             #good = get_root(g1)
             #b1 = max([(x,y) for x,y in prob_cache.items() if 'S|NP|NP' in x.sem_cats], key=lambda x:x[1])[0]
@@ -433,18 +436,26 @@ class LanguageAcquirer():
         # it will never have seen this split because disallowed during training
         # so only option is to include prior
         ovs_ = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('NP + S/NP\\NP', 'S/NP')
-        comb_obj_first = shm_prob_func('lambda $0.lambda $1.vconst $1 $0', 'S|NP|NP')
-        comb_subj_first = shm_prob_func('lambda $0.lambda $1.vconst $0 $1', 'S|NP|NP')
-        unnormed_probs = pd.Series({
-        'sov': sov_or_osv*comb_obj_first,
-        'svo': svo_*comb_obj_first,
-        'vso': vso_or_vos*comb_subj_first,
-        'vos': vso_or_vos*comb_obj_first,
-        'osv': sov_or_osv*comb_subj_first,
-        'ovs': ovs_*comb_subj_first
-        }) + 1e-8
-        #if unnormed_probs['ovs'] > unnormed_probs['svo']:
-            #breakpoint()
+        if ARGS.condition_on_syncats:
+            unnormed_probs = pd.Series({
+            'sov': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S\\NP\\NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S\\NP\\NP')),
+            'svo': svo_*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S\\NP/NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S\\NP/NP')),
+            'vso': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S/NP/NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S/NP/NP')),
+            'vos': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S/NP/NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S/NP/NP')),
+            'osv': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S\\NP\\NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S\\NP\\NP')),
+            'ovs': ovs_*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S/NP\\NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S/NP\\NP'))
+            }) + 1e-8
+        else:
+            comb_obj_first = shm_prob_func('lambda $0.lambda $1.vconst $1 $0', 'S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)', 'S|NP|NP')
+            comb_subj_first = shm_prob_func('lambda $0.lambda $1.vconst $0 $1', 'S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)', 'S|NP|NP')
+            unnormed_probs = pd.Series({
+            'sov': sov_or_osv*comb_obj_first,
+            'svo': svo_*comb_obj_first,
+            'vso': vso_or_vos*comb_subj_first,
+            'vos': vso_or_vos*comb_obj_first,
+            'osv': sov_or_osv*comb_subj_first,
+            'ovs': ovs_*comb_obj_first,
+            }) + 1e-8
 
         return unnormed_probs/unnormed_probs.sum()
 
@@ -693,6 +704,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--test_gts", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
+    ARGS.add_argument("--condition_on_syncats", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='adam')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
     ARGS.add_argument("--dblfs", type=str)
@@ -734,6 +746,7 @@ if __name__ == "__main__":
     start_time = time()
     all_word_order_probs = []
     all_word_order_probs_no_prior = []
+    all_prob_changes = []
     problem_list = []
     plot_every = 1
     for epoch_num in range(ARGS.n_epochs):
@@ -754,8 +767,16 @@ if __name__ == "__main__":
             problem_list += la.train_one_step(lf_strs_incl_distractors,words,apply_buffers)
             if ((i+1)%plot_every == 0 or ARGS.is_test):
                 la.eval()
-                all_word_order_probs.append(la.probs_of_word_orders(False))
+                new_probs_with_prior = la.probs_of_word_orders(False)
+                new_probs_without_prior = la.probs_of_word_orders(True)
+                if i>0:
+                    prob_change = ((new_probs_with_prior-all_word_order_probs[-1])**2).sum()
+                    #all_prob_changes.append((prob_change,(words,lf_strs_incl_distractors)))
+                    all_prob_changes.append({'prob update': prob_change, 'dpoint index': i, 'words':words, 'lf':lf_strs_incl_distractors})
+                all_word_order_probs.append(new_probs_with_prior)
                 all_word_order_probs_no_prior.append(la.probs_of_word_orders(True))
+                if i%30 == 0:
+                    print(all_word_order_probs[-1])
                 la.train()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
@@ -763,9 +784,12 @@ if __name__ == "__main__":
         final_parses = {}
         n_correct_parses = 0
 
-    with open(f'{ARGS.expname}_failures.txt','w') as f:
+    with open(f'experiments/{ARGS.expname}/failed_dpoints.txt','w') as f:
         for pf,e in problem_list:
             f.write(' '.join(pf['words']) + pf['lf'] + str(e))
+    with open(f'experiments/{ARGS.expname}/prob_updates.txt','w') as f:
+        for x in sorted(all_prob_changes, key=lambda x:x['prob update'], reverse=True):
+            f.write('\t'.join(f'{k}: {v}' for k,v in x.items()) + '\n')
     inverse_probs_start_time = time()
     la.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
