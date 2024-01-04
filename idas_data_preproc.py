@@ -2,8 +2,8 @@ import json
 from pprint import pprint as pp
 import numpy as np
 import re
-from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac
-from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes
+from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf
+from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes
 
 
 with open('data/hagar_comma_format.txt') as f:
@@ -11,10 +11,10 @@ with open('data/hagar_comma_format.txt') as f:
 cw_words = set(sorted(re.findall(rf'(?<=co\|)[{he_chars}]+(?=\()',d)))
 
 def maybe_detnoun_match(x):
-    return re.match(fr'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((\$\d{{1,2}}),(n\|[{he_chars}\w-]*)\(\2\)\)',x)
+    return re.match(fr'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|det\|ha|det\|\~ha|BARE|n:prop\|\w*\'s\')\((\$\d{{1,2}}),(n\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def maybe_attrib_noun_match(x):
-    return re.match(fr'(qn\|\w*|det:\w*\|\w*|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[{he_chars}\w-]*)\(\2\)\)',x)
+    return re.match(fr'(qn\|\w*|det:\w*\|\w*|det\|ha|det\|\~ha|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def is_nplike(x):
     if x in ['WHO', 'WHAT', 'WHOSE', 'you']:
@@ -119,6 +119,11 @@ def _decommafy_inner(parse):
 def lf_preproc(lf_, sent):
     lf = lf_.rstrip('\n')
     lf = lf[5:] # have already checked it starts with 'Sem: '
+    if np_marked:=lf.startswith('BARE($0'):
+        lf=lf[8:-1]
+        lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
+    if lf.startswith('BARE('):
+        breakpoint()
     lf = premanual_ida_fixes.get(lf, lf)
     lf = lf.replace('co|like', 'v|like')
     lf = lf.replace('conj|like', 'v|like')
@@ -129,7 +134,10 @@ def lf_preproc(lf_, sent):
     maybe_wh_lambda_match = re.match(r'^lambda (\$\d)_\{(e|<<e,e>,e>)}\.',lf)
     if is_wh:=(bool(maybe_wh_lambda_match)):
         wh_var_with_num = maybe_wh_lambda_match.groups()[0]
-        if ((wh_word := sent.split()[1]) in ['what','who']):
+        wh_word = sent.split()[1]
+        if ARGS.dset == 'hagar':
+            replacer = 'WH'
+        elif (wh_word in ['what','who']):
             replacer = wh_word.upper()
         elif wh_word == 'which':
             replacer = 'det:dem|WHICH'
@@ -170,12 +178,26 @@ def lf_preproc(lf_, sent):
         print(f'fixing {old_dlf} to {dlf}')
     if 'pro:per|yo' in dlf.replace('(',' ').replace(')',' ').split():
         breakpoint()
-    return dlf
+    if np_marked:
+        root_cat='NP'
+    elif 'WH' in dlf:
+        root_cat='Swhq'
+    elif dlf.startswith('Q'):
+        root_cat='Sq'
+    else:
+        root_cat='S'
+    if dlf == '$ $':
+        breakpoint()
+    assert is_wellformed_lf(dlf)
+    return f'{root_cat}: {dlf}'
 
 def sent_preproc(sent):
-    sent = sent[6:].rstrip('?.!\n')
+    sent = sent[6:].rstrip('?.!\n ')
+    assert not sent.endswith(' ')
+    if sent in sent_fixes:
+        sent = sent_fixes[sent]
     sent = [w for w in sent.split() if w not in cw_words]
-    sent = [w for w in sent if w not in ('Adam', 'Paul', 'Hagāri')]
+    sent = [w for w in sent if not w[0].isupper()]
     if ' '.join(sent) in manual_sent_fixes:
         print('fixing', sent, 'to ',end='')
         sent = manual_sent_fixes[' '.join(sent)].split()
@@ -202,7 +224,9 @@ if __name__ == '__main__':
     assert all([dset_lines[i]=='\n' for i in range(3,len(dset_lines),4)])
 
     dset_data = []
+    n_excluded = 0
     for l,s in zip(lfs,sents):
+
         if any(x in l for x in exclude_lfs):
             continue
         if s[6:-3] in exclude_sents:
@@ -211,14 +235,20 @@ if __name__ == '__main__':
         if ARGS.db_sent is not None and ps == ARGS.db_sent.split():
             breakpoint()
         if ps == []:
+            n_excluded+=1
             continue
         pl = lf_preproc(l,s)
         if ARGS.print_conversions:
             print(' '.join(ps))
-        if pl == '':
+        if 'now' in s.split():
+            print(' '.join(ps), pl)
+        if pl.endswith(': '):
             continue
         if pl is None:
             continue
+
+        if 'bōʔi bōʔi' in s:
+            breakpoint()
         dset_data.append({'lf':pl, 'words':ps})
     x=[' '.join(y['words']) for y in dset_data]
     y=dict(zip(*np.unique(x, return_counts=True)))
@@ -226,5 +256,13 @@ if __name__ == '__main__':
     pp(hist_counts[:20])
     dset = {'data':dset_data, 'hist_counts':hist_counts}
 
+    print(f'Num Excluded Points: {n_excluded}')
+    print(f'Num Remaining Points: {len(dset_data)}')
     with open(f'data/{ARGS.dset}.json','w') as f:
         json.dump(dset,f)
+    breakpoint()
+    with open(f'data/{ARGS.dset}_no_commas.txt','w') as f:
+        for dpoint in dset_data:
+            sent, lf = dpoint['words'], ' '.join(dpoint['lf'])
+            f.write(f'Sent: {sent}\n')
+            f.write(f'Sem: {lf}\n\n')

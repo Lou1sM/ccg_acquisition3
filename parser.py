@@ -22,7 +22,7 @@ debug_set_cats = None
 
 
 class LogicalForm:
-    def __init__(self,defining_string,idx_in_tree=[],caches={'splits':{},'cats':{}},parent=None,dblfs=None,dbsss=None):
+    def __init__(self,defining_string,idx_in_tree=[],caches={'splits':{},'cats':{}},parent=None,dblfs=None,dbsss=None,root_cat=None):
         if dblfs is not None:
             global debug_split_lf
             assert debug_split_lf in (None, dblfs)
@@ -48,9 +48,11 @@ class LogicalForm:
         self.stored_alpha_normalized_shell_subtree_string = ''
         self.ud_pos = ''
         self.was_cached = False
+        self.root_cat = root_cat
         defining_string = maybe_debrac(defining_string)
-        if parent == 'START':
-            self.set_cats_as_root(defining_string)
+        if parent == 'START' and  root_cat is not None:
+            self.sem_cats = set([root_cat])
+            #self.set_cats_as_root(defining_string)
         #if re.match(r'BARE\([a-z-A-Z0-9\-_:]*\)',defining_string):
         if defining_string.startswith('BARE'):
             self.node_type = 'barenoun'
@@ -205,7 +207,10 @@ class LogicalForm:
         assert not any(sc is None for sc in self.sem_cats)
         assert isinstance(self.sem_cats,set)
         is_congruent = self.is_type_congruent()
-        self.caches['cats'][self.lf_str] = self.sem_cats, self.is_semantic_leaf, is_congruent
+        if not (self.parent=='START' and self.root_cat is not None):
+            self.caches['cats'][self.lf_str] = self.sem_cats, self.is_semantic_leaf, is_congruent
+        if self.lf_str == 'adj|qar' and 'S' in self.sem_cats:
+            breakpoint()
         return is_congruent
 
     def is_type_congruent(self):
@@ -315,13 +320,8 @@ class LogicalForm:
 
     def add_split(self,f,g,split_type):
         f.parent = g.parent = self
-        #if g.lf_str == 'lambda $0.not ($0 pro:per|you_1)':
-            #breakpoint()
         if not g.set_cats_from_string():
             return
-        #if all(gsc not in ['X','N','N|N'] and len(re.findall(r'[\\/\|]',gsc)) != g.n_lambda_binders for gsc in g.sem_cats):
-        #    print('discarding', g.sem_cats, g.lf_str)
-        #    return
         if g.sem_cats == {'NP|N'}:
             breakpoint()
         if not g.cat_consistent():
@@ -329,8 +329,6 @@ class LogicalForm:
         assert f != self
         assert g != self
         if split_type == 'app':
-            #if not f.set_cats_from_string():
-                #return
             to_add_to = self.possible_app_splits
         else:
             assert split_type == 'cmp'
@@ -339,10 +337,6 @@ class LogicalForm:
             f.sem_cats = set(['X'])
             to_add_to = self.possible_cmp_splits
         assert ( combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True))
-            #fstr = f.subtree_string()
-            #gstr = g.subtree_string()
-            #breakpoint()
-            #combine_lfs(fstr,gstr,split_type,normalize=True)
         g.infer_splits()
         f.infer_splits()
         if self.sem_cat_is_set and g.sem_cat_is_set:
@@ -356,8 +350,6 @@ class LogicalForm:
             inferred_sem_cats = set([])
             for fsc in f.sem_cats:
                 for gsc in g.sem_cats:
-                    #hits = re.findall(fr'[\\/\|]\(?{re.escape(gsc)}\)?$',re.escape(fsc))
-                    # it seems '\' needs to be escaped but | needs to NOT be escaped
                     hits = re.findall(fr'[\\/\|]\(?{re.escape(gsc)}\)?$',fsc.replace('\\','\\\\'))
                     assert len(hits) < 2
                     new_inferred_sem_cats = set(fsc[:-len(h)] for h in hits if is_bracket_balanced(h))
@@ -372,17 +364,20 @@ class LogicalForm:
                     self.sem_cats = new
                 if not self.cat_consistent():
                     return
-        assert f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set
+        if not ( ( f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set)):
+            breakpoint()
         if not f.sem_cat_is_set:
             #print(f.lf_str,' + ',g.lf_str)
             return
-        assert not (self.sem_cats == set(['S']) and g.sem_cats == set(['N']))
+        if not ( not (self.sem_cats == set(['S']) and g.sem_cats == set(['N']))):
+            breakpoint()
         f.sibling = g
         g.sibling = f
         if f.is_type_congruent():
             f.put_self_in_caches()
             g.put_self_in_caches()
             to_add_to.append((f,g))
+        assert self.sem_cats != set()
 
     def put_self_in_caches(self):
         self.caches['splits'][self.lf_str] = self.possible_app_splits, self.possible_cmp_splits, self.sem_cats
@@ -427,7 +422,7 @@ class LogicalForm:
     def spawn_self_like(self,defining_string,idx_in_tree=None):
         if idx_in_tree is None:
             idx_in_tree = self.idx_in_tree
-        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,caches=self.caches,parent=self.parent)
+        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,caches=self.caches,parent=self.parent,root_cat=self.root_cat)
         new.sem_cats = self.sem_cats
         return new
 
@@ -542,7 +537,6 @@ class LogicalForm:
 
         assert as_shell or 'PLACE' not in x
         assert not x.startswith('.')
-
         return x
 
     def copy(self):

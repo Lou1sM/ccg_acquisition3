@@ -483,10 +483,7 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
         return new_f, new_g # hard-coding fwd slash
 
 def lf_cat_congruent(lf_str, sem_cat):
-    #assert '\\' not in sem_cat and '/' not in sem_cat # should only run on sem_cats, not syn_cats
-    if sem_cat == 'Swhq':
-        what_n_lambdas_should_be = 1
-    elif sem_cat in ('N|N', 'N\\N','N/N'):
+    if sem_cat in ('Swhq','N|N', 'N\\N','N/N'):
         what_n_lambdas_should_be = 0
     else:
         what_n_lambdas_should_be = len(split_respecting_brackets(sem_cat,sep=['|','\\','/']))-1

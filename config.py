@@ -181,6 +181,10 @@ exclude_sents = [
     "because you might fall and hurt yourself", # lf doesn't match
     ]
 
+sent_fixes = {
+    'hiʔ ʕoṣā qāqi ʔābaʔ': 'hiʔ ʕoṣā qāqi',
+    }
+
 premanual_ida_fixes = {
     'lambda $0_{r}.not(co|careful_5(pro:per|you_2,$0),$0)':'lambda $0_{r}.not(adj|careful_5(pro:per|you_2,$0),$0)', # pos of 'careful' to v
     'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(co|careful_4(pro:per|you_1,$0),$0))':'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(v|careful_4(pro:per|you_1,$0),$0))', # pos of 'careful' to v
@@ -203,6 +207,7 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (mod|will-cond (conj|like pro:per|you (det:art|a n|piece)))': 'Q (mod|will-cond (v|like pro:per|you (det:art|a n|piece)))', # pos of 'like' to verb
     'qn|another $0 (pro:indef|one $0)': 'qn|another pro:indef|one', # missed 'one' as noun
     'Q (mod|do (v|see pro:per|you n|thing_5_any))': 'Q (mod|do (v|see pro:per|you (qn|any n|thing)))', # split anything into two words like it is in the sent (which may well be mistranscribed)
+    'v|ciyēr pro:per|ʔat (BARE n|ʕigūl)': 'v|ciyēr you (BARE n|ʕigūl)', # split anything into two words like it is in the sent (which may well be mistranscribed)
     }
 
 manual_sent_fixes = {

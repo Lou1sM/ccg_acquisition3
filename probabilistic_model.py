@@ -58,10 +58,20 @@ class DirichletProcess():
 class BaseDirichletProcessLearner(ABC):
     def __init__(self,alpha):
         self.alpha = alpha
+        self.base_alpha = alpha
+        self.eval_alpha = ARGS.eval_alpha
         self.memory = {}
         self.base_distribution_cache = {}
         self.buffers = []
         self.is_training = True
+
+    def train(self):
+        self.alpha = self.base_alpha
+        self.is_training = True
+
+    def eval(self):
+        self.alpha = self.eval_alpha
+        self.is_training = False
 
     def base_distribution_(self,x):
         raise NotImplementedError
@@ -217,16 +227,16 @@ class LanguageAcquirer():
         self.vocab_thresh = 1
 
     def train(self):
-        self.syntaxl.is_training = True
-        self.shmeaningl.is_training = True
-        self.meaningl.is_training = True
-        self.wordl.is_training = True
+        self.syntaxl.train()
+        self.shmeaningl.train()
+        self.meaningl.train()
+        self.wordl.train()
 
     def eval(self):
-        self.syntaxl.is_training = False
-        self.shmeaningl.is_training = False
-        self.meaningl.is_training = False
-        self.wordl.is_training = False
+        self.syntaxl.eval()
+        self.shmeaningl.eval()
+        self.meaningl.eval()
+        self.wordl.eval()
 
     @property
     def lf_vocab(self):
@@ -314,12 +324,13 @@ class LanguageAcquirer():
         probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='COUNT'}
         file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
 
-    def get_lf(self,lf_str):
+    def get_lf(self,lf_str_):
+        root_cat, lf_str = lf_str_.split(': ')
         if lf_str in self.full_lfs_cache:
             lf = self.full_lfs_cache[lf_str]
             lf.set_cats_as_root(lf_str) # in case was in cache as embedded S, so got X
         else:
-            lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss)
+            lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss,root_cat=root_cat)
             self.full_lfs_cache[lf_str] = lf
         return lf
 
@@ -691,6 +702,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--max_lf_len", type=int, default=6)
     ARGS.add_argument("--start_from", type=int, default=0)
     ARGS.add_argument("--lr", type=float, default=1.0)
+    ARGS.add_argument("--eval_alpha", type=float, default=1.0)
     ARGS.add_argument("--n_epochs", type=int, default=1)
     ARGS.add_argument("--n_generate", type=int, default=0)
     ARGS.add_argument("--n_distractors", type=int, default=0)
@@ -707,6 +719,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--condition_on_syncats", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='adam')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
+    ARGS.add_argument("--db_prob_changes_above", type=float, default=1.)
     ARGS.add_argument("--dblfs", type=str)
     ARGS.add_argument("--dbsent", type=str, default='')
     ARGS.add_argument("--dbsss", type=str)
@@ -737,7 +750,7 @@ if __name__ == "__main__":
     all_data = [x for x in all_data if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
     all_data = [x for x in all_data if len(x['words']) > 1]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
-    train_data = data_to_use[:-len(data_to_use)//5]
+    train_data = data_to_use[:-len(data_to_use)//20]
     test_data = train_data if ARGS.is_test else data_to_use[-len(data_to_use)//5:]
     if 'questions' in ARGS.dset:
         univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a lake))'}
@@ -764,6 +777,8 @@ if __name__ == "__main__":
             lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
             print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
             apply_buffers = i>=ARGS.n_distractors
+            n_words_seen = sum(w in la.vocab for w in words)
+            frac_words_seen = n_words_seen/len(words)
             problem_list += la.train_one_step(lf_strs_incl_distractors,words,apply_buffers)
             if ((i+1)%plot_every == 0 or ARGS.is_test):
                 la.eval()
@@ -771,12 +786,17 @@ if __name__ == "__main__":
                 new_probs_without_prior = la.probs_of_word_orders(True)
                 if i>0:
                     prob_change = ((new_probs_with_prior-all_word_order_probs[-1])**2).sum()
+                    diff_probs = new_probs_with_prior-all_word_order_probs[-1]
+                    forder = diff_probs.idxmax()
+                    good_point = diff_probs['svo'] == diff_probs.max()
+                    if not good_point and prob_change > 1e-5:
+                        print(new_probs_with_prior)
                     #all_prob_changes.append((prob_change,(words,lf_strs_incl_distractors)))
-                    all_prob_changes.append({'prob update': prob_change, 'dpoint index': i, 'words':words, 'lf':lf_strs_incl_distractors})
+                    all_prob_changes.append({'prob update': prob_change, 'dpoint index': i, 'words':' '.join(words), 'lf':dpoint['lf'], 'good':good_point, 'favoured order':forder,'nseen':n_words_seen})
                 all_word_order_probs.append(new_probs_with_prior)
                 all_word_order_probs_no_prior.append(la.probs_of_word_orders(True))
-                if i%30 == 0:
-                    print(all_word_order_probs[-1])
+                if i>0 and prob_change>ARGS.db_prob_changes_above:
+                    breakpoint()
                 la.train()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
@@ -789,7 +809,11 @@ if __name__ == "__main__":
             f.write(' '.join(pf['words']) + pf['lf'] + str(e))
     with open(f'experiments/{ARGS.expname}/prob_updates.txt','w') as f:
         for x in sorted(all_prob_changes, key=lambda x:x['prob update'], reverse=True):
-            f.write('\t'.join(f'{k}: {v}' for k,v in x.items()) + '\n')
+            f.write('\t'.join(f'{k}: {" ".join(v) if isinstance(v,list) else round(v,5) if isinstance(v,float) else v}' for k,v in x.items() if k!='good') + '\n')
+    with open(f'experiments/{ARGS.expname}/bad_prob_updates.txt','w') as f:
+        for x in sorted(all_prob_changes, key=lambda x:x['prob update'], reverse=True):
+            if not x['good']:
+                f.write('\t'.join(f'{k}: {" ".join(v) if isinstance(v,list) else v}' for k,v in x.items() if k not in ['good', 'forder']) + '\n')
     inverse_probs_start_time = time()
     la.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
@@ -817,9 +841,15 @@ if __name__ == "__main__":
     plot_df(df_prior, ARGS.expname)
     plot_df(df_no_prior, f'{ARGS.expname} No Prior')
     print(la.syntaxl.memory['S\\NP'])
+    df = pd.DataFrame(all_prob_changes)
+    df = df.sort_values('prob update', ascending=False)
+    bad = df.loc[~df['good']].drop('good', axis=1)
+    df = df.drop('good', axis=1)
+    df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}/prob_updates.csv')
+    bad.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}/bad_prob_updates.csv')
     if ARGS.db_after:
         breakpoint()
-    with open(f'{ARGS.expname}_summary.txt','w') as f:
+    with open(f'experiments/{ARGS.expname}/{ARGS.expname}_summary.txt','w') as f:
         if ARGS.n_generate > 0:
             file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
         for _ in range(ARGS.n_generate):
