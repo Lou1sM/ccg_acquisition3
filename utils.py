@@ -88,7 +88,7 @@ def logical_de_type_raise(lf_str):
     #type_raising_part = re.match(r'lambda (\$\d{1,2}).\1',lf_str)
     type_raising_part = lambda_match(lf_str)
     len_of_type_raising_part = type_raising_part.span()[1]
-    rest = lf_str[len_of_type_raising_part+1:]
+    rest = lf_str[len_of_type_raising_part+3:]
     rest = maybe_debrac(rest)
     return rest
 
