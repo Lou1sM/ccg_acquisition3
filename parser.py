@@ -1,8 +1,9 @@
 import numpy as np
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced, SemCatError, ZeroProbError
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced
+from errors import SemCatError, ZeroProbError
 import re
 import sys; sys.setrecursionlimit(500)
-from config import pos_marking_dict, base_lexicon
+from converter_config import pos_marking_dict, base_lexicon
 
 
 # is_leaf means it's atomic in lambda calculus
@@ -51,7 +52,8 @@ class LogicalForm:
         self.root_cat = root_cat
         defining_string = maybe_debrac(defining_string)
         if parent == 'START' and  root_cat is not None:
-            self.sem_cats = set([root_cat])
+            #self.sem_cats = set([root_cat])
+            self.sem_cats = set('X')
             #self.set_cats_as_root(defining_string)
         #if re.match(r'BARE\([a-z-A-Z0-9\-_:]*\)',defining_string):
         if defining_string.startswith('BARE'):
@@ -229,21 +231,22 @@ class LogicalForm:
             return self.possible_app_splits
         if has_q:=any(x.node_type=='Q' for x in self.descs):
             qidx = [i for i,x in enumerate(self.descs) if x.node_type=='Q'][0]
-            verbs = [x for x in self.leaf_descs if x.string.startswith('v|') or x.string.startswith('mod|')]
-            if len(verbs)==0:
+            head_options = [x for x in self.leaf_descs if x.string.startswith('v|') or x.string.startswith('mod|')]
+            if len(head_options)==0:
+                head_options = [x for x in self.leaf_descs if x.string.startswith('det') or x.string.startswith('prep') or x.string.startswith('adv') or x.string == 'aux|~be']
+            if len(head_options)==0:
                 self.possible_app_splits = []
                 self.possible_cmp_splits = []
                 return self.possible_app_splits
-            main_verb = verbs[0]
+            else:
+                head = head_options[0]
+
         remove_types = ['const','noun','quant','barenoun','neg','raise']
         pridxs = [i for i,d in enumerate(self.descs) if d.node_type in remove_types]
         if debug_split_lf is not None and debug_split_lf == self.subtree_string(recompute=True):
             breakpoint()
         for ridxs in all_sublists(pridxs):
-            n_removees = len(ridxs)
-            if n_removees == 0: continue
-            if n_removees == len(pridxs):
-                continue
+            if (n_removees := len(ridxs)) in (0,len(pridxs)): continue
             if self.sem_cats.intersection({'S','S|NP'}) and \
                 all(self.descs[ri].sem_cats.intersection({'N'}) for ri in ridxs):
                     continue # this would result in illegitimate cats, like S|N or S|NP|N
@@ -253,7 +256,7 @@ class LogicalForm:
             f = self.copy()
             f.parent = self
             to_remove = [f.descs[i] for i in ridxs]
-            if has_q and main_verb in to_remove:
+            if has_q and head in to_remove:
                 ridxs.append(qidx)
             if any(x in not_removees for x in to_remove):
                 breakpoint()
@@ -322,7 +325,7 @@ class LogicalForm:
         f.parent = g.parent = self
         if not g.set_cats_from_string():
             return
-        if g.sem_cats == {'NP|N'}:
+        if g.sem_cats == {'NP|N'} and not g.lf_str.split('.')[1].startswith('not') and not g.lf_str.split('.')[1].startswith('Q'):
             breakpoint()
         if not g.cat_consistent():
             return
@@ -610,14 +613,14 @@ class ParseNode():
         assert (sibling is None) or (node_type != 'ROOT'), \
             "you're trying to specify a sibling for the root node"
         self.sem_cats = self.logical_form.sem_cats
+        if self.logical_form.possible_app_splits == []:
+            self.logical_form.infer_splits()
         if syn_cats is not None:
             self.syn_cats = syn_cats
         else:
             self.syn_cats = lf.sem_cats
         self.is_leaf = self.logical_form.is_semantic_leaf or len(self.words) == 1
         if not self.is_leaf:
-            if self.logical_form.possible_app_splits == []:
-                self.logical_form.infer_splits()
             for split_point in range(1,len(self.words)):
                 left_words = self.words[:split_point]
                 right_words = self.words[split_point:]
@@ -661,27 +664,26 @@ class ParseNode():
         self.append_split(left_child_fwd,right_child_fwd,'fwd_cmp')
 
     def add_app_splits(self,f,g,left_words,right_words):
-            # CONVENTION: f-child with the words on the left of sentence is
-            # the 'left' child, even if bck application, left child is g in
-            # that case
-            right_child_fwd = ParseNode(g,right_words,parent=self,node_type='right_fwd_app')
-            new_syn_cats = set(f'{ssync}/{maybe_brac(rcsync)}' for ssync in self.syn_cats for rcsync in right_child_fwd.syn_cats)
-            assert new_syn_cats != 'S/NP\\NP'
-            bad_new_syn_cats = [sc for sc in ('X\\S', 'X/S') if sc in new_syn_cats]
-            if len(bad_new_syn_cats) > 0:
-                raise SemCatError(f"bad new syn cats: {''.join(bad_new_syn_cats)}")
-            left_child_fwd = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',syn_cats=new_syn_cats)
-            #congs = set(x for x in f.sem_cats if any(is_congruent(x,y) for y in new_syn_cats))
-            if not ( f.was_cached or set_congruent(f.sem_cats, new_syn_cats)):
-                raise SemCatError('no f-semcats are congruent with it\'s new inferred syncats')
-            self.append_split(left_child_fwd,right_child_fwd,'fwd_app')
+        # CONVENTION: f-child with the words on the left of sentence is the
+        # 'left' child, even if bck application, left child is g in that case
+        right_child_fwd = ParseNode(g,right_words,parent=self,node_type='right_fwd_app')
+        new_syn_cats = set(f'{ssync}/{maybe_brac(rcsync)}' for ssync in self.syn_cats for rcsync in right_child_fwd.syn_cats)
+        assert new_syn_cats != 'S/NP\\NP'
+        bad_new_syn_cats = [sc for sc in ('X\\S', 'X/S') if sc in new_syn_cats]
+        if len(bad_new_syn_cats) > 0:
+            raise SemCatError(f"bad new syn cats: {''.join(bad_new_syn_cats)}")
+        left_child_fwd = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',syn_cats=new_syn_cats)
+        #congs = set(x for x in f.sem_cats if any(is_congruent(x,y) for y in new_syn_cats))
+        if not (f.was_cached or self.syn_cats==set('X') or set_congruent(f.sem_cats,new_syn_cats)):
+            raise SemCatError('no f-semcats are congruent with it\'s new inferred syncats')
+        self.append_split(left_child_fwd,right_child_fwd,'fwd_app')
 
-            left_child_bck = ParseNode(g,left_words,parent=self,node_type='left_bck_app')
-            new_syn_cats = set(f'{ssync}\\{maybe_brac(lcsync)}' for ssync in self.syn_cats for lcsync in left_child_bck.syn_cats if not (ssync=='S/NP' and lcsync=='NP'))
-            if new_syn_cats:
-                assert f.was_cached or set_congruent(f.sem_cats, new_syn_cats)
-                right_child_bck = ParseNode(f,right_words,parent=self,node_type='right_bck_app',syn_cats=new_syn_cats)
-                self.append_split(left_child_bck,right_child_bck,'bck_app')
+        left_child_bck = ParseNode(g,left_words,parent=self,node_type='left_bck_app')
+        new_syn_cats = set(f'{ssync}\\{maybe_brac(lcsync)}' for ssync in self.syn_cats for lcsync in left_child_bck.syn_cats if not (ssync=='S/NP' and lcsync=='NP'))
+        if new_syn_cats and self.syn_cats!=set('X'):
+            assert f.was_cached or set_congruent(f.sem_cats, new_syn_cats)
+            right_child_bck = ParseNode(f,right_words,parent=self,node_type='right_bck_app',syn_cats=new_syn_cats)
+            self.append_split(left_child_bck,right_child_bck,'bck_app')
 
     def append_split(self,left,right,combinator):
         left.siblingify(right)

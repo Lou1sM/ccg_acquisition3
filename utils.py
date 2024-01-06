@@ -20,6 +20,8 @@ def is_wellformed_lf(lf):
     if bool(re.search(r'lambda(?! \$\d)',lf)): # rule out this simple string
     #if bool(re.search(r'lambda(?! (WHAT1|WHO1|\$\d))', lf)):
         return False
+    if lf.count('.') != lf.count('lambda'):
+        return False
     lf = maybe_debrac(lf)
     if bool(re.match(r'[a-zA-Z0-9_]+',lf)):
         return True
@@ -88,8 +90,14 @@ def logical_de_type_raise(lf_str):
     #type_raising_part = re.match(r'lambda (\$\d{1,2}).\1',lf_str)
     type_raising_part = lambda_match(lf_str)
     len_of_type_raising_part = type_raising_part.span()[1]
-    rest = lf_str[len_of_type_raising_part+3:]
+    rest = lf_str[len_of_type_raising_part:]
+    maybe_lambda, body = all_lambda_body_splits(rest)
+    if not body.startswith('$0'):
+        return lf_str
+    return maybe_lambda + body[3:]
     rest = maybe_debrac(rest)
+    if not is_wellformed_lf(rest):
+        breakpoint()
     return rest
 
 def get_cmp_of_lfs(f_str,g_str):
@@ -202,7 +210,8 @@ def strip_string(ss):
     #ss = re.sub(r'(lambda \$\d{1,2})+\.','', ss)
     ss = re.sub(r'^(lambda \$\d{1,2}\.)+','', ss)
     #ss = re.sub(r'( ?\$\d+)+$','',ss.replace('(','').replace(')',''))
-    ss = re.sub(r' ?\$\d{1,2}','', ss).replace('()','')
+    ss = re.sub(r' ?\$\d{1,2}','', ss)
+    ss = re.sub(r'\( *\)','', ss)
     # allowed to have trailing bound variables
     return ss.strip()
 
@@ -215,7 +224,7 @@ def set_congruent(sc1s, sc2s):
 def is_congruent(sc1,sc2):
     if sc1 is None or sc2 is None:
         return False
-    return sc1 == 'X' or sc2 == 'X' or n_nps(sc1) == n_nps(sc2)
+    return 'X' in sc1 or 'X' in sc2 or n_nps(sc1) == n_nps(sc2)
 
 def is_direct_congruent(sc1,sc2):
     sc1 = re.sub(r'[\\/]','|',sc1)
@@ -554,23 +563,3 @@ def parses_of_syn_cats(self,syn_cats):
     for _ in range(len(syn_cats)-1):
         frontiers = [current+[f] for current in frontiers for f in possible_next_frontiers(current[-1])]
     return frontiers
-
-class CCGLearnerError(Exception):
-    """A base class for CCGLearnerError exceptions."""
-    def __init__(self, msg=''):
-        self.msg = msg
-
-    def __repr__(self):
-        raise NotImplementedError
-
-class SemCatError(CCGLearnerError):
-    """A base class for CCGLearnerError exceptions."""
-
-    def __str__(self):
-        return 'SemCat Error' if self.msg == '' else f'SemCat Error: {self.msg}'
-
-class ZeroProbError(CCGLearnerError):
-    """A base class for CCGLearnerError exceptions."""
-
-    def __str__(self):
-        return 'ZeroProb Error' if self.msg == '' else f'ZeroProb Error: {self.msg}'

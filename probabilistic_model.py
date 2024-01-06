@@ -1,6 +1,5 @@
 import numpy as np
 from dl_utils.misc import check_dir
-from config import exclude_lfs
 from gt_parse_graphs import gts
 import os
 import networkx as nx
@@ -10,7 +9,8 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_cat_congruent, CCGLearnerError
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_cat_congruent
+from errors import CCGLearnerError, RootSemCatError
 from time import time
 import argparse
 from abc import ABC
@@ -393,6 +393,7 @@ class LanguageAcquirer():
             else:
                 new_shmeaningl_buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
             new_meaningl_buffer.append((lf,shell_lf,leaf_prob))
+            assert lf != '0 pro:per|you'
             new_wordl_buffer.append((word_str,lf,leaf_prob))
         bad_prob = sum(x[2] for x in new_shmeaningl_buffer if x[0]=='lambda $0.lambda $1.vconst $0 $1')
         good_prob = sum(x[2] for x in new_shmeaningl_buffer if x[0]=='lambda $0.lambda $1.vconst $1 $0')
@@ -488,6 +489,8 @@ class LanguageAcquirer():
 
     def make_parse_node(self,lf_str,words):
         lf = self.get_lf(lf_str)
+        #if lf.sem_cats == set('X'):
+            #raise RootSemCatError(lf.lf_str)
 
         if ' '.join([lf_str]+words) in self.parse_node_cache:
             parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
@@ -499,6 +502,10 @@ class LanguageAcquirer():
         return parse_root
 
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
+        self.lf_word_counts =  pd.DataFrame({lf:{w:self.wordl.memory[lf].get(w,0) for w in self.vocab} for lf in self.lf_vocab})
+        self.marginal_word_probs = self.lf_word_counts.sum(axis=1)
+        self.lf_shell_lf_counts =  pd.DataFrame({lfs:{lf:self.meaningl.memory[lfs].get(lf,0) for lf in self.lf_vocab} for lfs in self.shell_lf_vocab})
+        self.marginal_lf_probs = self.lf_shell_lf_counts.sum(axis=1)
         self.word_to_lf_probs = pd.DataFrame([{y:self.wordl.prob(x,y) for y in self.lf_vocab} for x in self.mwe_vocab],index=self.mwe_vocab)
 
         self.lf_to_lf_shell_probs = pd.DataFrame([{y:self.meaningl.prob(x,y) for y in self.shell_lf_vocab} for x in self.lf_vocab],index=self.lf_vocab)
@@ -690,7 +697,7 @@ class LanguageAcquirer():
         plt.savefig(f'{graph_dir}/{fname}.png')
         plt.clf()
         if ARGS.show_graphs:
-            os.system(f'/usr/bin/xdg-open experiments/{ARGS.expname}/plotted_graphs/{fname}.png')
+            os.system(f'/usr/bin/xdg-open "experiments/{ARGS.expname}/plotted_graphs/{fname}.png"')
 
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
@@ -746,8 +753,8 @@ if __name__ == "__main__":
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     f = open(f'experiments/{ARGS.expname}/results.txt','w')
-    all_data = [x for x in d['data'] if all(y not in x['lf'] for y in exclude_lfs)]
-    all_data = [x for x in all_data if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
+    #all_data = [x for x in d['data'] if all(y not in x['lf'] for y in exclude_lfs)]
+    all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
     all_data = [x for x in all_data if len(x['words']) > 1]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
     train_data = data_to_use[:-len(data_to_use)//20]
@@ -841,12 +848,13 @@ if __name__ == "__main__":
     plot_df(df_prior, ARGS.expname)
     plot_df(df_no_prior, f'{ARGS.expname} No Prior')
     print(la.syntaxl.memory['S\\NP'])
-    df = pd.DataFrame(all_prob_changes)
-    df = df.sort_values('prob update', ascending=False)
-    bad = df.loc[~df['good']].drop('good', axis=1)
-    df = df.drop('good', axis=1)
-    df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}/prob_updates.csv')
-    bad.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}/bad_prob_updates.csv')
+    if ARGS.n_dpoints>0:
+        df = pd.DataFrame(all_prob_changes)
+        df = df.sort_values('prob update', ascending=False)
+        bad = df.loc[~df['good']].drop('good', axis=1)
+        df = df.drop('good', axis=1)
+        df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_prob_updates.csv')
+        bad.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_bad_prob_updates.csv')
     if ARGS.db_after:
         breakpoint()
     with open(f'experiments/{ARGS.expname}/{ARGS.expname}_summary.txt','w') as f:

@@ -1,95 +1,19 @@
-pos_marking_dict = {
-                    'adj':set(['N|N']),
-                    'adv':set([None]),
-                    'adv:int':set([None]),
-                    'adv:tem':set([None]),
-                    'aux':set([None]),
-                    'chi':set([None]),
-                    #'co':set(['S']),
-                    'co':set([None]),
-                    'conj':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
-                    'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # same as above ok for now?
-                    'cop':set(['S|S','X']),
-                    'det':set(['NP|N']),
-                    'det:art':set(['NP|N']),
-                    'det:dem':set(['NP|N']),
-                    'det:int':set(['NP']),
-                    'det:num':set(['NP|N']),
-                    'det:poss':set(['NP|N']),
-                    'meta':set([None]),
-                    'mod':set(['S|NP|(S|NP)','S|(S|NP)|NP','S|NP|(S|NP)','S|(S|NP)|NP']),
-                    'mod:aux':set([None]),
-                    'n':set(['N']),
-                    'n:gerund':set(['NP']),
-                    'n:let':set(['NP']),
-                    'n:prop':set(['NP']),
-                    'n:pt':set(['N']), # seems to be for nouns with plural morph.]), like scissors
-                    'neg':set(['S|S']), # ?
-                    'on':set([None]),
-                    'part':set([None]),
-                    'poss':set([None]),
-                    'post':set(['S|S']), # ?
-                    'prep':set(['S|NP|NP', 'S|S|NP']),
-                    'pro:dem':set(['NP']), # ?
-                    'pro:exist':set(['NP']),
-                    'pro:indef':set(['NP']),
-                    'pro:int':set(['NP']),
-                    'pro:obj':set(['NP']),
-                    'pro:per':set(['NP']),
-                    'pro:poss':set(['NP']),
-                    'pro:refl':set(['NP']),
-                    'pro:rel':set(['NP']),
-                    'pro:sub':set(['NP']),
-                    'qn':set(['NP|N']),
-                    'sing':set([None]),
-                    'v':set(['S|NP','S|NP|NP']),
-                    #'v:obj':set([None]),
-                    'wplay':set([None]),
-                    }
-
-pos_marking_dict = {k:set(['X']) if v == set([None]) else v for k,v in pos_marking_dict.items()}
-
-
-base_lexicon = {k:set(['NP']) for k in ('you','i','me','he','she','it','WHAT','WHO')}
-base_lexicon['equals'] = set(['S|NP|NP'])
-base_lexicon['hasproperty'] = set(['S|NP|(N|N)'])
-base_lexicon['mod|will_2'] = set(['S|NP', 'S|NP|NP'])
-base_lexicon['not'] = set(['X'])
-
 full_lfs_to_exclude = [
         # Adam
         'lambda $0_{r}.cop|be-pres_1(part|write-presp_3(pro:per|you_2,det:art|a_4($1,n|letter_5($1)),$0),$0)',
-        'n|stop_1 you',
-        'n|talk_1 you',
-        'Q (n:prop|adam_3 pro:per|you_1)',
-        'Q (n:prop|ursula_3 pro:per|you_1)',
-        'Q (pro:int|what_3 pro:per|you_1)',
-        'Q (not (v|hurry_3 you))',
-        'Q (n:prop|daddy_3 pro:dem|that_1)',
-        'Q (n|right_3 pro:dem|that_2)',
-        'cop|be-pres_1 (part|write-presp_3 pro:per|you_2 (det:art|a_4 n|letter_5))',
-        'v|have_2 (v|get-past_4 pro:sub|they_3 WHAT)',
-        'not (v|know_4 pro:sub|he_1 (BARE n|boy-pl_7))',
-        'BARE $0 (pro:indef|more_2 $0)', # not well-formed
-        'det:art|the_1 $0 (pro:indef|one_2 $0)', # not well-formed
-        'adv|enough_3', # not well-formed
-        'v|have_2 pro:per|you_1 (det:art|a_3 n|funnel_4)', # doesn't match sent
-        'v|have pro:per|you (det:art|a n|funnel)', # doesn't match sent
-        'v|open pro:per|you pro:per|it', # doesn't match sent
-        'Q (prep|like_1 pro:dem|that_2)', # just prepositional phrase
-        'qn|some n|water', # just noun phrase
-        'n|tickle WHO pro:obj|me', # 'tickle' pos wrong and sent is malordered
-        'n|call you n:prop|robin', # 'call' pos wrong and not clear what sent means
+        'lambda $1_{e}.lambda $0_{r}.$1(qn|many_3(BARE($2,n|bear-pl_4($2)),$0))', # superfluous 'BARE'
+        'lambda $0_{r}.v|say-3s_2(n|mine_1,BARE($1,n:let|p_3($1)),$0)', # doesn't match sent
+        'lambda $0_{r}.v|have_2(pro:per|you_1,det:art|a_3($1,n|funnel_4($1)),$0)', # doesn't match sent
         'lambda $0_{r}.co|thank_you_1(you,$0)', # unclear semantics, unclear semcat
         'lambda $0_{r}.Q(det:art|a_3(pro:rel|that_2,and_comp(n|dragon_4(pro:rel|that_2,$0),n|fly_5(pro:rel|that_2,$0))))', # malformed
         'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_4,$0)', # dum_dum wrong pos and no 'or' as in sent
         'lambda $1_{e}.lambda $0_{r}.$1(qn|many_3(BARE($2,n|bear-pl_4($2)),$0))', # not well-formed
         'lambda $0_{r}.mod|~will_2(adj|soon_5(adj|ready_4(pro:per|it_1,$0)),$0)', # don't know how to model
-        'aux|have (mod|must (adv|so (v|hasproperty pro:per|you adj|hungry)))', # don't know how to model
         'lambda $0_{r}.cop|be-3s_3_there_1_it_2(you,$0)', # don't know how to model but seems wrong
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         ]
+
 
 partial_lfs_to_exclude = [
         # Adam
@@ -191,6 +115,7 @@ premanual_ida_fixes = {
     'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,co|help_4($1)),$0)':'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,n|help_4($1)),$0)', # pos of 'help' to n
     'lambda $0_{r}.Q(det:art|the_3(pro:rel|that_2,n|kitchen_4(pro:rel|that_2,$0)))':'lambda $0_{r}.Q(det:art|the_3(pro:dem|that_2,n|kitchen_4(pro:dem|that_2,$0)))', # pos of 'that' to pro:dem from pro:rel
     'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
+    'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
     }
 
 manual_ida_fixes = { # applied after conversion to no-comma form
@@ -207,6 +132,7 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (mod|will-cond (conj|like pro:per|you (det:art|a n|piece)))': 'Q (mod|will-cond (v|like pro:per|you (det:art|a n|piece)))', # pos of 'like' to verb
     'qn|another $0 (pro:indef|one $0)': 'qn|another pro:indef|one', # missed 'one' as noun
     'Q (mod|do (v|see pro:per|you n|thing_5_any))': 'Q (mod|do (v|see pro:per|you (qn|any n|thing)))', # split anything into two words like it is in the sent (which may well be mistranscribed)
+    'Q (pro:dem|that $1 (pro:indef|one $1))': 'Q (pro:dem|that $1 (pro:indef|one $1))', # split anything into two words like it is in the sent (which may well be mistranscribed)
     'v|ciyēr pro:per|ʔat (BARE n|ʕigūl)': 'v|ciyēr you (BARE n|ʕigūl)', # split anything into two words like it is in the sent (which may well be mistranscribed)
     }
 

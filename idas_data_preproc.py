@@ -3,7 +3,7 @@ from pprint import pprint as pp
 import numpy as np
 import re
 from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf
-from config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes
+from converter_config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes
 
 
 with open('data/hagar_comma_format.txt') as f:
@@ -175,7 +175,6 @@ def lf_preproc(lf_, sent):
     if dlf in manual_ida_fixes.keys():
         old_dlf = dlf
         dlf = manual_ida_fixes[dlf]
-        print(f'fixing {old_dlf} to {dlf}')
     if 'pro:per|yo' in dlf.replace('(',' ').replace(')',' ').split():
         breakpoint()
     if np_marked:
@@ -189,19 +188,19 @@ def lf_preproc(lf_, sent):
     if dlf == '$ $':
         breakpoint()
     assert is_wellformed_lf(dlf)
+    if any(x in dlf for x in exclude_lfs):
+        print(sent[6:-1], dlf)
     return f'{root_cat}: {dlf}'
 
-def sent_preproc(sent):
+def sent_preproc(sent, lf):
     sent = sent[6:].rstrip('?.!\n ')
     assert not sent.endswith(' ')
     if sent in sent_fixes:
         sent = sent_fixes[sent]
     sent = [w for w in sent.split() if w not in cw_words]
-    sent = [w for w in sent if not w[0].isupper()]
+    sent = [w for w in sent if not w[0].isupper() or w.lower() in lf]
     if ' '.join(sent) in manual_sent_fixes:
-        print('fixing', sent, 'to ',end='')
         sent = manual_sent_fixes[' '.join(sent)].split()
-        print(sent)
     return sent
 
 if __name__ == '__main__':
@@ -231,7 +230,7 @@ if __name__ == '__main__':
             continue
         if s[6:-3] in exclude_sents:
             continue
-        ps = sent_preproc(s)
+        ps = sent_preproc(s,l)
         if ARGS.db_sent is not None and ps == ARGS.db_sent.split():
             breakpoint()
         if ps == []:
@@ -240,8 +239,6 @@ if __name__ == '__main__':
         pl = lf_preproc(l,s)
         if ARGS.print_conversions:
             print(' '.join(ps))
-        if 'now' in s.split():
-            print(' '.join(ps), pl)
         if pl.endswith(': '):
             continue
         if pl is None:
