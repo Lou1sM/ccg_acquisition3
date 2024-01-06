@@ -57,7 +57,7 @@ base_lexicon['hasproperty'] = set(['S|NP|(N|N)'])
 base_lexicon['mod|will_2'] = set(['S|NP', 'S|NP|NP'])
 base_lexicon['not'] = set(['X'])
 
-gt_word_meanings_and_syncats = {
+gt_word2lfs = {
             "'ll": 'lambda $0.lambda $1.mod|~will ($0 $1)',
              "'re": 'lambda $0.lambda $1.Q (v|equals $0 $1)',
              "'s": 'lambda $0.lambda $1.v|equals $1 $0',
@@ -106,7 +106,8 @@ gt_word_meanings_and_syncats = {
              'what': 'pro:int|WHAT',
              'who': 'pro:int|WHO',
              'you': 'pro:per|you',
-             'your': 'lambda $0.det:poss|your $0'
+             'your': 'lambda $0.det:poss|your $0',
+             'them': 'pro:obj|them',
              }
 
 

@@ -3,7 +3,8 @@ from pprint import pprint as pp
 import numpy as np
 import re
 from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf
-from converter_config import manual_ida_fixes, pos_marking_dict, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes
+from converter_config import manual_ida_fixes, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes
+from learner_config import pos_marking_dict
 
 
 with open('data/hagar_comma_format.txt') as f:
@@ -65,11 +66,10 @@ def decommafy(parse, debrac=False):
     return lf
 
 def _decommafy_inner(parse):
-    if parse == 'pro:dem|that_1(pro:per|it_3)':
-        return 'v|equals pro:dem|that pro:per|it'
-    if parse.startswith('Q(mod|do_1('):
-        breakpoint()
     parse = maybe_debrac(parse)
+    if ',' not in parse and '(' not in parse:
+        assert ')' not in parse
+        return parse
     if bool(mdm := maybe_detnoun_match(parse)):
         det, var, noun = mdm.groups()
         if det != 'BARE':
@@ -87,12 +87,7 @@ def _decommafy_inner(parse):
         assert rest == ''
         end_of_predicate = first_chunk.find('(')
         pred = first_chunk[:end_of_predicate]
-        args = first_chunk[end_of_predicate+1:-1]
-        if re.match(r'(v|mod)\|do',pred):
-            if '-' in pred and args.startswith('v|'):
-                marking = pred.split('-')[1].split('_')[0]
-                args = re.sub(r'v\|([a-zA-Z0-9]+)_',fr'v|\1-{marking}_', args)
-                pred = ''
+        args = maybe_debrac(first_chunk[end_of_predicate:])
         arg_splits = split_respecting_brackets(args,sep=',')
 
         if len(arg_splits)==1 and is_nplike(arg_splits[0]):
@@ -128,6 +123,10 @@ def lf_preproc(lf_, sent):
     lf = lf.replace('co|like', 'v|like')
     lf = lf.replace('conj|like', 'v|like')
     lf = lf.replace('co|look', 'v|look')
+    lf = lf.replace('n|ʔābaʔ', 'n:prop|ʔābaʔ' )
+    lf = lf.replace('n|ʔīmaʔ', 'n:prop|ʔīmaʔ' )
+    if ('n:prop|ʔābaʔ' in lf or 'n:prop|ʔīmaʔ' in lf) and ('det|ha' in lf or 'det|~ha' in lf):
+        breakpoint()
     if 'lambda $0' in lf.rpartition('.')[0]:
         lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
@@ -175,8 +174,6 @@ def lf_preproc(lf_, sent):
     if dlf in manual_ida_fixes.keys():
         old_dlf = dlf
         dlf = manual_ida_fixes[dlf]
-    if 'pro:per|yo' in dlf.replace('(',' ').replace(')',' ').split():
-        breakpoint()
     if np_marked:
         root_cat='NP'
     elif 'WH' in dlf:
@@ -185,11 +182,7 @@ def lf_preproc(lf_, sent):
         root_cat='Sq'
     else:
         root_cat='S'
-    if dlf == '$ $':
-        breakpoint()
     assert is_wellformed_lf(dlf)
-    if any(x in dlf for x in exclude_lfs):
-        print(sent[6:-1], dlf)
     return f'{root_cat}: {dlf}'
 
 def sent_preproc(sent, lf):
@@ -237,15 +230,15 @@ if __name__ == '__main__':
             n_excluded+=1
             continue
         pl = lf_preproc(l,s)
-        if ARGS.print_conversions:
-            print(' '.join(ps))
         if pl.endswith(': '):
             continue
         if pl is None:
             continue
-
-        if 'bōʔi bōʔi' in s:
-            breakpoint()
+        if '_' in pl:
+            continue
+        assert not any(x in pl for x in exclude_lfs)
+        if ARGS.print_conversions:
+            print(' '.join(ps))
         dset_data.append({'lf':pl, 'words':ps})
     x=[' '.join(y['words']) for y in dset_data]
     y=dict(zip(*np.unique(x, return_counts=True)))
@@ -257,7 +250,6 @@ if __name__ == '__main__':
     print(f'Num Remaining Points: {len(dset_data)}')
     with open(f'data/{ARGS.dset}.json','w') as f:
         json.dump(dset,f)
-    breakpoint()
     with open(f'data/{ARGS.dset}_no_commas.txt','w') as f:
         for dpoint in dset_data:
             sent, lf = dpoint['words'], ' '.join(dpoint['lf'])

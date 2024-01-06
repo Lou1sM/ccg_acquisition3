@@ -3,7 +3,7 @@ from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_b
 from errors import SemCatError, ZeroProbError
 import re
 import sys; sys.setrecursionlimit(500)
-from converter_config import pos_marking_dict, base_lexicon
+from learner_config import pos_marking_dict, base_lexicon
 
 
 # is_leaf means it's atomic in lambda calculus
@@ -211,8 +211,6 @@ class LogicalForm:
         is_congruent = self.is_type_congruent()
         if not (self.parent=='START' and self.root_cat is not None):
             self.caches['cats'][self.lf_str] = self.sem_cats, self.is_semantic_leaf, is_congruent
-        if self.lf_str == 'adj|qar' and 'S' in self.sem_cats:
-            breakpoint()
         return is_congruent
 
     def is_type_congruent(self):
@@ -521,8 +519,9 @@ class LogicalForm:
             assert len(self.children) == 1
             # debraccing only happens in subtree_string() so child already bracced here
             x = self.children[0].subtree_string_(show_treelike,as_shell,recompute=recompute)
-            bracced_if_var = f'({x})' if x.startswith('$') or x.startswith('BARE') else x
-            return f'Q {bracced_if_var}'
+            #bracced_if_var = f'({x})' if x.startswith('$') or x.startswith('BARE') else x
+            #return f'Q {bracced_if_var}'
+            return f'Q {maybe_brac(x)}'
         elif self.node_type in ['composite','detnoun']:
             child_trees = [maybe_brac(c.subtree_string_(show_treelike,as_shell,recompute=recompute),sep=[' ']) for c in self.children]
             if show_treelike:
@@ -714,7 +713,7 @@ class ParseNode():
         sem_cats = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.sem_cats)
         syn_cats = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.syn_cats)
         if sem_cats != self.sem_cats: # has been de-type-raised
-            assert syn_cats != self.syn_cats
+            assert syn_cats != self.syn_cats or any('X' in sync for sync in syn_cats)
             assert all(any(maybe_debrac(maybe_de_type_raise(s1))==s2 for s1 in self.sem_cats) for s2 in sem_cats)
             assert all(any(maybe_debrac(maybe_de_type_raise(s1))==s2 for s1 in self.syn_cats) for s2 in syn_cats)
             shell_lf = alpha_normalize(logical_de_type_raise(shell_lf))

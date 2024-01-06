@@ -17,6 +17,7 @@ from abc import ABC
 import re
 from parser import LogicalForm, ParseNode
 import json
+from learner_config import gt_word2lfs
 
 
 def type_raise(cat,direction,out_cat='S'):
@@ -317,12 +318,12 @@ class LanguageAcquirer():
         #file_print(f'\nLearned syntactic categories for \'{word}\'',f)
         #file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in syn_cats.items() if prob > 1e-4]),f)
 
-    def show_splits(self,syn_cat,f):
-        file_print(f'Learned splits for category {syn_cat}',f)
-        counts = self.syntaxl.memory[syn_cat]
-        norm = counts['COUNT']
-        probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='COUNT'}
-        file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
+    #def show_splits(self,syn_cat,f):
+        #file_print(f'Learned splits for category {syn_cat}',f)
+        #counts = self.syntaxl.memory[syn_cat]
+        #norm = counts['COUNT']
+        #probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='COUNT'}
+        #file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
 
     def get_lf(self,lf_str_):
         root_cat, lf_str = lf_str_.split(': ')
@@ -370,10 +371,6 @@ class LanguageAcquirer():
         new_meaningl_buffer = []
         new_wordl_buffer = []
         for node, prob in prob_cache.items():
-            #if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $1 $0':
-                #breakpoint()
-            #if node.syn_cats == {'S\\NP/NP'} and node.lf_str == 'lambda $0.lambda $1.v|racā $0 $1':
-                #breakpoint()
             if node.parent is not None and not node.is_g:
                 update_weight = node.prob / root_prob # for conditional
                 if node.is_fwd:
@@ -393,23 +390,9 @@ class LanguageAcquirer():
             else:
                 new_shmeaningl_buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
             new_meaningl_buffer.append((lf,shell_lf,leaf_prob))
-            assert lf != '0 pro:per|you'
             new_wordl_buffer.append((word_str,lf,leaf_prob))
         bad_prob = sum(x[2] for x in new_shmeaningl_buffer if x[0]=='lambda $0.lambda $1.vconst $0 $1')
         good_prob = sum(x[2] for x in new_shmeaningl_buffer if x[0]=='lambda $0.lambda $1.vconst $1 $0')
-        #print(bad_prob, good_prob)
-        #if ARGS.dset == 'adam': # still dealing with this on Adam, extended shell_lfs should help
-            #print(self.shmeaningl.prob('lambda $0.const const $0','S|NP'),self.shmeaningl.prob('lambda $0.const $0 const','S|NP'))
-        #else:
-        #print(self.shmeaningl.prob('lambda $0.lambda $1.vconst $0 $1','S|NP|NP'),self.shmeaningl.prob('lambda $0.lambda $1.vconst $1 $0','S|NP|NP'))
-        #if bad_prob > good_prob:
-            #print(f'BAD: {bad_prob} IS GREATER THAN GOOD: {good_prob}')
-            #print('TOTAL BAD:', self.shmeaningl.prob('lambda $0.lambda $1.vconst $0 $1','S|NP|NP'), 'TOTAL GOOD:', self.shmeaningl.prob('lambda $0.lambda $1.vconst $1 $0','S|NP|NP'))
-            #g1 = max([(x,y) for x,y in prob_cache.items() if 'S\\NP/NP' in x.syn_cats], key=lambda x:x[1])[0]
-            #good = get_root(g1)
-            #b1 = max([(x,y) for x,y in prob_cache.items() if 'S|NP|NP' in x.sem_cats], key=lambda x:x[1])[0]
-            #bad = get_root(b1)
-            #self.as_leaf(g1)
         self.syntaxl.buffers.append(new_syntaxl_buffer)
         self.shmeaningl.buffers.append(new_shmeaningl_buffer)
         self.meaningl.buffers.append(new_meaningl_buffer)
@@ -752,7 +735,6 @@ if __name__ == "__main__":
         la.load_from(f'experiments/{ARGS.reload_from}')
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
-    f = open(f'experiments/{ARGS.expname}/results.txt','w')
     #all_data = [x for x in d['data'] if all(y not in x['lf'] for y in exclude_lfs)]
     all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
     all_data = [x for x in all_data if len(x['words']) > 1]
@@ -807,7 +789,6 @@ if __name__ == "__main__":
                 la.train()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
-        la.show_splits(ARGS.cat_to_sample_from,f)
         final_parses = {}
         n_correct_parses = 0
 
@@ -847,14 +828,18 @@ if __name__ == "__main__":
 
     plot_df(df_prior, ARGS.expname)
     plot_df(df_no_prior, f'{ARGS.expname} No Prior')
-    print(la.syntaxl.memory['S\\NP'])
-    if ARGS.n_dpoints>0:
+    print(la.syntaxl.memory.get('S\\NP',None))
+    if len(train_data)>=2:
         df = pd.DataFrame(all_prob_changes)
         df = df.sort_values('prob update', ascending=False)
         bad = df.loc[~df['good']].drop('good', axis=1)
         df = df.drop('good', axis=1)
         df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_prob_updates.csv')
         bad.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_bad_prob_updates.csv')
+    correct_lf2words = [(v,la.wordl.top_k(v,2)[1][0]==k if v in la.wordl.memory else 0) for k,v in gt_word2lfs.items()]
+    correct_word2lfs = [(k,la.lf_word_counts.loc[k].idxmax()==v if k in la.lf_word_counts.index else 0) for k,v in gt_word2lfs.items()]
+    lf2word_acc = sum([x[1] for x in correct_lf2words])/len(correct_lf2words)
+    word2lf_acc = sum([x[1] for x in correct_word2lfs])/len(correct_word2lfs)
     if ARGS.db_after:
         breakpoint()
     with open(f'experiments/{ARGS.expname}/{ARGS.expname}_summary.txt','w') as f:
@@ -867,7 +852,11 @@ if __name__ == "__main__":
             else:
                 file_print(f'{generated}: not seen during training',f)
         file_print(f'Total run time: {time()-start_time:.3f}s',f)
-    la.parse('you missed it'.split())
+        file_print(f'Word to LF accuracy: {word2lf_acc:.4f}',f)
+        file_print(f'LF to Word accuracy: {lf2word_acc:.4f}',f)
+        file_print('Final word order probs:',f)
+        for k,v in all_word_order_probs[-1].items():
+            file_print(f'{k}: {v:.6f}',f)
     for dpoint in test_data[:ARGS.n_test]:
         la.parse(dpoint['words'])
     if ARGS.test_gts:
