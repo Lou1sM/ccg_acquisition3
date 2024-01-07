@@ -344,20 +344,18 @@ class LanguageAcquirer():
                 new_prob_cache = {}
                 new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                            self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
+                if lfs == ARGS.dbr:
+                    breakpoint()
             except CCGLearnerError as e:
                 new_problem_list.append((dpoint,e))
                 print(lfs, e)
                 continue
-            if root.possible_splits == []:
+            if root.possible_splits == [] and not ARGS.suppress_prints:
                 print('no splits :(')
             if new_root_prob==0:
                 print('zero root prob for', lfs, words)
             root.propagate_above_probs(1)
-            if lfs == ARGS.dbr:
-                breakpoint()
             if words == ARGS.dbsent.split():
-                breakpoint()
-            if ' '.join(words).startswith('ken ʔa'):
                 breakpoint()
             for n,p in new_prob_cache.items():
                 if n in prob_cache.keys():
@@ -705,6 +703,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--overwrite", action="store_true")
     ARGS.add_argument("--test_gts", action="store_true")
     ARGS.add_argument("--shuffle", action="store_true")
+    ARGS.add_argument("--suppress_prints", action="store_true")
     ARGS.add_argument("--condition_on_syncats", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='adam')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
@@ -736,7 +735,7 @@ if __name__ == "__main__":
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     #all_data = [x for x in d['data'] if all(y not in x['lf'] for y in exclude_lfs)]
     all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
-    all_data = [x for x in all_data if len(x['words']) > 1]
+    #all_data = [x for x in all_data if len(x['words']) > 1]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
     train_data = data_to_use[:-len(data_to_use)//20]
     test_data = train_data if ARGS.is_test else data_to_use[-len(data_to_use)//5:]
@@ -763,7 +762,8 @@ if __name__ == "__main__":
             start = max(0, i-(ARGS.n_distractors//2))
             stop = min(len(train_data)-1, i+((ARGS.n_distractors+1)//2)+1)
             lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
-            print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
+            if not ARGS.suppress_prints:
+                print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
             apply_buffers = i>=ARGS.n_distractors
             n_words_seen = sum(w in la.vocab for w in words)
             frac_words_seen = n_words_seen/len(words)
@@ -777,7 +777,7 @@ if __name__ == "__main__":
                     diff_probs = new_probs_with_prior-all_word_order_probs[-1]
                     forder = diff_probs.idxmax()
                     good_point = diff_probs['svo'] == diff_probs.max()
-                    if not good_point and prob_change > 1e-5:
+                    if not good_point and prob_change > 1e-5 and not ARGS.suppress_prints:
                         print(new_probs_with_prior)
                     #all_prob_changes.append((prob_change,(words,lf_strs_incl_distractors)))
                     all_prob_changes.append({'prob update': prob_change, 'dpoint index': i, 'words':' '.join(words), 'lf':dpoint['lf'], 'good':good_point, 'favoured order':forder,'nseen':n_words_seen})
@@ -835,8 +835,8 @@ if __name__ == "__main__":
         df = df.drop('good', axis=1)
         df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_prob_updates.csv')
         bad.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_bad_prob_updates.csv')
-    correct_lf2words = [(v,la.wordl.top_k(v,2)[1][0]==k if v in la.wordl.memory else 0) for k,v in gt_word2lfs.items()]
-    correct_word2lfs = [(k,la.lf_word_counts.loc[k].idxmax()==v if k in la.lf_word_counts.index else 0) for k,v in gt_word2lfs.items()]
+    correct_lf2words = [(v,la.wordl.top_k(v,2)[1][0]==k if v in la.wordl.memory else 0) for k,v in gt_word2lfs]
+    correct_word2lfs = [(k,la.lf_word_counts.loc[k].idxmax()==v if k in la.lf_word_counts.index else 0) for k,v in gt_word2lfs]
     lf2word_acc = sum([x[1] for x in correct_lf2words])/len(correct_lf2words)
     word2lf_acc = sum([x[1] for x in correct_word2lfs])/len(correct_word2lfs)
     if ARGS.db_after:

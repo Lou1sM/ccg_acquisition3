@@ -52,12 +52,9 @@ class LogicalForm:
         if parent == 'START':
             self.sem_cats = set('X')
         if defining_string.startswith('BARE'):
-            self.node_type = 'entity'
-            self.is_leaf = True
-            self.string = defining_string
-            for v_num in set(re.findall(r'(?<=\$)\d{1,2}',defining_string)):
-                self.extend_var_descs(v_num)
-        elif defining_string=='not':
+            print('\n'+defining_string+'\n')
+            raise SemCatError()
+        if defining_string=='not':
             self.node_type = 'neg'
             self.string = 'not'
             self.is_leaf = True
@@ -116,7 +113,7 @@ class LogicalForm:
             elif re.match(r'[\w:]+\|', defining_string):
                 chiltag = defining_string.split('|')[0]
                 if chiltag not in chiltag_to_node_types:
-                    if chiltag not in ['part','aux','on','poss']:
+                    if chiltag not in ['part','aux','on','poss','pro:exist','post']:
                         print(defining_string)
                     self.node_type = chiltag
                 else:
@@ -177,17 +174,13 @@ class LogicalForm:
                         breakpoint()
                     ss = ss[1:-1].strip()
                 ss = maybe_debrac(ss[4:]) if (notstart:=ss.startswith('not ')) else ss
-                #self.is_semantic_leaf = self.node_type=='barenoun' or ' ' not in ss
                 self.is_semantic_leaf = ' ' not in ss.lstrip('BARE ')
                 if not self.is_semantic_leaf:
                     self.sem_cats = set(['X'])
                 elif ss == 'v|hasproperty':
                     self.is_semantic_leaf = True
                     self.sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
-                #elif self.node_type in ['barenoun','detnoun']:
-                    #self.sem_cats = set(['NP'])
                 elif '|' in ss:
-                    assert self.node_type not in ['barenoun','detnoun']
                     pos_marking = ss.split('|')[0]
                     if pos_marking == 'n' and ss.rstrip('BARE').endswith('pl'):
                         self.sem_cats = set(['NP','N'])
@@ -227,11 +220,14 @@ class LogicalForm:
             self.possible_app_splits, self.possible_cmp_splits, self.sem_cats = self.caches['splits'][self.lf_str]
             self.was_cached = True
             return self.possible_app_splits
+        if debug_split_lf is not None and debug_split_lf == self.subtree_string(recompute=True):
+            breakpoint()
         if has_q:=any(x.node_type=='Q' for x in self.descs):
             qidx = [i for i,x in enumerate(self.descs) if x.node_type=='Q'][0]
-            head_options = [x for x in self.leaf_descs if x.string.startswith('v|') or x.string.startswith('mod|')]
+            head_options = [x for x in self.leaf_descs if x.node_type in ['verb','raise','quant']]
+            #head_options = [x for x in self.leaf_descs if x.node_type in ['quant','raise']]
             if len(head_options)==0:
-                head_options = [x for x in self.leaf_descs if x.string.startswith('det') or x.string.startswith('prep') or x.string.startswith('adv') or x.string == 'aux|~be']
+                head_options = [x for x in self.leaf_descs if x.node_type in ['quant','prep','adv','aux']]
             if len(head_options)==0:
                 self.possible_app_splits = []
                 self.possible_cmp_splits = []
@@ -241,8 +237,6 @@ class LogicalForm:
 
         remove_types = ['entity','verb','quant','noun','neg','raise','WH','adj','prep']
         pridxs = [i for i,d in enumerate(self.descs) if d.node_type in remove_types]
-        if debug_split_lf is not None and debug_split_lf == self.subtree_string(recompute=True):
-            breakpoint()
         for ridxs in all_sublists(pridxs):
             if (n_removees := len(ridxs)) in (0,len(pridxs)): continue
             if self.sem_cats.intersection({'S','S|NP'}) and \

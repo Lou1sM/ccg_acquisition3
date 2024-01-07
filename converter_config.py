@@ -10,6 +10,9 @@ full_lfs_to_exclude = [
         'lambda $1_{e}.lambda $0_{r}.$1(qn|many_3(BARE($2,n|bear-pl_4($2)),$0))', # not well-formed
         'lambda $0_{r}.mod|~will_2(adj|soon_5(adj|ready_4(pro:per|it_1,$0)),$0)', # don't know how to model
         'lambda $0_{r}.cop|be-3s_3_there_1_it_2(you,$0)', # don't know how to model but seems wrong
+        'adv|just_1(BARE($0,det:num|one_2($0)))', # don't know how to model but seems wrong
+        'Q(prep|of_2(BARE($0,det:num|two_1(pro:obj|them_3($0)))))', # don't know how to model but seems wrong
+        'lambda $0_{r}.n|blow_1(you,BARE($1,pro:indef|one_2($1)),$0)', # don't know how to model but seems wrong
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         ]
@@ -103,6 +106,8 @@ exclude_sents = [
     "the kind the policeman carry", # lf doesn't match
     "because that 's what he wants", # lf doesn't match
     "because you might fall and hurt yourself", # lf doesn't match
+    "he had one of those", # lf doesn't match
+    "where one what", # lf doesn't match and malformed sent
     ]
 
 sent_fixes = {
@@ -112,10 +117,12 @@ sent_fixes = {
 premanual_ida_fixes = {
     'lambda $0_{r}.not(co|careful_5(pro:per|you_2,$0),$0)':'lambda $0_{r}.not(adj|careful_5(pro:per|you_2,$0),$0)', # pos of 'careful' to v
     'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(co|careful_4(pro:per|you_1,$0),$0))':'lambda $0_{r}.conj|when_5(v|play_7(pro:per|you_6,$0),mod:aux|have_to_2(v|careful_4(pro:per|you_1,$0),$0))', # pos of 'careful' to v
-    'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,co|help_4($1)),$0)':'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,n|help_4($1)),$0)', # pos of 'help' to n
+    #'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,co|help_4($1)),$0)':'lambda $0_{r}.v|need_2(pro:sub|we_1,qn|some_3($1,n|help_4($1)),$0)', # pos of 'help' to n
     'lambda $0_{r}.Q(det:art|the_3(pro:rel|that_2,n|kitchen_4(pro:rel|that_2,$0)))':'lambda $0_{r}.Q(det:art|the_3(pro:dem|that_2,n|kitchen_4(pro:dem|that_2,$0)))', # pos of 'that' to pro:dem from pro:rel
     'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
     'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
+    'lambda $0_{r}.Q(v|carīḳ(pro:per|ʔat,BARE($1,on|pīpi($1)),$0))': 'lambda $0_{r}.Q(v|carīḳ(pro:per|ʔat,BARE($1,n|pīpi($1)),$0))', # pos of pipi
+    'lambda $0_{r}.and(v|ʕaṣā(BARE($1,on|pīpi($1)),$0),BARE($2,and(adj|gadōl($2),on|pīpi($2))))': 'lambda $0_{r}.and(v|ʕaṣā(BARE($1,on|pīpi($1)),$0),BARE($2,and(adj|gadōl($2),n|pīpi($2))))', # pos of pipi
     }
 
 manual_ida_fixes = { # applied after conversion to no-comma form
@@ -133,6 +140,7 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'qn|another $0 (pro:indef|one $0)': 'qn|another pro:indef|one', # missed 'one' as noun
     'Q (mod|do (v|see pro:per|you n|thing_5_any))': 'Q (mod|do (v|see pro:per|you (qn|any n|thing)))', # split anything into two words like it is in the sent (which may well be mistranscribed)
     'Q (pro:dem|that $1 (pro:indef|one $1))': 'Q (pro:dem|that $1 (pro:indef|one $1))', # split anything into two words like it is in the sent (which may well be mistranscribed)
+    # Hagar
     'v|ciyēr pro:per|ʔat n|ʕigūl-BARE': 'v|ciyēr you n|ʕigūl-BARE', # split anything into two words like it is in the sent (which may well be mistranscribed)
     }
 

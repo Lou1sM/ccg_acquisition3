@@ -11,11 +11,12 @@ with open('data/hagar_comma_format.txt') as f:
     d=f.read()
 cw_words = set(sorted(re.findall(rf'(?<=co\|)[{he_chars}]+(?=\()',d)))
 
+maybe_det_str = 'pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|det\|ha|det\|\~ha|BARE|n:prop\|\w*\'s\''
 def maybe_detnoun_match(x):
-    return re.match(fr'(pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|det\|ha|det\|\~ha|BARE|n:prop\|\w*\'s\')\((\$\d{{1,2}}),(n\|[{he_chars}\w-]*)\(\2\)\)',x)
+    return re.match(fr'({maybe_det_str})\((\$\d{{1,2}}),([\w:]+\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def maybe_attrib_noun_match(x):
-    return re.match(fr'(qn\|\w*|det:\w*\|\w*|det\|ha|det\|\~ha|BARE|n:prop\|\w*\'s\')\((pro:(sub|obj|per|dem)\|\w*),(\w*\|[{he_chars}\w-]*)\(\2\)\)',x)
+    return re.match(fr'({maybe_det_str})\((pro:(sub|obj|per|dem)\|\w*),([\w:]+\|[{he_chars}\w-]*)\(\2\)\)',x)
 
 def is_nplike(x):
     if x in ['WHO', 'WHAT', 'WHOSE', 'you']:
@@ -72,14 +73,15 @@ def _decommafy_inner(parse):
         return parse
     if bool(mdm := maybe_detnoun_match(parse)):
         det, var, noun = mdm.groups()
+        noun_pos, noun_word = noun.split('|')
+        if noun_pos != 'n':
+            print(parse)
         if det == 'BARE':
-            print(f'{noun}-BARE')
-            return f'{noun}-BARE'
+            return f'n|{noun_word}-BARE'
         else:
             if 'that' in det:
                 det = 'det:dem|that'
             assert det.startswith('det') or det.startswith('qn')
-        noun_pos, noun_word = noun.split('|')
         return f'{det} n|{noun_word}'
     if bool(mam := maybe_attrib_noun_match(parse)):
         det, subj, _, noun = mam.groups()
@@ -120,12 +122,19 @@ def lf_preproc(lf_, sent):
     if np_marked:=lf.startswith('BARE($0'):
         lf=lf[8:-1]
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
-    if lf.startswith('BARE('):
-        breakpoint()
-    lf = premanual_ida_fixes.get(lf, lf)
+    if lf in premanual_ida_fixes:
+        olf_lf = lf
+        lf = premanual_ida_fixes[lf]
+        if ARGS.print_fixes:
+            print(f'Fixing: {olf_lf} --> {lf}')
     lf = lf.replace('co|like', 'v|like')
     lf = lf.replace('conj|like', 'v|like')
     lf = lf.replace('co|look', 'v|look')
+    old_lf = lf
+    lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔābaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔābaʔ', lf )
+    lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔīmaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔīmaʔ', lf )
+    if lf != old_lf:
+        print(f'{old_lf} --> {lf}')
     lf = lf.replace('n|ʔābaʔ', 'n:prop|ʔābaʔ' )
     lf = lf.replace('n|ʔīmaʔ', 'n:prop|ʔīmaʔ' )
     if ('n:prop|ʔābaʔ' in lf or 'n:prop|ʔīmaʔ' in lf) and ('det|ha' in lf or 'det|~ha' in lf):
@@ -160,10 +169,19 @@ def lf_preproc(lf_, sent):
         lf = re.sub(r'(?<![a-zA-Z])v\|do(?![a-zA-Z])','mod|do',lf)
 
     lf = re.sub(r'_\d{1,2}\b','',lf) # remove sense numbers, way too fine-grained
+    lf = re.sub(r'BARE\(\$\d{1,2},(pro:indef\|[{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'\1',lf)
+    lf = re.sub(r'BARE\(\$\d{1,2},(det:num|n:let|on|co)\|([{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'n:prop|\2',lf)
+    lf = re.sub(r'BARE\(\$\d{1,2},(part\|[{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'\1',lf)
+    if lf != old_lf:
+        assert 'that one' not in ' '.join(sent)
+        print(f'{old_lf} --> {lf}')
     lf = re.sub(r'co\|([\w{he_chars}]+\()(?!\$\d|$)',r'v|\1',lf) #'(' inside group to not replace single term
     lf =re.sub(rf',co\|[\w{he_chars}]+', '', lf)
     lf =re.sub(rf'co\|[\w{he_chars}]+,', '', lf)
     lf =re.sub(rf'co\|[\w{he_chars}]+', '', lf)
+    old_lf = lf
+    #if 'BARE($1,pro:indef|somebody($1))' in lf:
+        #breakpoint()
     lf = lf.replace('()', '')
     if '(pro:rel|that)' in lf or ',pro:rel|that)' in lf or '(pro:rel|that,' in lf or 'pro:rel|that,n|' in lf:
         lf = lf.replace('pro:rel|that','pro:dem|that')
@@ -177,10 +195,17 @@ def lf_preproc(lf_, sent):
     if dlf in manual_ida_fixes.keys():
         old_dlf = dlf
         dlf = manual_ida_fixes[dlf]
+        if ARGS.print_fixes:
+            print(f'Fixing: {old_dlf} --> {dlf}')
     if sent[6:].lstrip('Adam ').startswith('is that') and not dlf.startswith('Q '):
         dlf = f'Q ({dlf})'
-        print(dlf)
     if dlf == 'v|equals pro:dem|that (det:art|a n|racket)':
+        breakpoint()
+    old_dlf = dlf
+    dlf = re.sub(r'BARE \$\d{1,2} \((det:num\|[{he_chars}\w-]+) \((n\|[\w{he_chars}-]+) \$\d{1,2}\)\)', r'\1 \2', dlf)
+    if old_dlf!=dlf:
+        print(f'{old_lf} --> {dlf}')
+    if 'BARE ($1 $1)' in dlf:
         breakpoint()
     assert is_wellformed_lf(dlf)
     return dlf
@@ -190,7 +215,6 @@ def sent_preproc(sent, lf):
     assert not sent.endswith(' ')
     if sent in sent_fixes:
         sent = sent_fixes[sent]
-    #sent = [w for w in sent.split() if w not in cw_words]
     sent = [w for w in sent.split() if f'co|{w}' not in lf]
     if sent == '':
         breakpoint()
@@ -206,6 +230,7 @@ if __name__ == '__main__':
     ARGS.add_argument("--db", type=str)
     ARGS.add_argument("--db_sent", type=str)
     ARGS.add_argument("-p", "--print_conversions", action='store_true')
+    ARGS.add_argument("-f", "--print_fixes", action='store_true')
     ARGS = ARGS.parse_args()
 
     with open(f'data/{ARGS.dset}_comma_format.txt') as f:
@@ -226,8 +251,6 @@ if __name__ == '__main__':
         if s[6:-3] in exclude_sents:
             continue
         ps = sent_preproc(s,l)
-        if ' '.join(ps).startswith('hiʔ ʕoṣā'):
-            breakpoint()
         if ARGS.db_sent is not None and ps == ARGS.db_sent.split():
             breakpoint()
         if ps == []:
