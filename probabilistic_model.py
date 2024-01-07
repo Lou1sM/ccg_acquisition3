@@ -9,7 +9,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_cat_congruent
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_cat_congruent, lf_acc
 from errors import CCGLearnerError, RootSemCatError
 from time import time
 import argparse
@@ -42,12 +42,12 @@ class DirichletProcess():
         self.memory = {'COUNT':0}
         self.alpha = alpha
 
-    def observe(self,obs):
+    def observe(self,obs,weight):
         if obs in self.memory:
-            self.memory[obs] += 1
+            self.memory[obs] += weight
         else:
-            self.memory = self.memory | {obs:1}
-        self.memory['COUNT'] += 1
+            self.memory = self.memory | {obs:weight}
+        self.memory['COUNT'] += weight
         assert np.allclose(2*self.memory['COUNT'],sum(self.memory.values()),rtol=1e-6)
 
     def prob(self,obs, ignore_prior=False):
@@ -225,6 +225,7 @@ class LanguageAcquirer():
         self.caches = {'splits':{}, 'cats':{}}
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
         self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
+        self.leaf_syncat_memory = DirichletProcess(1) # counts of the syn_cats it's seen anywhere
         self.vocab_thresh = 1
 
     def train(self):
@@ -277,6 +278,7 @@ class LanguageAcquirer():
         self.meaningl.set_from_dict(to_load['meaning'])
         self.wordl.set_from_dict(to_load['word'])
         self.root_sem_cat_memory.memory = to_load['root_sem_cat']
+        self.leaf_syncat_memory.memory = to_load['syn_cat']
 
         self.word_to_lf_probs = pd.read_pickle(join(fpath,'word_to_lf_probs.pkl'))
         self.lf_to_lf_shell_probs = pd.read_pickle(join(fpath,'lf_to_lf_shell_probs.pkl'))
@@ -292,7 +294,8 @@ class LanguageAcquirer():
                   'base_distribution_cache':self.meaningl.base_distribution_cache},
                   'word': {'memory':self.wordl.memory,
                   'base_distribution_cache':self.wordl.base_distribution_cache},
-                  'root_sem_cat': self.root_sem_cat_memory.memory}
+                  'root_sem_cat': self.root_sem_cat_memory.memory,
+                  'syn_cat': self.leaf_syncat_memory.memory}
 
         distributions_fpath = join(fpath,'distributions.json')
         with open(distributions_fpath,'w') as f:
@@ -333,6 +336,20 @@ class LanguageAcquirer():
             lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss)
             self.full_lfs_cache[lf_str] = lf
         return lf
+
+    def make_parse_node(self,lf_str,words):
+        lf = self.get_lf(lf_str)
+        #if lf.sem_cats == set('X'):
+            #raise RootSemCatError(lf.lf_str)
+
+        if ' '.join([lf_str]+words) in self.parse_node_cache:
+            parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
+        else:
+            parse_root = ParseNode(lf,words,'ROOT')
+            for sc in parse_root.sem_cats:
+                self.root_sem_cat_memory.observe(sc,1)
+            self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
+        return parse_root
 
     def train_one_step(self,lf_strs,words,apply_buffers):
         prob_cache = {}
@@ -375,6 +392,8 @@ class LanguageAcquirer():
                 else:
                     new_syntaxl_buffer += [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syn_cats for ssync in node.sibling.syn_cats for psync in node.parent.syn_cats]
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
+            for sync in node.syn_cats:
+                self.leaf_syncat_memory.observe(sync, leaf_prob)
             if not leaf_prob > 0:
                 print(node)
             lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
@@ -467,30 +486,20 @@ class LanguageAcquirer():
             f,g = split.split(' + ')
             return f'{self.generate_words(f)} {self.generate_words(g)}'
 
-    def make_parse_node(self,lf_str,words):
-        lf = self.get_lf(lf_str)
-        #if lf.sem_cats == set('X'):
-            #raise RootSemCatError(lf.lf_str)
-
-        if ' '.join([lf_str]+words) in self.parse_node_cache:
-            parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
-        else:
-            parse_root = ParseNode(lf,words,'ROOT')
-            for sc in parse_root.sem_cats:
-                self.root_sem_cat_memory.observe(sc)
-            self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
-        return parse_root
-
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
         self.lf_word_counts =  pd.DataFrame({lf:{w:self.wordl.memory[lf].get(w,0) for w in self.vocab} for lf in self.lf_vocab})
-        self.marginal_word_probs = self.lf_word_counts.sum(axis=1)
-        self.lf_shell_lf_counts =  pd.DataFrame({lfs:{lf:self.meaningl.memory[lfs].get(lf,0) for lf in self.lf_vocab} for lfs in self.shell_lf_vocab})
-        self.marginal_lf_probs = self.lf_shell_lf_counts.sum(axis=1)
-        self.word_to_lf_probs = pd.DataFrame([{y:self.wordl.prob(x,y) for y in self.lf_vocab} for x in self.mwe_vocab],index=self.mwe_vocab)
-
-        self.lf_to_lf_shell_probs = pd.DataFrame([{y:self.meaningl.prob(x,y) for y in self.shell_lf_vocab} for x in self.lf_vocab],index=self.lf_vocab)
-        self.lf_shell_to_sem_probs = pd.DataFrame([{y:self.shmeaningl.prob(x,y) for y in self.sem_cat_vocab} for x in self.shell_lf_vocab],index=self.shell_lf_vocab)
-        #self.word_to_sem_probs = la.word_to_lf_probs.dot(la.lf_to_lf_shell_probs).dot(la.lf_shell_to_sem_probs)
+        #self.marginal_word_probs = self.lf_word_counts.sum(axis=1)
+        self.shell_lf_lf_counts = pd.DataFrame({lfs:{lf:self.meaningl.memory[lfs].get(lf,0) for lf in self.lf_vocab} for lfs in self.shell_lf_vocab})
+        #self.marginal_lf_probs = self.shell_lf_lf_counts.sum(axis=1)
+        self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync.replace('\\','|').replace('/','|')].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in self.sem_cat_vocab})
+        self.sem_word_counts = self.lf_word_counts.dot(self.shell_lf_lf_counts).dot(self.sem_shell_lf_counts)
+        # transforming syncats to semcats when taking p(shell_lf|syn_cat),
+        # implicitly assumes that p(sc|sync) is 1 if compatible and 0# otherwise,
+        # so when computing p(sync|sc), we can just restrict to compatible
+        # syncats, and then ignore p(sc|sync) in Bayes, using only the prior
+        # p(sync)
+        self.marginal_syn_counts = pd.Series({sync:self.leaf_syncat_memory.prob(sync) for sync in self.syn_cat_vocab})
+        self.syn_word_counts = pd.DataFrame({sync:self.sem_word_counts[sc]*self.leaf_syncat_memory.prob(sync) for sc in self.sem_word_counts.columns for sync in possible_syn_cats(sc)})
 
     def leaf_probs_of_word_span(self,words,beam_size):
         if words not in self.mwe_vocab and ' ' not in words:
@@ -683,6 +692,7 @@ if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("--expname", type=str,default='tmp')
     ARGS.add_argument("--reload_from", type=str)
+    ARGS.add_argument("--jreload_from", type=str)
     ARGS.add_argument("--n_test", type=int,default=5)
     ARGS.add_argument("--n_dpoints", type=int, default=-1)
     ARGS.add_argument("--db_at", type=int, default=-1)
@@ -725,6 +735,11 @@ if __name__ == "__main__":
         expname = f'{ARGS.n_epochs}_{ARGS.max_lf_len}'
     else:
         expname = ARGS.expname
+    if ARGS.jreload_from:
+        ARGS.reload_from = ARGS.jreload_from
+        ARGS.n_dpoints = 0
+        ARGS.db_after = True
+
     set_experiment_dir(f'experiments/{ARGS.expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
     with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
 
@@ -835,10 +850,11 @@ if __name__ == "__main__":
         df = df.drop('good', axis=1)
         df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_prob_updates.csv')
         bad.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_bad_prob_updates.csv')
-    correct_lf2words = [(v,la.wordl.top_k(v,2)[1][0]==k if v in la.wordl.memory else 0) for k,v in gt_word2lfs]
-    correct_word2lfs = [(k,la.lf_word_counts.loc[k].idxmax()==v if k in la.lf_word_counts.index else 0) for k,v in gt_word2lfs]
+    correct_lf2words = [(lf,la.wordl.top_k(lf,2)[1][0]==w if lf in la.wordl.memory else 0) for w,lf in gt_word2lfs]
+    correct_word2lfs = [(w,lf_acc(la.lf_word_counts.loc[w].idxmax(),lf) if w in la.lf_word_counts.index else 0) for w,lf in gt_word2lfs]
     lf2word_acc = sum([x[1] for x in correct_lf2words])/len(correct_lf2words)
     word2lf_acc = sum([x[1] for x in correct_word2lfs])/len(correct_word2lfs)
+    each_word2lf = [(a,b,a==b) for a,b in [(w,la.lf_word_counts[lf].nlargest(2).index[1]) for w,lf in gt_word2lfs]]
     if ARGS.db_after:
         breakpoint()
     with open(f'experiments/{ARGS.expname}/{ARGS.expname}_summary.txt','w') as f:

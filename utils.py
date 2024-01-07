@@ -3,6 +3,15 @@ import re
 
 LAMBDA_RE_STR = r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.'
 #LAMBDA_RE_STR = r'^lambda (WHAT1|WHO1|\$\d{1,2}|\$\d{1,2}_\{e\}|\$\d{1,2}_\{r\}|\$\d{1,2}_\{<r,t>\}|\$\d{1,2}\{<<e,e>,e>\})?\.'
+def de_q(lf):
+    lambda_binder, body = all_lambda_body_splits(lf)
+    if body.startswith('Q '):
+        body = maybe_debrac(body[2:])
+    return lambda_binder + body
+
+def lf_acc(lf_pred, lf_gt):
+    return de_q(lf_pred) == de_q(lf_gt)
+
 def new_var_num(lf_str):
     vars_in_self = re.findall(r'\$\d{1,2}',lf_str)
     if len(vars_in_self) == 0:
