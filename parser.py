@@ -3,7 +3,7 @@ from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_b
 from errors import SemCatError, ZeroProbError
 import re
 import sys; sys.setrecursionlimit(500)
-from learner_config import pos_marking_dict, base_lexicon
+from learner_config import pos_marking_dict, base_lexicon, chiltag_to_node_types
 
 
 # is_leaf means it's atomic in lambda calculus
@@ -23,7 +23,7 @@ debug_set_cats = None
 
 
 class LogicalForm:
-    def __init__(self,defining_string,idx_in_tree=[],caches={'splits':{},'cats':{}},parent=None,dblfs=None,dbsss=None,root_cat=None):
+    def __init__(self,defining_string,idx_in_tree=[],caches={'splits':{},'cats':{}},parent=None,dblfs=None,dbsss=None):
         if dblfs is not None:
             global debug_split_lf
             assert debug_split_lf in (None, dblfs)
@@ -37,7 +37,6 @@ class LogicalForm:
         had_surrounding_brackets = False
         self.sibling = None
         self.idx_in_tree = idx_in_tree
-        #self.caches = {'splits':{},'sem_cats':{},'lfs':{}} if caches is None else caches
         self.caches = caches
         self.var_descs = []
         self.possible_app_splits = []
@@ -49,15 +48,11 @@ class LogicalForm:
         self.stored_alpha_normalized_shell_subtree_string = ''
         self.ud_pos = ''
         self.was_cached = False
-        self.root_cat = root_cat
         defining_string = maybe_debrac(defining_string)
-        if parent == 'START' and  root_cat is not None:
-            #self.sem_cats = set([root_cat])
+        if parent == 'START':
             self.sem_cats = set('X')
-            #self.set_cats_as_root(defining_string)
-        #if re.match(r'BARE\([a-z-A-Z0-9\-_:]*\)',defining_string):
         if defining_string.startswith('BARE'):
-            self.node_type = 'barenoun'
+            self.node_type = 'entity'
             self.is_leaf = True
             self.string = defining_string
             for v_num in set(re.findall(r'(?<=\$)\d{1,2}',defining_string)):
@@ -66,7 +61,6 @@ class LogicalForm:
             self.node_type = 'neg'
             self.string = 'not'
             self.is_leaf = True
-        #elif bool(re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>)\})?\.',defining_string)):
         elif bool(lambda_match(defining_string)):
             lambda_string, _, remaining_string = defining_string.partition('.')
             variable_index = lambda_string.partition('_')[0][7:]
@@ -117,27 +111,30 @@ class LogicalForm:
                 self.node_type = 'WH'
             elif sds in ['you', 'equals', 'hasproperty']:
                 self.node_type = sds
+            elif sds == '':
+                self.node_type = 'null'
+            elif re.match(r'[\w:]+\|', defining_string):
+                chiltag = defining_string.split('|')[0]
+                if chiltag not in chiltag_to_node_types:
+                    if chiltag not in ['part','aux','on','poss']:
+                        print(defining_string)
+                    self.node_type = chiltag
+                else:
+                    self.node_type = chiltag_to_node_types[chiltag]
+                #if '|' not in defining_string and not defining_string.startswith('$') and strip_string(defining_string) and sds!='':
             else:
-                if '|' not in defining_string and not defining_string.startswith('$') and strip_string(defining_string) and sds!='':
-                    print(defining_string)
-                    breakpoint()
-                self.node_type = 'const'
+                breakpoint()
 
         if self.is_leaf: # should only have children defined if comes from the __init__ in splits
-            #assert not hasattr(self,'children') or self.children==[]
             self.children = []
 
         if had_surrounding_brackets:
-            #assert self.subtree_string()==re.match(r'(.*\|)?(.*)',defining_string).group(2)[1:-1]
             assert self.subtree_string() == defining_string
         else:
             if not self.subtree_string() == defining_string:
                 breakpoint()
 
         self.set_cats_from_string()
-        #if defining_string.startswith('lambda $1_{r}.'):
-            #breakpoint()
-        pass
 
     def set_cats_as_root(self, defining_string):
         if defining_string.startswith('Q'):
@@ -160,7 +157,6 @@ class LogicalForm:
             ss = self.stripped_subtree_string
             if debug_set_cats is not None and debug_set_cats==self.subtree_string(recompute=True):
                 breakpoint()
-            assert ss not in ['v|show_3','v|show-past_3','v|show_5',]
             if ss == 'not':
                 self.is_semantic_leaf = True
                 self.sem_cats = set(['X'])
@@ -181,18 +177,22 @@ class LogicalForm:
                         breakpoint()
                     ss = ss[1:-1].strip()
                 ss = maybe_debrac(ss[4:]) if (notstart:=ss.startswith('not ')) else ss
-                self.is_semantic_leaf = self.node_type=='barenoun' or ' ' not in ss
+                #self.is_semantic_leaf = self.node_type=='barenoun' or ' ' not in ss
+                self.is_semantic_leaf = ' ' not in ss.lstrip('BARE ')
                 if not self.is_semantic_leaf:
                     self.sem_cats = set(['X'])
                 elif ss == 'v|hasproperty':
                     self.is_semantic_leaf = True
                     self.sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
-                elif self.node_type in ['barenoun','detnoun']:
-                    self.sem_cats = set(['NP'])
+                #elif self.node_type in ['barenoun','detnoun']:
+                    #self.sem_cats = set(['NP'])
                 elif '|' in ss:
+                    assert self.node_type not in ['barenoun','detnoun']
                     pos_marking = ss.split('|')[0]
-                    if pos_marking == 'n' and ss.endswith('pl'):
+                    if pos_marking == 'n' and ss.rstrip('BARE').endswith('pl'):
                         self.sem_cats = set(['NP','N'])
+                    elif pos_marking == 'n' and ss.endswith('BARE'):
+                        self.sem_cats = set(['NP'])
                     elif pos_marking == 'n:prop' and ss.endswith('\'s\''):
                         self.sem_cats = set(['NP|N']) # e.g. John's
                     else:
@@ -209,7 +209,7 @@ class LogicalForm:
         assert not any(sc is None for sc in self.sem_cats)
         assert isinstance(self.sem_cats,set)
         is_congruent = self.is_type_congruent()
-        if not (self.parent=='START' and self.root_cat is not None):
+        if not (self.parent=='START'):
             self.caches['cats'][self.lf_str] = self.sem_cats, self.is_semantic_leaf, is_congruent
         return is_congruent
 
@@ -239,7 +239,7 @@ class LogicalForm:
             else:
                 head = head_options[0]
 
-        remove_types = ['const','noun','quant','barenoun','neg','raise']
+        remove_types = ['entity','verb','quant','noun','neg','raise','WH','adj','prep']
         pridxs = [i for i,d in enumerate(self.descs) if d.node_type in remove_types]
         if debug_split_lf is not None and debug_split_lf == self.subtree_string(recompute=True):
             breakpoint()
@@ -423,7 +423,7 @@ class LogicalForm:
     def spawn_self_like(self,defining_string,idx_in_tree=None):
         if idx_in_tree is None:
             idx_in_tree = self.idx_in_tree
-        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,caches=self.caches,parent=self.parent,root_cat=self.root_cat)
+        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,caches=self.caches,parent=self.parent)
         new.sem_cats = self.sem_cats
         return new
 
@@ -497,9 +497,8 @@ class LogicalForm:
         x = self.get_stored_subtree_string(as_shell,alpha_normalized)
         if x == '' or recompute:
             x = self.subtree_string_(show_treelike=show_treelike,as_shell=as_shell,recompute=recompute)
-            if not is_bracket_balanced(x):
-                breakpoint()
-            assert is_bracketed(x) or ' ' not in x or self.node_type in ['noun','lmbda','Q','detnoun','barenoun']
+            assert is_bracket_balanced(x)
+            assert is_bracketed(x) or ' ' not in x or self.node_type=='entity' and x.startswith('BARE') or self.node_type in ['noun','lmbda','Q','detnoun']
             x = maybe_debrac(x)
             if alpha_normalized:
                 x = alpha_normalize(x)

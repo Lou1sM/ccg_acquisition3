@@ -72,7 +72,10 @@ def _decommafy_inner(parse):
         return parse
     if bool(mdm := maybe_detnoun_match(parse)):
         det, var, noun = mdm.groups()
-        if det != 'BARE':
+        if det == 'BARE':
+            print(f'{noun}-BARE')
+            return f'{noun}-BARE'
+        else:
             if 'that' in det:
                 det = 'det:dem|that'
             assert det.startswith('det') or det.startswith('qn')
@@ -174,23 +177,23 @@ def lf_preproc(lf_, sent):
     if dlf in manual_ida_fixes.keys():
         old_dlf = dlf
         dlf = manual_ida_fixes[dlf]
-    if np_marked:
-        root_cat='NP'
-    elif 'WH' in dlf:
-        root_cat='Swhq'
-    elif dlf.startswith('Q'):
-        root_cat='Sq'
-    else:
-        root_cat='S'
+    if sent[6:].lstrip('Adam ').startswith('is that') and not dlf.startswith('Q '):
+        dlf = f'Q ({dlf})'
+        print(dlf)
+    if dlf == 'v|equals pro:dem|that (det:art|a n|racket)':
+        breakpoint()
     assert is_wellformed_lf(dlf)
-    return f'{root_cat}: {dlf}'
+    return dlf
 
 def sent_preproc(sent, lf):
     sent = sent[6:].rstrip('?.!\n ')
     assert not sent.endswith(' ')
     if sent in sent_fixes:
         sent = sent_fixes[sent]
-    sent = [w for w in sent.split() if w not in cw_words]
+    #sent = [w for w in sent.split() if w not in cw_words]
+    sent = [w for w in sent.split() if f'co|{w}' not in lf]
+    if sent == '':
+        breakpoint()
     sent = [w for w in sent if not w[0].isupper() or w.lower() in lf]
     if ' '.join(sent) in manual_sent_fixes:
         sent = manual_sent_fixes[' '.join(sent)].split()
@@ -218,12 +221,13 @@ if __name__ == '__main__':
     dset_data = []
     n_excluded = 0
     for l,s in zip(lfs,sents):
-
         if any(x in l for x in exclude_lfs):
             continue
         if s[6:-3] in exclude_sents:
             continue
         ps = sent_preproc(s,l)
+        if ' '.join(ps).startswith('hiʔ ʕoṣā'):
+            breakpoint()
         if ARGS.db_sent is not None and ps == ARGS.db_sent.split():
             breakpoint()
         if ps == []:

@@ -325,13 +325,12 @@ class LanguageAcquirer():
         #probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='COUNT'}
         #file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
 
-    def get_lf(self,lf_str_):
-        root_cat, lf_str = lf_str_.split(': ')
+    def get_lf(self,lf_str):
         if lf_str in self.full_lfs_cache:
             lf = self.full_lfs_cache[lf_str]
             lf.set_cats_as_root(lf_str) # in case was in cache as embedded S, so got X
         else:
-            lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss,root_cat=root_cat)
+            lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss)
             self.full_lfs_cache[lf_str] = lf
         return lf
 
