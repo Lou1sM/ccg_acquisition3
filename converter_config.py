@@ -140,6 +140,7 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'qn|another $0 (pro:indef|one $0)': 'qn|another pro:indef|one', # missed 'one' as noun
     'Q (mod|do (v|see pro:per|you n|thing_5_any))': 'Q (mod|do (v|see pro:per|you (qn|any n|thing)))', # split anything into two words like it is in the sent (which may well be mistranscribed)
     'Q (pro:dem|that $1 (pro:indef|one $1))': 'Q (pro:dem|that $1 (pro:indef|one $1))', # split anything into two words like it is in the sent (which may well be mistranscribed)
+    'lambda $0_{r}.v|ciyēr(you,BARE($1,adj|mešulāš($1)),$0)': 'lambda $0_{r}.v|ciyēr(you,BARE($1,n|mešulāš($1)),$0)', # pos of mesulas to n
     # Hagar
     'v|ciyēr pro:per|ʔat n|ʕigūl-BARE': 'v|ciyēr you n|ʕigūl-BARE', # split anything into two words like it is in the sent (which may well be mistranscribed)
     }

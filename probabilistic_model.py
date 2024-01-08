@@ -17,7 +17,7 @@ from abc import ABC
 import re
 from parser import LogicalForm, ParseNode
 import json
-from learner_config import gt_word2lfs
+from learner_config import all_gt_lexicons
 
 
 def type_raise(cat,direction,out_cat='S'):
@@ -280,10 +280,12 @@ class LanguageAcquirer():
         self.root_sem_cat_memory.memory = to_load['root_sem_cat']
         self.leaf_syncat_memory.memory = to_load['syn_cat']
 
-        self.word_to_lf_probs = pd.read_pickle(join(fpath,'word_to_lf_probs.pkl'))
-        self.lf_to_lf_shell_probs = pd.read_pickle(join(fpath,'lf_to_lf_shell_probs.pkl'))
-        self.lf_shell_to_sem_probs = pd.read_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
-        #self.word_to_sem_probs = pd.read_pickle(join(fpath,'word_to_sem_probs.pkl'))
+        self.lf_word_counts = pd.read_pickle(join(fpath,'lf_word_counts.pkl'))
+        self.shell_lf_lf_counts = pd.read_pickle(join(fpath,'shell_lf_lf_counts.pkl'))
+        self.sem_shell_lf_counts = pd.read_pickle(join(fpath,'sem_shell_lf_counts.pkl'))
+        self.sem_word_counts = pd.read_pickle(join(fpath,'sem_word_counts.pkl'))
+        self.marginal_syn_counts = pd.read_pickle(join(fpath,'marginal_syn_counts.pkl'))
+        self.syn_word_probs = pd.read_pickle(join(fpath,'syn_word_probs.pkl'))
 
     def save_to(self,fpath):
         to_dump = {'syntax': {'memory':self.syntaxl.memory,
@@ -301,10 +303,12 @@ class LanguageAcquirer():
         with open(distributions_fpath,'w') as f:
             json.dump(to_dump,f)
 
-        self.word_to_lf_probs.to_pickle(join(fpath,'word_to_lf_probs.pkl'))
-        self.lf_to_lf_shell_probs.to_pickle(join(fpath,'lf_to_lf_shell_probs.pkl'))
-        self.lf_shell_to_sem_probs.to_pickle(join(fpath,'lf_shell_to_sem_probs.pkl'))
-        #self.word_to_sem_probs.to_pickle(join(fpath,'word_to_sem_probs.pkl'))
+        self.lf_word_counts.to_pickle(join(fpath,'lf_word_counts.pkl'))
+        self.shell_lf_lf_counts.to_pickle(join(fpath,'shell_lf_lf_counts.pkl'))
+        self.sem_shell_lf_counts.to_pickle(join(fpath,'sem_shell_lf_counts.pkl'))
+        self.sem_word_counts.to_pickle(join(fpath,'sem_word_counts.pkl'))
+        self.marginal_syn_counts.to_pickle(join(fpath,'marginal_syn_counts.pkl'))
+        self.syn_word_probs.to_pickle(join(fpath,'syn_word_probs.pkl'))
 
     def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
         distr = self.wordl.inverse_distribution(word)
@@ -316,17 +320,6 @@ class LanguageAcquirer():
         meanings = self.word_to_lf_probs.loc[word].sort_values()[-10:]
         file_print(f'\nLearned meanings for \'{word}\'',f)
         file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in meanings.items() if prob > 1e-4]),f)
-
-        #syn_cats = self.word_to_sem_probs.loc[word].sort_values()[-10:]
-        #file_print(f'\nLearned syntactic categories for \'{word}\'',f)
-        #file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in syn_cats.items() if prob > 1e-4]),f)
-
-    #def show_splits(self,syn_cat,f):
-        #file_print(f'Learned splits for category {syn_cat}',f)
-        #counts = self.syntaxl.memory[syn_cat]
-        #norm = counts['COUNT']
-        #probs = {k:counts[k]/norm for k in sorted(counts,key=lambda x:counts[x]) if k!='COUNT'}
-        #file_print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs.items()]),f)
 
     def get_lf(self,lf_str):
         if lf_str in self.full_lfs_cache:
@@ -488,7 +481,7 @@ class LanguageAcquirer():
 
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
         self.lf_word_counts =  pd.DataFrame({lf:{w:self.wordl.memory[lf].get(w,0) for w in self.vocab} for lf in self.lf_vocab})
-        #self.marginal_word_probs = self.lf_word_counts.sum(axis=1)
+        self.marginal_word_probs = self.lf_word_counts.sum(axis=1)
         self.shell_lf_lf_counts = pd.DataFrame({lfs:{lf:self.meaningl.memory[lfs].get(lf,0) for lf in self.lf_vocab} for lfs in self.shell_lf_vocab})
         #self.marginal_lf_probs = self.shell_lf_lf_counts.sum(axis=1)
         self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync.replace('\\','|').replace('/','|')].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in self.sem_cat_vocab})
@@ -499,7 +492,7 @@ class LanguageAcquirer():
         # syncats, and then ignore p(sc|sync) in Bayes, using only the prior
         # p(sync)
         self.marginal_syn_counts = pd.Series({sync:self.leaf_syncat_memory.prob(sync) for sync in self.syn_cat_vocab})
-        self.syn_word_counts = pd.DataFrame({sync:self.sem_word_counts[sc]*self.leaf_syncat_memory.prob(sync) for sc in self.sem_word_counts.columns for sync in possible_syn_cats(sc)})
+        self.syn_word_probs = pd.DataFrame({sync:self.sem_word_counts[sc]*self.leaf_syncat_memory.prob(sync) for sc in self.sem_word_counts.columns for sync in possible_syn_cats(sc)})
 
     def leaf_probs_of_word_span(self,words,beam_size):
         if words not in self.mwe_vocab and ' ' not in words:
@@ -519,7 +512,7 @@ class LanguageAcquirer():
     def parse(self,words):
         N = len(words)
         beam_size = 50
-        probs_table = np.empty((N,N),dtype='object') #(i,j) will be a dict of len(beam_size) saying probs of top syn_cats
+        probs_table = np.empty((N,N),dtype='object') #(i,j) will be a dict of len(beam_size) saying probs of top syn_cats for span of len i beginning at index j
         for i in range(N):
             probs_table[0,i] = self.leaf_probs_of_word_span(words[i],beam_size)
 
@@ -552,20 +545,22 @@ class LanguageAcquirer():
                             split = lsync + ' + ' + rsync
                             prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,csync)
                             backpointer = (k,j,left_idx), (i-k,j+k,right_idx)
-                            #backpointer contains the coordinates in probs_table, and the idx in the
+                            #backpointer contains the coords in probs_table, and the idx in the
                             #beam, of the two locations that the current one could be split into
                             pn = {'sem_cat':combined,'lf':lf,'backpointer':backpointer,'rule':rule,'prob':prob,'words':' '.join(words[j:j+i]),'syn_cat':csync}
                             possible_nexts.append(pn)
-            if i == N:
-                for pn in possible_nexts:
-                    pn['syn_cat'] = pn['sem_cat']
-                    pn['prob'] = pn['prob']*self.root_sem_cat_memory.prob(pn['syn_cat'])
             to_add =sorted(possible_nexts,key=lambda x:x['prob'])[-beam_size:]
             probs_table[i-1,j] = to_add
 
         for a in range(2,N+1):
             for b in range(N-a+1):
                 add_prob_of_span(a,b)
+
+        for pn in probs_table[N-1,0]:
+            if pn is not None:
+                pn['syn_cat'] = pn['sem_cat']
+                pn['prob'] = pn['prob']*self.root_sem_cat_memory.prob(pn['syn_cat'])
+
         if len(probs_table[N-1,0]) == 0:
             return 'No parse found'
 
@@ -725,6 +720,7 @@ if __name__ == "__main__":
     ARGS = ARGS.parse_args()
 
     ARGS.is_test = ARGS.is_test or ARGS.is_short_test
+    ARGS.expname += ARGS.dset[0]
 
     expdir = f'experiments/{ARGS.dset}'
     if ARGS.is_test:
@@ -737,7 +733,6 @@ if __name__ == "__main__":
         expname = ARGS.expname
     if ARGS.jreload_from:
         ARGS.reload_from = ARGS.jreload_from
-        ARGS.n_dpoints = 0
         ARGS.db_after = True
 
     set_experiment_dir(f'experiments/{ARGS.expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
@@ -748,11 +743,9 @@ if __name__ == "__main__":
         la.load_from(f'experiments/{ARGS.reload_from}')
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
-    #all_data = [x for x in d['data'] if all(y not in x['lf'] for y in exclude_lfs)]
     all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
-    #all_data = [x for x in all_data if len(x['words']) > 1]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
-    train_data = data_to_use[:-len(data_to_use)//20]
+    train_data = [] if ARGS.jreload_from is not None else data_to_use[:-len(data_to_use)//20]
     test_data = train_data if ARGS.is_test else data_to_use[-len(data_to_use)//5:]
     if 'questions' in ARGS.dset:
         univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a lake))'}
@@ -817,8 +810,10 @@ if __name__ == "__main__":
             if not x['good']:
                 f.write('\t'.join(f'{k}: {" ".join(v) if isinstance(v,list) else v}' for k,v in x.items() if k not in ['good', 'forder']) + '\n')
     inverse_probs_start_time = time()
-    la.compute_inverse_probs()
+    if len(train_data) > 0:
+        la.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
+    la.save_to(f'experiments/{ARGS.expname}')
     print(df_prior:=pd.DataFrame(all_word_order_probs))
     df_no_prior=pd.DataFrame(all_word_order_probs_no_prior)
     cs = ['r','g','b','y','orange','brown']
@@ -850,13 +845,24 @@ if __name__ == "__main__":
         df = df.drop('good', axis=1)
         df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_prob_updates.csv')
         bad.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_bad_prob_updates.csv')
-    correct_lf2words = [(lf,la.wordl.top_k(lf,2)[1][0]==w if lf in la.wordl.memory else 0) for w,lf in gt_word2lfs]
-    correct_word2lfs = [(w,lf_acc(la.lf_word_counts.loc[w].idxmax(),lf) if w in la.lf_word_counts.index else 0) for w,lf in gt_word2lfs]
-    lf2word_acc = sum([x[1] for x in correct_lf2words])/len(correct_lf2words)
-    word2lf_acc = sum([x[1] for x in correct_word2lfs])/len(correct_word2lfs)
-    each_word2lf = [(a,b,a==b) for a,b in [(w,la.lf_word_counts[lf].nlargest(2).index[1]) for w,lf in gt_word2lfs]]
+
+    gt_lexicon = all_gt_lexicons[ARGS.dset]
+    gt_df = pd.DataFrame(gt_lexicon,columns=['word','GT LF', 'GT syncat']).set_index('word')
+    w2l_preds = [(w,la.lf_word_counts.loc[w].idxmax() if w in la.lf_word_counts.index else 'not seen') for w,lf,sync in gt_lexicon]
+    w2s_preds = [(w,max([s for s in la.syn_word_probs.columns if 'X' not in s], key=lambda x: la.syn_word_probs.loc[w][x])) for w,lf,syn in gt_lexicon]
+    pred_df = pd.DataFrame([dict(w2l_preds),dict(w2s_preds)],index=['pred LF','pred syncat']).T
+    assert (gt_df.index==pred_df.index).all()
+    comb_df = gt_df.join(pred_df)
+    comb_df['LF correct'] = comb_df['pred LF']==comb_df['GT LF']
+    comb_df['syncat correct'] = comb_df['pred syncat']==comb_df['GT syncat']
+    comb_df['both correct'] = comb_df['LF correct']&comb_df['syncat correct']
+    print(comb_df)
+    word2lf_acc = comb_df['LF correct'].mean()
+    word2syn_acc = comb_df['syncat correct'].mean()
+    word2both_acc = comb_df['both correct'].mean()
     if ARGS.db_after:
         breakpoint()
+    comb_df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_full_preds_and_scores.csv')
     with open(f'experiments/{ARGS.expname}/{ARGS.expname}_summary.txt','w') as f:
         if ARGS.n_generate > 0:
             file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
@@ -868,14 +874,17 @@ if __name__ == "__main__":
                 file_print(f'{generated}: not seen during training',f)
         file_print(f'Total run time: {time()-start_time:.3f}s',f)
         file_print(f'Word to LF accuracy: {word2lf_acc:.4f}',f)
-        file_print(f'LF to Word accuracy: {lf2word_acc:.4f}',f)
-        file_print('Final word order probs:',f)
-        for k,v in all_word_order_probs[-1].items():
-            file_print(f'{k}: {v:.6f}',f)
-    for dpoint in test_data[:ARGS.n_test]:
-        la.parse(dpoint['words'])
+        file_print(f'Word to syncat accuracy: {word2syn_acc:.4f}',f)
+        file_print(f'Full lexical accuracy: {word2both_acc:.4f}',f)
+        if len(train_data) == 0:
+            file_print('Trainset was empty, no word_order_probs logged',f)
+        else:
+            file_print('Final word order probs:',f)
+            for k,v in all_word_order_probs[-1].items():
+                file_print(f'{k}: {v:.6f}',f)
+    #for dpoint in test_data[:ARGS.n_test]:
+        #la.parse(dpoint['words'])
     if ARGS.test_gts:
         for sent,gt in gts.items():
             la.parse(gt[0][0]['words'].split())
             la.draw_graph(gt,is_gt=True)
-    la.save_to(f'experiments/{ARGS.expname}')
