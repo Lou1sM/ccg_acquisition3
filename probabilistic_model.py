@@ -324,7 +324,7 @@ class LanguageAcquirer():
     def get_lf(self,lf_str):
         if lf_str in self.full_lfs_cache:
             lf = self.full_lfs_cache[lf_str]
-            lf.set_cats_as_root(lf_str) # in case was in cache as embedded S, so got X
+            #lf.set_cats_as_root(lf_str) # in case was in cache as embedded S, so got X
         else:
             lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss)
             self.full_lfs_cache[lf_str] = lf
@@ -847,22 +847,22 @@ if __name__ == "__main__":
         bad.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_bad_prob_updates.csv')
 
     gt_lexicon = all_gt_lexicons[ARGS.dset]
-    gt_df = pd.DataFrame(gt_lexicon,columns=['word','GT LF', 'GT syncat']).set_index('word')
-    w2l_preds = [(w,la.lf_word_counts.loc[w].idxmax() if w in la.lf_word_counts.index else 'not seen') for w,lf,sync in gt_lexicon]
-    w2s_preds = [(w,max([s for s in la.syn_word_probs.columns if 'X' not in s], key=lambda x: la.syn_word_probs.loc[w][x])) for w,lf,syn in gt_lexicon]
-    pred_df = pd.DataFrame([dict(w2l_preds),dict(w2s_preds)],index=['pred LF','pred syncat']).T
-    assert (gt_df.index==pred_df.index).all()
-    comb_df = gt_df.join(pred_df)
-    comb_df['LF correct'] = comb_df['pred LF']==comb_df['GT LF']
-    comb_df['syncat correct'] = comb_df['pred syncat']==comb_df['GT syncat']
-    comb_df['both correct'] = comb_df['LF correct']&comb_df['syncat correct']
-    print(comb_df)
-    word2lf_acc = comb_df['LF correct'].mean()
-    word2syn_acc = comb_df['syncat correct'].mean()
-    word2both_acc = comb_df['both correct'].mean()
+    results_dict = {}
+    for w,gts in gt_lexicon:
+        pred_lf = la.lf_word_counts.loc[w].idxmax() if w in la.lf_word_counts.index else 'notseen'
+        pred_syn = max([s for s in la.syn_word_probs.columns if 'X' not in s], key=lambda x: la.syn_word_probs.loc[w][x])
+        lf_correct = any(lf_acc(pred_lf,g.split(' || ')[0]) for g in gts)
+        syn_correct = any(pred_syn==g.split(' || ')[1] for g in gts)
+        both_correct = any(lf_acc(pred_lf,g.split(' || ')[0]) and pred_syn==g.split(' || ')[1] for g in gts)
+        results_dict[w] = {'pred LF':pred_lf, 'pred syncat':pred_syn, 'LF correct':lf_correct, 'syncat correct':syn_correct, 'both correct': both_correct}
+    results = pd.DataFrame(results_dict).T
+    print(results)
+    word2lf_acc = results['LF correct'].mean()
+    word2syn_acc = results['syncat correct'].mean()
+    word2both_acc = results['both correct'].mean()
     if ARGS.db_after:
         breakpoint()
-    comb_df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_full_preds_and_scores.csv')
+    results.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_full_preds_and_scores.csv')
     with open(f'experiments/{ARGS.expname}/{ARGS.expname}_summary.txt','w') as f:
         if ARGS.n_generate > 0:
             file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)

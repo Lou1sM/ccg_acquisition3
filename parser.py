@@ -133,17 +133,6 @@ class LogicalForm:
 
         self.set_cats_from_string()
 
-    def set_cats_as_root(self, defining_string):
-        if defining_string.startswith('Q'):
-            self.sem_cats = set(['Sq'])
-        elif len(defining_string.split())==2 and defining_string.split()[0].startswith('det') and defining_string.split()[1].startswith('n|'):
-            self.sem_cats = set(['NP'])
-        #elif lambda_match(defining_string):
-        elif 'WH' in defining_string:
-            self.sem_cats = set(['Swhq'])
-        else:
-            self.sem_cats = set(['S'])
-
     def set_cats_from_string(self):
         if self.parent == 'START':
             self.is_semantic_leaf = False
