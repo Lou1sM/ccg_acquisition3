@@ -11,7 +11,7 @@ with open('data/hagar_comma_format.txt') as f:
     d=f.read()
 cw_words = set(sorted(re.findall(rf'(?<=co\|)[{he_chars}]+(?=\()',d)))
 
-maybe_det_str = 'pro:\w*\|that_\d|qn\|\w*|det:\w*\|\w*|det\|ha|det\|\~ha|BARE|n:prop\|\w*\'s\''
+maybe_det_str = f'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|\w{he_chars}*\'s\''
 def maybe_detnoun_match(x):
     return re.match(fr'({maybe_det_str})\((\$\d{{1,2}}),([\w:]+\|[{he_chars}\w-]*)\(\2\)\)',x)
 
@@ -133,8 +133,8 @@ def lf_preproc(lf_, sent):
     old_lf = lf
     lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔābaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔābaʔ', lf )
     lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔīmaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔīmaʔ', lf )
-    if lf != old_lf:
-        print(f'{old_lf} --> {lf}')
+    #if lf != old_lf:
+        #print(f'{old_lf} --> {lf}')
     lf = lf.replace('n|ʔābaʔ', 'n:prop|ʔābaʔ' )
     lf = lf.replace('n|ʔīmaʔ', 'n:prop|ʔīmaʔ' )
     if ('n:prop|ʔābaʔ' in lf or 'n:prop|ʔīmaʔ' in lf) and ('det|ha' in lf or 'det|~ha' in lf):
@@ -174,7 +174,7 @@ def lf_preproc(lf_, sent):
     lf = re.sub(r'BARE\(\$\d{1,2},(part\|[{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'\1',lf)
     if lf != old_lf:
         assert 'that one' not in ' '.join(sent)
-        print(f'{old_lf} --> {lf}')
+        #print(f'{old_lf} --> {lf}')
     lf = re.sub(r'co\|([\w{he_chars}]+\()(?!\$\d|$)',r'v|\1',lf) #'(' inside group to not replace single term
     lf =re.sub(rf',co\|[\w{he_chars}]+', '', lf)
     lf =re.sub(rf'co\|[\w{he_chars}]+,', '', lf)
@@ -208,6 +208,8 @@ def lf_preproc(lf_, sent):
     if 'BARE ($1 $1)' in dlf:
         breakpoint()
     assert is_wellformed_lf(dlf)
+    #if '$' in dlf:
+        #print(dlf)
     return dlf
 
 def sent_preproc(sent, lf):
@@ -215,7 +217,9 @@ def sent_preproc(sent, lf):
     assert not sent.endswith(' ')
     if sent in sent_fixes:
         sent = sent_fixes[sent]
-    sent = [w for w in sent.split() if f'co|{w}' not in lf]
+    sent = [w for w in sent.split() if f'co|{w}' not in lf and not(w=='we' and w not in lf)]
+    if len(sent)>0 and sent[0] == 'ʔavāl' and 'ʔavāl' not in lf:
+        sent = sent[1:]
     if sent == '':
         breakpoint()
     sent = [w for w in sent if not w[0].isupper() or w.lower() in lf]
@@ -247,10 +251,14 @@ if __name__ == '__main__':
     n_excluded = 0
     for l,s in zip(lfs,sents):
         if any(x in l for x in exclude_lfs):
+            n_excluded+=1
             continue
         if s[6:-3] in exclude_sents:
+            n_excluded+=1
             continue
         ps = sent_preproc(s,l)
+        if len(ps) > 0 and ps[0] == 'ʔavāl':
+            breakpoint()
         if ARGS.db_sent is not None and ps == ARGS.db_sent.split():
             breakpoint()
         if ps == []:
@@ -258,10 +266,13 @@ if __name__ == '__main__':
             continue
         pl = lf_preproc(l,s)
         if pl.endswith(': '):
+            n_excluded+=1
             continue
         if pl is None:
+            n_excluded+=1
             continue
         if '_' in pl:
+            n_excluded+=1
             continue
         assert not any(x in pl for x in exclude_lfs)
         if ARGS.print_conversions:
@@ -279,6 +290,6 @@ if __name__ == '__main__':
         json.dump(dset,f)
     with open(f'data/{ARGS.dset}_no_commas.txt','w') as f:
         for dpoint in dset_data:
-            sent, lf = dpoint['words'], ' '.join(dpoint['lf'])
+            sent, lf = ' '.join(dpoint['words']), dpoint['lf']
             f.write(f'Sent: {sent}\n')
             f.write(f'Sem: {lf}\n\n')
