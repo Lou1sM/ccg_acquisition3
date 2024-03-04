@@ -15,6 +15,7 @@ full_lfs_to_exclude = [
         'lambda $0_{r}.n|blow_1(you,BARE($1,pro:indef|one_2($1)),$0)', # don't know how to model but seems wrong
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
+        'v|racā pro:per|huʔ n|xavitā-BARE' # doesnt match sent
         ]
 
 
@@ -108,6 +109,8 @@ exclude_sents = [
     "because you might fall and hurt yourself", # lf doesn't match
     "he had one of those", # lf doesn't match
     "where one what", # lf doesn't match and malformed sent
+    # Hagar
+    'huʔ racā xavitā loʔ melafefōn' # lf doesn't match
     ]
 
 sent_fixes = {
@@ -122,7 +125,11 @@ premanual_ida_fixes = {
     'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
     'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
     'lambda $0_{r}.Q(v|carīḳ(pro:per|ʔat,BARE($1,on|pīpi($1)),$0))': 'lambda $0_{r}.Q(v|carīḳ(pro:per|ʔat,BARE($1,n|pīpi($1)),$0))', # pos of pipi
-    'lambda $0_{r}.and(v|ʕaṣā(BARE($1,on|pīpi($1)),$0),BARE($2,and(adj|gadōl($2),on|pīpi($2))))': 'lambda $0_{r}.and(v|ʕaṣā(BARE($1,on|pīpi($1)),$0),BARE($2,and(adj|gadōl($2),n|pīpi($2))))', # pos of pipi
+    'lambda $0_{r}.and(v|ʕaṣā(BARE($1,on|pīpi($1)),$0),BARE($2,and(adj|gadōl($2),on|pīpi($2))))': 'lambda $0_{r}.and(v|ʕaṣā(BARE($1,on|pīpi($1)),$0),BARE($2,and(adj|gadōl($2),n|pīpi($2))))', # pos of pipi to n
+    'lambda $0_{r}.v|ʕaṣā(you,BARE($1,adj|xadāš($1)),$0)': 'lambda $0_{r}.v|ʕaṣā(you,BARE($1,n|xadāš($1)),$0)', # pos of xadas to n
+    'lambda $0_{r}.Q(v|racā(pro:per|ʔat,BARE($1,adj|ʔaxēr($1)),$0))': 'lambda $0_{r}.Q(v|racā(pro:per|ʔat,BARE($1,n|ʔaxēr($1)),$0))', # pos of axer to n
+    'Q(prep|le(BARE($0,adj|sagōl($0))))': 'Q(prep|le(BARE($0,n|sagōl($0))))', # pos of sagol to n
+    'lambda $0_{r}.Q(v|nafāl(BARE($1,adj|cahōv($1)),$0))': 'lambda $0_{r}.Q(v|nafāl(BARE($1,n|cahōv($1)),$0))', # pos of cahov to n
     }
 
 manual_ida_fixes = { # applied after conversion to no-comma form
