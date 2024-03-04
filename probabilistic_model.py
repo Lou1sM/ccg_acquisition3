@@ -9,7 +9,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_cat_congruent, lf_acc
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets
 from errors import CCGLearnerError, RootSemCatError
 from time import time
 import argparse
@@ -211,7 +211,10 @@ class MeaningDirichletProcessLearner(BaseDirichletProcessLearner):
 class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution(self,x):
         assert len(x) > 0
-        return 28**-(len(x)/2) # kinda approximate num phonetic chunks
+        if ARGS.remove_vowels:
+            return 14**-len(x)
+        else:
+            return 28**-(len(x)/2) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
     def __init__(self, lr):
@@ -483,14 +486,12 @@ class LanguageAcquirer():
         self.lf_word_counts =  pd.DataFrame({lf:{w:self.wordl.memory[lf].get(w,0) for w in self.vocab} for lf in self.lf_vocab})
         self.marginal_word_probs = self.lf_word_counts.sum(axis=1)
         self.shell_lf_lf_counts = pd.DataFrame({lfs:{lf:self.meaningl.memory[lfs].get(lf,0) for lf in self.lf_vocab} for lfs in self.shell_lf_vocab})
-        #self.marginal_lf_probs = self.shell_lf_lf_counts.sum(axis=1)
         self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync.replace('\\','|').replace('/','|')].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in self.sem_cat_vocab})
         self.sem_word_counts = self.lf_word_counts.dot(self.shell_lf_lf_counts).dot(self.sem_shell_lf_counts)
         # transforming syncats to semcats when taking p(shell_lf|syn_cat),
         # implicitly assumes that p(sc|sync) is 1 if compatible and 0# otherwise,
         # so when computing p(sync|sc), we can just restrict to compatible
-        # syncats, and then ignore p(sc|sync) in Bayes, using only the prior
-        # p(sync)
+        # syncats, and ignore p(sc|sync) in Bayes, using only the prior p(sync)
         self.marginal_syn_counts = pd.Series({sync:self.leaf_syncat_memory.prob(sync) for sync in self.syn_cat_vocab})
         self.syn_word_probs = pd.DataFrame({sync:self.sem_word_counts[sc]*self.leaf_syncat_memory.prob(sync) for sc in self.sem_word_counts.columns for sync in possible_syn_cats(sc)})
 
@@ -683,40 +684,49 @@ class LanguageAcquirer():
         if ARGS.show_graphs:
             os.system(f'/usr/bin/xdg-open "experiments/{ARGS.expname}/plotted_graphs/{fname}.png"')
 
+def remove_vowels(w):
+    for v in ('a','e','i','o','u'):
+        w = w.replace(v, '')
+    return w
+
 if __name__ == "__main__":
     ARGS = argparse.ArgumentParser()
-    ARGS.add_argument("--expname", type=str,default='tmp')
-    ARGS.add_argument("--reload_from", type=str)
-    ARGS.add_argument("--jreload_from", type=str)
-    ARGS.add_argument("--n_test", type=int,default=5)
-    ARGS.add_argument("--n_dpoints", type=int, default=-1)
-    ARGS.add_argument("--db_at", type=int, default=-1)
-    ARGS.add_argument("--max_lf_len", type=int, default=6)
-    ARGS.add_argument("--start_from", type=int, default=0)
-    ARGS.add_argument("--lr", type=float, default=1.0)
-    ARGS.add_argument("--eval_alpha", type=float, default=1.0)
-    ARGS.add_argument("--n_epochs", type=int, default=1)
-    ARGS.add_argument("--n_generate", type=int, default=0)
-    ARGS.add_argument("--n_distractors", type=int, default=0)
-    ARGS.add_argument("-tt","--is_short_test", action="store_true")
-    ARGS.add_argument("-t","--is_test", action="store_true")
-    ARGS.add_argument("--show_splits", action="store_true")
-    ARGS.add_argument("--show_graphs", action="store_true")
-    ARGS.add_argument("--show_plots", action="store_true")
-    ARGS.add_argument("--db_parse", action="store_true")
-    ARGS.add_argument("--db_after", action="store_true")
-    ARGS.add_argument("--overwrite", action="store_true")
-    ARGS.add_argument("--test_gts", action="store_true")
-    ARGS.add_argument("--shuffle", action="store_true")
-    ARGS.add_argument("--suppress_prints", action="store_true")
-    ARGS.add_argument("--condition_on_syncats", action="store_true")
-    ARGS.add_argument("-d", "--dset", type=str, default='adam')
     ARGS.add_argument("--cat_to_sample_from", type=str, default='S')
+    ARGS.add_argument("--condition_on_syncats", action="store_true")
+    ARGS.add_argument("--db_after", action="store_true")
+    ARGS.add_argument("--db_at", type=int, default=-1)
+    ARGS.add_argument("--db_parse", action="store_true")
     ARGS.add_argument("--db_prob_changes_above", type=float, default=1.)
     ARGS.add_argument("--dblfs", type=str)
+    ARGS.add_argument("--dbr", type=str)
     ARGS.add_argument("--dbsent", type=str, default='')
     ARGS.add_argument("--dbsss", type=str)
-    ARGS.add_argument("--dbr", type=str)
+    ARGS.add_argument("--eval_alpha", type=float, default=1.0)
+    ARGS.add_argument("--exclude_copulae", action="store_true")
+    ARGS.add_argument("--expname", type=str,default='tmp')
+    ARGS.add_argument("--expname_in_plot_titles", action="store_true")
+    ARGS.add_argument("--jreload_from", type=str)
+    ARGS.add_argument("--lr", type=float, default=1.0)
+    ARGS.add_argument("--max_lf_len", type=int, default=6)
+    ARGS.add_argument("--n_distractors", type=int, default=0)
+    ARGS.add_argument("--n_dpoints", type=int, default=-1)
+    ARGS.add_argument("--n_epochs", type=int, default=1)
+    ARGS.add_argument("--n_generate", type=int, default=0)
+    ARGS.add_argument("--n_test", type=int,default=5)
+    ARGS.add_argument("--overwrite", action="store_true")
+    ARGS.add_argument("--reload_from", type=str)
+    ARGS.add_argument("--remove_vowels", action="store_true")
+    ARGS.add_argument("--show_graphs", action="store_true")
+    ARGS.add_argument("--show_plots", action="store_true")
+    ARGS.add_argument("--show_splits", action="store_true")
+    ARGS.add_argument("--shuffle", action="store_true")
+    ARGS.add_argument("--start_from", type=int, default=0)
+    ARGS.add_argument("--suppress_prints", action="store_true")
+    ARGS.add_argument("--test_frac", type=float, default=0.1)
+    ARGS.add_argument("--test_gts", action="store_true")
+    ARGS.add_argument("-d", "--dset", type=str, default='adam')
+    ARGS.add_argument("-t","--is_test", action="store_true")
+    ARGS.add_argument("-tt","--is_short_test", action="store_true")
     ARGS = ARGS.parse_args()
 
     ARGS.is_test = ARGS.is_test or ARGS.is_short_test
@@ -745,8 +755,8 @@ if __name__ == "__main__":
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
-    train_data = [] if ARGS.jreload_from is not None else data_to_use[:-len(data_to_use)//20]
-    test_data = train_data if ARGS.is_test else data_to_use[-len(data_to_use)//5:]
+    train_data = [] if ARGS.jreload_from is not None else data_to_use[:int(len(data_to_use)*(1-ARGS.test_frac))]
+    test_data = train_data if ARGS.is_test else data_to_use[-len(train_data):]
     if 'questions' in ARGS.dset:
         univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a lake))'}
         train_data = train_data[:10] + [univ] + train_data[10:]
@@ -756,11 +766,15 @@ if __name__ == "__main__":
     all_word_order_probs_no_prior = []
     all_prob_changes = []
     problem_list = []
-    plot_every = 1
+    good_point_idxs = []
+    plateaus = []
+    gpi = 0
     for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
             words = dpoint['words']
+            if ARGS.remove_vowels:
+                words = [remove_vowels(w) for w in words]
             if dpoint != all_data[i+ARGS.start_from]:
                 breakpoint()
             if words[-1] == '?':
@@ -775,25 +789,37 @@ if __name__ == "__main__":
             apply_buffers = i>=ARGS.n_distractors
             n_words_seen = sum(w in la.vocab for w in words)
             frac_words_seen = n_words_seen/len(words)
-            problem_list += la.train_one_step(lf_strs_incl_distractors,words,apply_buffers)
-            if ((i+1)%plot_every == 0 or ARGS.is_test):
-                la.eval()
-                new_probs_with_prior = la.probs_of_word_orders(False)
-                new_probs_without_prior = la.probs_of_word_orders(True)
-                if i>0:
-                    prob_change = ((new_probs_with_prior-all_word_order_probs[-1])**2).sum()
-                    diff_probs = new_probs_with_prior-all_word_order_probs[-1]
-                    forder = diff_probs.idxmax()
-                    good_point = diff_probs['svo'] == diff_probs.max()
-                    if not good_point and prob_change > 1e-5 and not ARGS.suppress_prints:
-                        print(new_probs_with_prior)
-                    #all_prob_changes.append((prob_change,(words,lf_strs_incl_distractors)))
-                    all_prob_changes.append({'prob update': prob_change, 'dpoint index': i, 'words':' '.join(words), 'lf':dpoint['lf'], 'good':good_point, 'favoured order':forder,'nseen':n_words_seen})
-                all_word_order_probs.append(new_probs_with_prior)
-                all_word_order_probs_no_prior.append(la.probs_of_word_orders(True))
-                if i>0 and prob_change>ARGS.db_prob_changes_above:
-                    breakpoint()
-                la.train()
+            lf = dpoint['lf']
+            has_copula = 'v|hasproperty' in lf or 'v|equals' in lf
+            if not (has_copula and ARGS.exclude_copulae):
+               problem_list += la.train_one_step(lf_strs_incl_distractors,words,apply_buffers)
+            else:
+                print('excluding')
+            #if ((i+1)%plot_every == 0 or ARGS.is_test):
+            la.eval()
+            new_probs_with_prior = la.probs_of_word_orders(False)
+            new_probs_without_prior = la.probs_of_word_orders(True)
+            if i>0:
+                prob_change = ((new_probs_with_prior-all_word_order_probs[-1])**2).sum()
+                diff_probs = new_probs_with_prior-all_word_order_probs[-1]
+                forder = diff_probs.idxmax()
+                good_point = diff_probs['svo'] == diff_probs.max()
+                if not good_point and prob_change > 1e-5 and not ARGS.suppress_prints:
+                    print(new_probs_with_prior)
+                #all_prob_changes.append((prob_change,(words,lf_strs_incl_distractors)))
+                if n_words_seen==max(3,len(words)) and not lf.startswith('Q ') and not 'adv|' in lf and len(split_respecting_brackets(lf))>=3 and 'you' not in lf.split() and not lf.startswith('prep|') and not 'not' in lf and not (has_copula and ARGS.dset=='hagar'):
+                    gpi+=1
+                    if prob_change==0:
+                        plateaus.append(dict(dpoint,words=' '.join(dpoint['words'])))
+                    else:
+                        print(i, round(diff_probs['svo'],7), words, lf)
+                all_prob_changes.append({'prob update': prob_change, 'dpoint index': i, 'words':' '.join(words), 'lf':lf, 'good':good_point, 'favoured order':forder,'nseen':n_words_seen})
+            good_point_idxs.append(gpi)
+            all_word_order_probs.append(new_probs_with_prior)
+            all_word_order_probs_no_prior.append(la.probs_of_word_orders(True))
+            if i>0 and prob_change>ARGS.db_prob_changes_above:
+                breakpoint()
+            la.train()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
         final_parses = {}
@@ -813,15 +839,21 @@ if __name__ == "__main__":
     if len(train_data) > 0:
         la.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
-    la.save_to(f'experiments/{ARGS.expname}')
-    print(df_prior:=pd.DataFrame(all_word_order_probs))
-    df_no_prior=pd.DataFrame(all_word_order_probs_no_prior)
+    if ARGS.jreload_from is not None:
+        df_prior = pd.read_csv(f'experiments/{ARGS.jreload_from}/{ARGS.jreload_from}_word_order_probs.csv', index_col=0)
+        df_no_prior = pd.read_csv(f'experiments/{ARGS.jreload_from}/{ARGS.jreload_from}_word_order_probs_no_prior.csv', index_col=0)
+    else:
+        la.save_to(f'experiments/{ARGS.expname}')
+        print(df_prior:=pd.DataFrame(all_word_order_probs))
+        df_no_prior=pd.DataFrame(all_word_order_probs_no_prior)
+        df_prior.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_word_order_probs.csv')
+        df_no_prior.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_word_order_probs_no_prior.csv')
     cs = ['r','g','b','y','orange','brown']
 
-    def plot_df(df, info=''):
+    def plot_df(df, info='', against_good_point_idxs=False):
         if info != '':
             info = f' {info}'
-        xticks = np.arange(len(df)) if ARGS.is_test else plot_every*np.arange(len(df))
+        xticks = good_point_idxs if against_good_point_idxs else np.arange(len(df))
         for i,c in enumerate(df.columns):
             plt.plot(xticks, df[c], label=c, color=cs[i])
         plt.legend(loc='upper right')
@@ -835,7 +867,12 @@ if __name__ == "__main__":
             os.system(f'/usr/bin/xdg-open {fpath}')
         plt.clf()
 
-    plot_df(df_prior, ARGS.expname)
+    dn = ARGS.dset[0].upper() + ARGS.dset[1:]
+    dn_info = dn if ARGS.n_distractors==0 else f'{dn} {ARGS.n_distractors} distractors'
+    if ARGS.expname_in_plot_titles:
+        dn_info = f'{dn_info} {ARGS.expname[:-1]}'.replace('_',' ')
+    plot_df(df_prior, dn_info)
+    plot_df(df_prior, dn_info + ' vs. good points', True)
     plot_df(df_no_prior, f'{ARGS.expname} No Prior')
     print(la.syntaxl.memory.get('S\\NP',None))
     if len(train_data)>=2:
@@ -850,13 +887,14 @@ if __name__ == "__main__":
     results_dict = {}
     for w,gts in gt_lexicon:
         pred_lf = la.lf_word_counts.loc[w].idxmax() if w in la.lf_word_counts.index else 'notseen'
-        pred_syn = max([s for s in la.syn_word_probs.columns if 'X' not in s], key=lambda x: la.syn_word_probs.loc[w][x])
+        pred_syn = max([s for s in la.syn_word_probs.columns if 'X' not in s], key=lambda x: la.syn_word_probs.loc[w][x] if w in la.syn_word_probs.index else 0)
         lf_correct = any(lf_acc(pred_lf,g.split(' || ')[0]) for g in gts)
         syn_correct = any(pred_syn==g.split(' || ')[1] for g in gts)
         both_correct = any(lf_acc(pred_lf,g.split(' || ')[0]) and pred_syn==g.split(' || ')[1] for g in gts)
         results_dict[w] = {'pred LF':pred_lf, 'pred syncat':pred_syn, 'LF correct':lf_correct, 'syncat correct':syn_correct, 'both correct': both_correct}
     results = pd.DataFrame(results_dict).T
-    print(results)
+    if not ARGS.suppress_prints:
+        print(results)
     word2lf_acc = results['LF correct'].mean()
     word2syn_acc = results['syncat correct'].mean()
     word2both_acc = results['both correct'].mean()
@@ -888,3 +926,6 @@ if __name__ == "__main__":
         for sent,gt in gts.items():
             la.parse(gt[0][0]['words'].split())
             la.draw_graph(gt,is_gt=True)
+    pdf = pd.DataFrame(plateaus)
+    print(pdf)
+    pdf.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_plateaus.csv')
