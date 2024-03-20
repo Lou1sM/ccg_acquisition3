@@ -39,8 +39,6 @@ def is_adj(x):
         return x.split('|')[0] in ['adj', 'n']
 
 def decommafy(parse, debrac=False):
-    if ARGS.dset == 'hagar':
-        parse = parse.replace('part|','v|')
     if parse == ARGS.db:
         breakpoint()
     if len(re.findall(r'[(),]',parse)) == 0:
@@ -116,29 +114,47 @@ def _decommafy_inner(parse):
             breakpoint()
         return lf
 
+def fix_posses(lf):
+    old_lf = lf
+    lf = lf.replace('post|', 'adv|')
+    if ARGS.dset == 'hagar':
+        lf = lf.replace('part|','v|')
+
+    lf = lf.replace('co|like', 'v|like')
+    lf = lf.replace('conj|like', 'v|like')
+    lf = lf.replace('co|look', 'v|look')
+    lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔābaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔābaʔ', lf )
+    lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔīmaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔīmaʔ', lf )
+    lf = lf.replace('n|ʔābaʔ', 'n:prop|ʔābaʔ' )
+    lf = lf.replace('n|ʔīmaʔ', 'n:prop|ʔīmaʔ' )
+    lf = re.sub(r'_\d{1,2}\b','',lf) # remove sense numbers, way too fine-grained
+    lf = re.sub(r'BARE\(\$\d{1,2},(pro:indef\|[{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'\1',lf)
+    lf = re.sub(r'BARE\(\$\d{1,2},(det:num|n:let|on|co)\|([{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'n:prop|\2',lf)
+    lf = re.sub(r'BARE\(\$\d{1,2},(part\|[{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'\1',lf)
+    if lf != old_lf:
+        assert 'that one' not in ' '.join(sent)
+    lf = re.sub(r'co\|([\w{he_chars}]+\()(?!\$\d|$)',r'v|\1',lf) #'(' inside group to not replace single term
+    lf =re.sub(rf',co\|[\w{he_chars}]+', '', lf)
+    lf =re.sub(rf'co\|[\w{he_chars}]+,', '', lf)
+    lf =re.sub(rf'co\|[\w{he_chars}]+', '', lf)
+    lf = lf.replace('()', '')
+    return lf
+
 def lf_preproc(lf_, sent):
+    """Conversion of LFs that is not related to removing commas or fixing det-nouns."""
     lf = lf_.rstrip('\n')
     lf = lf[5:] # have already checked it starts with 'Sem: '
     if np_marked:=lf.startswith('BARE($0'):
         lf=lf[8:-1]
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
     if lf in premanual_ida_fixes:
-        olf_lf = lf
+        old_lf = lf
         lf = premanual_ida_fixes[lf]
         if ARGS.print_fixes:
-            print(f'Fixing: {olf_lf} --> {lf}')
-    lf = lf.replace('co|like', 'v|like')
-    lf = lf.replace('conj|like', 'v|like')
-    lf = lf.replace('co|look', 'v|look')
-    old_lf = lf
-    lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔābaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔābaʔ', lf )
-    lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔīmaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔīmaʔ', lf )
-    #if lf != old_lf:
-        #print(f'{old_lf} --> {lf}')
-    lf = lf.replace('n|ʔābaʔ', 'n:prop|ʔābaʔ' )
-    lf = lf.replace('n|ʔīmaʔ', 'n:prop|ʔīmaʔ' )
-    if ('n:prop|ʔābaʔ' in lf or 'n:prop|ʔīmaʔ' in lf) and ('det|ha' in lf or 'det|~ha' in lf):
-        breakpoint()
+            print(f'Fixing: {old_lf} --> {lf}')
+
+    assert not ('n:prop|ʔābaʔ' in lf or 'n:prop|ʔīmaʔ' in lf) or not ('det|ha' in lf or 'det|~ha' in lf)
+    lf = fix_posses(lf)
     if 'lambda $0' in lf.rpartition('.')[0]:
         lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
@@ -168,21 +184,6 @@ def lf_preproc(lf_, sent):
     if re.search(r'(?<![a-zA-Z])v\|(?!do)', lf):
         lf = re.sub(r'(?<![a-zA-Z])v\|do(?![a-zA-Z])','mod|do',lf)
 
-    lf = re.sub(r'_\d{1,2}\b','',lf) # remove sense numbers, way too fine-grained
-    lf = re.sub(r'BARE\(\$\d{1,2},(pro:indef\|[{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'\1',lf)
-    lf = re.sub(r'BARE\(\$\d{1,2},(det:num|n:let|on|co)\|([{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'n:prop|\2',lf)
-    lf = re.sub(r'BARE\(\$\d{1,2},(part\|[{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'\1',lf)
-    if lf != old_lf:
-        assert 'that one' not in ' '.join(sent)
-        #print(f'{old_lf} --> {lf}')
-    lf = re.sub(r'co\|([\w{he_chars}]+\()(?!\$\d|$)',r'v|\1',lf) #'(' inside group to not replace single term
-    lf =re.sub(rf',co\|[\w{he_chars}]+', '', lf)
-    lf =re.sub(rf'co\|[\w{he_chars}]+,', '', lf)
-    lf =re.sub(rf'co\|[\w{he_chars}]+', '', lf)
-    old_lf = lf
-    #if 'BARE($1,pro:indef|somebody($1))' in lf:
-        #breakpoint()
-    lf = lf.replace('()', '')
     if '(pro:rel|that)' in lf or ',pro:rel|that)' in lf or '(pro:rel|that,' in lf or 'pro:rel|that,n|' in lf:
         lf = lf.replace('pro:rel|that','pro:dem|that')
     if re.search(r'pro:rel\|that\(\$\d,(n|pro:indef)', lf):
@@ -201,15 +202,8 @@ def lf_preproc(lf_, sent):
         dlf = f'Q ({dlf})'
     if dlf == 'v|equals pro:dem|that (det:art|a n|racket)':
         breakpoint()
-    old_dlf = dlf
     dlf = re.sub(r'BARE \$\d{1,2} \((det:num\|[{he_chars}\w-]+) \((n\|[\w{he_chars}-]+) \$\d{1,2}\)\)', r'\1 \2', dlf)
-    if old_dlf!=dlf:
-        print(f'{old_lf} --> {dlf}')
-    if 'BARE ($1 $1)' in dlf:
-        breakpoint()
     assert is_wellformed_lf(dlf)
-    #if '$' in dlf:
-        #print(dlf)
     return dlf
 
 def sent_preproc(sent, lf):
@@ -226,6 +220,21 @@ def sent_preproc(sent, lf):
     if ' '.join(sent) in manual_sent_fixes:
         sent = manual_sent_fixes[' '.join(sent)].split()
     return sent
+
+def fix_echo_questions(lf, sent):
+    for conj in ('but','and'):
+        if sent[0] == conj:
+            sent = sent[1:]
+            if lf.startswith(conj):
+                assert lf.starswith(f'{conj} (') and lf.endswith(')')
+                lf = lf[len(conj)+2:-1]
+    if not lf.startswith('Q '):
+        return lf, sent
+    breakpoint()
+    if not lf.startswith('Q (v|') or lf.starswith('Q (mod|'):
+        lf = lf[3:-1]
+        print(lf, sent)
+        return lf, sent
 
 if __name__ == '__main__':
     import argparse
@@ -249,6 +258,12 @@ if __name__ == '__main__':
 
     dset_data = []
     n_excluded = 0
+    with open('../CHILDES_UD2LF/conll/full_adam/adam.all.udv1.conllu.final') as f:
+        conll = f.read().strip().split('\n\n')
+
+    with open('../CHILDES_UD2LF/LF_files/full_adam/adam.all_lf.txt') as f:
+        ida_lf = f.read().strip().split('\n\n')
+
     for l,s in zip(lfs,sents):
         if any(x in l for x in exclude_lfs):
             n_excluded+=1
@@ -275,6 +290,7 @@ if __name__ == '__main__':
             n_excluded+=1
             continue
         assert not any(x in pl for x in exclude_lfs)
+        pl, ps = fix_echo_questions(pl, ps)
         if ARGS.print_conversions:
             print(' '.join(ps))
         dset_data.append({'lf':pl, 'words':ps})
