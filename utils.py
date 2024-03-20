@@ -351,7 +351,7 @@ def n_lambda_binders(s):
     assert all(x.startswith('lambda') for x in lambdas)
     #maybe_lambda_list = set(x for x in maybe_lambda_list_ if not x.endswith('_{e}'))
     #maybe_lambda_list = [m for m in maybe_lambda_list if m.startswith('lambda')]
-    if bool(leading_vars := re.match(r'(\$\d{1,2} ?)*', body)):
+    if bool(leading_vars := re.match(r'(\$\d{1,2} ?)*', body)):# don't count type-raised vars
         type_raised_vars = leading_vars.group().split()
         lambdas = [m for m in lambdas if all(trv not in m for trv in type_raised_vars)]
     return len(lambdas)

@@ -364,6 +364,7 @@ class LanguageAcquirer():
                 print(lfs, e)
                 continue
             if root.possible_splits == [] and not ARGS.suppress_prints:
+                print(words, lfs)
                 print('no splits :(')
             if new_root_prob==0:
                 print('zero root prob for', lfs, words)
@@ -703,8 +704,9 @@ if __name__ == "__main__":
     ARGS.add_argument("--dbsss", type=str)
     ARGS.add_argument("--eval_alpha", type=float, default=1.0)
     ARGS.add_argument("--exclude_copulae", action="store_true")
+    ARGS.add_argument("--exclude_points", type=int, nargs='+', default=[])
     ARGS.add_argument("--expname", type=str,default='tmp')
-    ARGS.add_argument("--expname_in_plot_titles", action="store_true")
+    ARGS.add_argument("--expname_for_plot_titles", type=str)
     ARGS.add_argument("--jreload_from", type=str)
     ARGS.add_argument("--lr", type=float, default=1.0)
     ARGS.add_argument("--max_lf_len", type=int, default=6)
@@ -730,7 +732,8 @@ if __name__ == "__main__":
     ARGS = ARGS.parse_args()
 
     ARGS.is_test = ARGS.is_test or ARGS.is_short_test
-    ARGS.expname += ARGS.dset[0]
+    if ARGS.dset.lower() not in ARGS.expname.lower():
+        ARGS.expname += ARGS.dset[0]
 
     expdir = f'experiments/{ARGS.dset}'
     if ARGS.is_test:
@@ -772,7 +775,11 @@ if __name__ == "__main__":
     for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
+            if i in ARGS.exclude_points:
+                continue
             words = dpoint['words']
+            if words==['ʔābaʔ', 'ʔat', 'rocā']:
+                continue
             if ARGS.remove_vowels:
                 words = [remove_vowels(w) for w in words]
             if dpoint != all_data[i+ARGS.start_from]:
@@ -807,7 +814,7 @@ if __name__ == "__main__":
                 if not good_point and prob_change > 1e-5 and not ARGS.suppress_prints:
                     print(new_probs_with_prior)
                 #all_prob_changes.append((prob_change,(words,lf_strs_incl_distractors)))
-                if n_words_seen==max(3,len(words)) and not lf.startswith('Q ') and not 'adv|' in lf and len(split_respecting_brackets(lf))>=3 and 'you' not in lf.split() and not lf.startswith('prep|') and not 'not' in lf and not (has_copula and ARGS.dset=='hagar'):
+                if n_words_seen==len(words) and len(split_respecting_brackets(lf))>=3 and not lf.startswith('Q ') and not 'adv|' in lf and len(split_respecting_brackets(lf))>=3 and 'you' not in lf.split() and not lf.startswith('prep|') and not 'not' in lf and not (has_copula and ARGS.dset=='hagar'):
                     gpi+=1
                     if prob_change==0:
                         plateaus.append(dict(dpoint,words=' '.join(dpoint['words'])))
@@ -867,9 +874,11 @@ if __name__ == "__main__":
             os.system(f'/usr/bin/xdg-open {fpath}')
         plt.clf()
 
-    dn = ARGS.dset[0].upper() + ARGS.dset[1:]
-    dn_info = dn if ARGS.n_distractors==0 else f'{dn} {ARGS.n_distractors} distractors'
-    if ARGS.expname_in_plot_titles:
+    if ARGS.expname_for_plot_titles is not None:
+        dn_info = ARGS.expname_for_plot_titles
+    else:
+        dn = ARGS.dset[0].upper() + ARGS.dset[1:]
+        dn_info = dn if ARGS.n_distractors==0 else f'{dn} {ARGS.n_distractors} distractors'
         dn_info = f'{dn_info} {ARGS.expname[:-1]}'.replace('_',' ')
     plot_df(df_prior, dn_info)
     plot_df(df_prior, dn_info + ' vs. good points', True)
