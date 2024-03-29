@@ -140,10 +140,10 @@ def fix_posses(lf):
     lf = lf.replace('()', '')
     return lf
 
-def lf_preproc(lf_, sent):
+def lf_preproc(lf, sent):
     """Conversion of LFs that is not related to removing commas or fixing det-nouns."""
-    lf = lf_.rstrip('\n')
-    lf = lf[5:] # have already checked it starts with 'Sem: '
+    #lf = lf_.rstrip('\n')
+    #lf = lf[5:] # have already checked it starts with 'Sem: '
     if np_marked:=lf.startswith('BARE($0'):
         lf=lf[8:-1]
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
@@ -158,10 +158,10 @@ def lf_preproc(lf_, sent):
     if 'lambda $0' in lf.rpartition('.')[0]:
         lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
-    maybe_wh_lambda_match = re.match(r'^lambda (\$\d)_\{(e|<<e,e>,e>)}\.',lf)
+    maybe_wh_lambda_match = re.match(r'^lambda (\$\d)_\{(r|e|<<e,e>,e>)}\.',lf)
     if is_wh:=(bool(maybe_wh_lambda_match)):
         wh_var_with_num = maybe_wh_lambda_match.groups()[0]
-        wh_word = sent.split()[1]
+        wh_word = sent.split()[0]
         if ARGS.dset == 'hagar':
             replacer = 'WH'
         elif (wh_word in ['what','who']):
@@ -198,7 +198,7 @@ def lf_preproc(lf_, sent):
         dlf = manual_ida_fixes[dlf]
         if ARGS.print_fixes:
             print(f'Fixing: {old_dlf} --> {dlf}')
-    if sent[6:].lstrip('Adam ').startswith('is that') and not dlf.startswith('Q '):
+    if dpoint['idasent'].lstrip('Adam ').startswith('is that') and not dlf.startswith('Q '):
         dlf = f'Q ({dlf})'
     if dlf == 'v|equals pro:dem|that (det:art|a n|racket)':
         breakpoint()
@@ -206,8 +206,9 @@ def lf_preproc(lf_, sent):
     assert is_wellformed_lf(dlf)
     return dlf
 
-def sent_preproc(sent, lf):
-    sent = sent[6:].rstrip('?.!\n ')
+def sent_preproc(lf, sent):
+    #sent = sent[6:].rstrip('?.!\n ')
+    sent = sent.rstrip('?.! ')
     assert not sent.endswith(' ')
     if sent in sent_fixes:
         sent = sent_fixes[sent]
@@ -221,20 +222,29 @@ def sent_preproc(sent, lf):
         sent = manual_sent_fixes[' '.join(sent)].split()
     return sent
 
-def fix_echo_questions(lf, sent):
-    for conj in ('but','and'):
+def decide_if_question(lf, sent, udtags):
+    conjs = ('but', 'and', 'or')
+    wh_words = ('what', 'who', 'how', 'where', 'when', 'which')
+    if udtags[0] == 'CONJ' and sent[0] not in conjs:
+        breakpoint()
+    for conj in conjs:
         if sent[0] == conj:
             sent = sent[1:]
             if lf.startswith(conj):
                 assert lf.starswith(f'{conj} (') and lf.endswith(')')
                 lf = lf[len(conj)+2:-1]
-    if not lf.startswith('Q '):
-        return lf, sent
-    breakpoint()
-    if not lf.startswith('Q (v|') or lf.starswith('Q (mod|'):
+    if 'you' not in lf.split() and udtags[0] in ('AUX', 'VERB'):
+        if not ( lf.startswith('Q ')):
+            print('should have Q in lf, adding one:', sent, lf)
+            lf = f'Q ({lf})'
+    #elif any(w in wh_words for w in sent):
+    elif sent[0] in wh_words:
+        if not ( lf.startswith('Q ')):
+            print('probably should have Q in lf:', sent, lf)
+    elif lf.startswith('Q '):
+        print('marked as Q without leading verb, removing:', sent, lf)
         lf = lf[3:-1]
-        print(lf, sent)
-        return lf, sent
+    return lf, sent
 
 if __name__ == '__main__':
     import argparse
@@ -246,15 +256,17 @@ if __name__ == '__main__':
     ARGS.add_argument("-f", "--print_fixes", action='store_true')
     ARGS = ARGS.parse_args()
 
-    with open(f'data/{ARGS.dset}_comma_format.txt') as f:
-        dset_lines = f.readlines()
+    #with open(f'data/{ARGS.dset}_comma_format.txt') as f:
+        #dset_lines = f.readlines()
 
-    sents = [dset_lines[i] for i in range(0,len(dset_lines),4)]
-    assert all([s.startswith('Sent: ') for s in sents])
-    lfs = [dset_lines[i] for i in range(1,len(dset_lines),4)]
-    assert all([lf.startswith('Sem: ') for lf in lfs])
-    assert all([dset_lines[i]=='example_end\n' for i in range(2,len(dset_lines),4)])
-    assert all([dset_lines[i]=='\n' for i in range(3,len(dset_lines),4)])
+    with open(f'data/{ARGS.dset}-combined-info.json') as f:
+        dset = json.load(f)
+    #sents = [dset_lines[i] for i in range(0,len(dset_lines),4)]
+    #assert all([s.startswith('Sent: ') for s in sents])
+    #lfs = [dset_lines[i] for i in range(1,len(dset_lines),4)]
+    #assert all([lf.startswith('Sem: ') for lf in lfs])
+    #assert all([dset_lines[i]=='example_end\n' for i in range(2,len(dset_lines),4)])
+    #assert all([dset_lines[i]=='\n' for i in range(3,len(dset_lines),4)])
 
     dset_data = []
     n_excluded = 0
@@ -264,14 +276,17 @@ if __name__ == '__main__':
     with open('../CHILDES_UD2LF/LF_files/full_adam/adam.all_lf.txt') as f:
         ida_lf = f.read().strip().split('\n\n')
 
-    for l,s in zip(lfs,sents):
-        if any(x in l for x in exclude_lfs):
+    #for l,s in zip(lfs,sents):
+    for dpoint in dset:
+        sent, lf, udtags = dpoint['idasent'], dpoint['idalf'], dpoint['udtags']
+        if any(x in dpoint['idalf'] for x in exclude_lfs):
             n_excluded+=1
             continue
-        if s[6:-3] in exclude_sents:
+        #if s[6:-3] in exclude_sents:
+        if sent[:-2] in exclude_sents:
             n_excluded+=1
             continue
-        ps = sent_preproc(s,l)
+        ps = sent_preproc(lf, sent)
         if len(ps) > 0 and ps[0] == 'ʔavāl':
             breakpoint()
         if ARGS.db_sent is not None and ps == ARGS.db_sent.split():
@@ -279,7 +294,7 @@ if __name__ == '__main__':
         if ps == []:
             n_excluded+=1
             continue
-        pl = lf_preproc(l,s)
+        pl = lf_preproc(lf, sent)
         if pl.endswith(': '):
             n_excluded+=1
             continue
@@ -290,9 +305,11 @@ if __name__ == '__main__':
             n_excluded+=1
             continue
         assert not any(x in pl for x in exclude_lfs)
-        pl, ps = fix_echo_questions(pl, ps)
+        pl, ps = decide_if_question(pl, ps, udtags)
         if ARGS.print_conversions:
             print(' '.join(ps))
+        if pl == 'Q ()':
+            breakpoint()
         dset_data.append({'lf':pl, 'words':ps})
     x=[' '.join(y['words']) for y in dset_data]
     y=dict(zip(*np.unique(x, return_counts=True)))

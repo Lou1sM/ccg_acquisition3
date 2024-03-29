@@ -109,6 +109,11 @@ exclude_sents = [
     "because you might fall and hurt yourself", # lf doesn't match
     "he had one of those", # lf doesn't match
     "where one what", # lf doesn't match and malformed sent
+    "what 's your song about", # lf wrong, treats event-var as wh-var
+    "the one who had the bunny rabbit", # lf doesn't match
+    'did I knock down more than you did or did you knock more down than I did', # lf doesn't match
+    'be very careful with this one', # lf doesn't match
+    'are you silly', # lf doesn't match
     # Hagar
     'huʔ racā xavitā loʔ melafefōn' # lf doesn't match
     #'ʔābaʔ ʔat rocā' # lf doesn't match--one that Mark says should be wh-movement
@@ -116,6 +121,7 @@ exclude_sents = [
     ]
 
 sent_fixes = {
+    'an a what': 'and a what',
     'hiʔ ʕoṣā qāqi ʔābaʔ': 'hiʔ ʕoṣā qāqi',
     }
 
@@ -126,6 +132,13 @@ premanual_ida_fixes = {
     'lambda $0_{r}.Q(det:art|the_3(pro:rel|that_2,n|kitchen_4(pro:rel|that_2,$0)))':'lambda $0_{r}.Q(det:art|the_3(pro:dem|that_2,n|kitchen_4(pro:dem|that_2,$0)))', # pos of 'that' to pro:dem from pro:rel
     'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
     'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
+    'lambda $0_{r}.n|stop_1(you,$0)':'lambda $0_{r}.v|stop_1(you,$0)', # pos of 'stop' to v
+    #'lambda $0_{r}.det:art|the_3(pro:per|you_2,n|drive-dv_4(pro:per|you_2,$0))':'lambda $0_{r}.Q(det:art|the_3(pro:per|you_2,n|drive-dv_4(pro:per|you_2,$0)))', # add Q
+    #'lambda $0_{r}.n|pillow-pl_3(pro:dem|those_2,$0)': 'lambda $0_{r}.Q(n|pillow-pl_3(pro:dem|those_2,$0))', # add Q
+    #'lambda $0_{r}.cop|be-pres_1(part|fix-presp_3(pro:per|you_2,det:art|the_4($1,n|dog_5($1)),$0),$0)': 'lambda $0_{r}.Q(cop|be-pres_1(part|fix-presp_3(pro:per|you_2,det:art|the_4($1,n|dog_5($1)),$0),$0))',# add Q
+    #'lambda $0_{r}.cop|be-pres_1(part|pull-presp_3(pro:per|you_2,det:poss|your_4($1,n|dog_5($1)),$0),$0)': 'lambda $0_{r}.Q(cop|be-pres_1(part|pull-presp_3(pro:per|you_2,det:poss|your_4($1,n|dog_5($1)),$0),$0))', # add Q
+
+    # Hagar
     'lambda $0_{r}.Q(v|carīḳ(pro:per|ʔat,BARE($1,on|pīpi($1)),$0))': 'lambda $0_{r}.Q(v|carīḳ(pro:per|ʔat,BARE($1,n|pīpi($1)),$0))', # pos of pipi
     'lambda $0_{r}.and(v|ʕaṣā(BARE($1,on|pīpi($1)),$0),BARE($2,and(adj|gadōl($2),on|pīpi($2))))': 'lambda $0_{r}.and(v|ʕaṣā(BARE($1,on|pīpi($1)),$0),BARE($2,and(adj|gadōl($2),n|pīpi($2))))', # pos of pipi to n
     'lambda $0_{r}.v|ʕaṣā(you,BARE($1,adj|xadāš($1)),$0)': 'lambda $0_{r}.v|ʕaṣā(you,BARE($1,n|xadāš($1)),$0)', # pos of xadas to n
