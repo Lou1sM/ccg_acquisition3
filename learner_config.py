@@ -131,7 +131,7 @@ agt_lexicon =[
         ('name', ['n|name || N']),
         ('need', ['lambda $0.lambda $1.v|need $1 $0 || S\\NP/NP']),
         ('no', ['lambda $0.qn|no $0 || NP/N']),
-        ('not', ['lambda $0.lambda $1.not ($0 $1) || S\\NP/(S\\NP)\(S\\NP/(S\\NP))']), #?
+        ('not', ['lambda $0.lambda $1.not ($0 $1) || S\\NP/(S\\NP)\\(S\\NP/(S\\NP))']), #?
         ('on', ['lambda $0.prep|on $0 || S\\NP\\(S\\NP)/NP']),
         ('one', ['pro:indef|one || NP']),
         ('pencil', ['n|pencil || N']),
@@ -158,7 +158,7 @@ hgt_lexicon = [
         ('ken', ['adv|ken || S',]),
         ('ha', ['lambda $0.det|ha $0 || NP/N',]),
         ('huʔ', ['pro:per|huʔ || NP',]),
-        ('loʔ', ['lambda $0.lambda $1.not ($0 $1) || S\\NP/(S\\NP)\(S\\NP/(S\\NP))',]),
+        ('loʔ', ['lambda $0.lambda $1.not ($0 $1) || S\\NP/(S\\NP)\\(S\\NP/(S\\NP))',]),
         ('bōʔi', ['v|baʔ you || S',]),
         ('rocā', ['lambda $0.lambda $1.v|racā $1 $0 || S\\NP/NP',]),
         ('ʔanī', ['pro:per|ʔanī || NP',]),

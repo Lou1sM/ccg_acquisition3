@@ -9,9 +9,9 @@ from learner_config import pos_marking_dict
 
 with open('data/hagar_comma_format.txt') as f:
     d=f.read()
-cw_words = set(sorted(re.findall(rf'(?<=co\|)[{he_chars}]+(?=\()',d)))
+cw_words = set(sorted(re.findall(fr'(?<=co\|)[{he_chars}]+(?=\()',d)))
 
-maybe_det_str = f'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|\w{he_chars}*\'s\''
+maybe_det_str = fr'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|\w{he_chars}*\'s\''
 def maybe_detnoun_match(x):
     return re.match(fr'({maybe_det_str})\((\$\d{{1,2}}),([\w:]+\|[{he_chars}\w-]*)\(\2\)\)',x)
 
@@ -27,7 +27,7 @@ def is_nplike(x):
         return False
     elif bool(maybe_detnoun_match(x)):
         return True
-    elif any(c in x for c in ',().\$'):
+    elif any(c in x for c in ',().$'):
         return False
     else:
         return pos_marking_dict[x.split('|')[0]] == set(['NP'])
@@ -270,10 +270,10 @@ if __name__ == '__main__':
 
     dset_data = []
     n_excluded = 0
-    with open('../CHILDES_UD2LF/conll/full_adam/adam.all.udv1.conllu.final') as f:
+    with open('../CHILDES_UD2LF_2/conll/full_adam/adam.all.udv1.conllu.final') as f:
         conll = f.read().strip().split('\n\n')
 
-    with open('../CHILDES_UD2LF/LF_files/full_adam/adam.all_lf.txt') as f:
+    with open('../CHILDES_UD2LF_2/LF_files/full_adam/adam.all_lf.txt') as f:
         ida_lf = f.read().strip().split('\n\n')
 
     #for l,s in zip(lfs,sents):
