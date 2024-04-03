@@ -217,7 +217,7 @@ class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
             return 28**-(len(x)/2) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
-    def __init__(self, lr):
+    def __init__(self, lr, vocab_thresh):
         self.lr = lr
         self.syntaxl = CCGDirichletProcessLearner(10)
         self.shmeaningl = ShellMeaningDirichletProcessLearner(1)
@@ -229,7 +229,7 @@ class LanguageAcquirer():
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
         self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
         self.leaf_syncat_memory = DirichletProcess(1) # counts of the syn_cats it's seen anywhere
-        self.vocab_thresh = 1
+        self.vocab_thresh = vocab_thresh
 
     def train(self):
         self.syntaxl.train()
@@ -393,7 +393,7 @@ class LanguageAcquirer():
                 self.leaf_syncat_memory.observe(sync, leaf_prob)
             if not leaf_prob > 0:
                 print(node)
-            lf = node.logical_form.subtree_string(alpha_normalized=True,recompute=True)
+            lf = node.lf.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cats, syn_cats = node.info_if_leaf()
             new_syntaxl_buffer += [('leaf',sync,leaf_prob) for sync in syn_cats]
             if any(x[1]=='(N|N)' for x in new_syntaxl_buffer):
@@ -751,15 +751,16 @@ if __name__ == "__main__":
     set_experiment_dir(f'experiments/{ARGS.expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
     with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
 
-    la = LanguageAcquirer(ARGS.lr)
-    if ARGS.reload_from is not None:
-        la.load_from(f'experiments/{ARGS.reload_from}')
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
     train_data = [] if ARGS.jreload_from is not None else data_to_use[:int(len(data_to_use)*(1-ARGS.test_frac))]
     test_data = train_data if ARGS.is_test else data_to_use[-len(train_data):]
+    vt = 1 if ARGS.n_dpoints==-1 else ARGS.n_dpoints/len(all_data)
+    la = LanguageAcquirer(ARGS.lr, vt)
+    if ARGS.reload_from is not None:
+        la.load_from(f'experiments/{ARGS.reload_from}')
     if 'questions' in ARGS.dset:
         univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a lake))'}
         train_data = train_data[:10] + [univ] + train_data[10:]

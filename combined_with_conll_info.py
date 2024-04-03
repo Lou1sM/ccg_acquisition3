@@ -6,13 +6,13 @@ import json
 for dset_name in ('adam', 'hagar'):
     print(dset_name)
     if dset_name=='adam':
-        conll_fpath = '../CHILDES_UD2LF/conll/full_adam/adam.all.udv1.conllu.final'
+        conll_fpath = '../CHILDES_UD2LF_2/conll/full_adam/adam.all.udv1.conllu.final'
     else:
-        conll_fpath = '../CHILDES_UD2LF/conll/full_hagar/hagar.all.udv1.conllu.current'
+        conll_fpath = '../CHILDES_UD2LF_2/conll/full_hagar/hagar.all.udv1.conllu.current'
     with open(conll_fpath) as f:
         conll = f.read().strip().split('\n\n')
 
-    with open(f'../CHILDES_UD2LF/LF_files/full_{dset_name}/{dset_name}.all_lf.txt') as f:
+    with open(f'../CHILDES_UD2LF_2/LF_files/full_{dset_name}/{dset_name}.all_lf.txt') as f:
         ida_lf = f.read().strip().split('\n\n')
 
     print(len(conll), len(ida_lf))

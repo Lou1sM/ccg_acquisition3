@@ -581,7 +581,7 @@ class LogicalForm:
 
 class ParseNode():
     def __init__(self,lf,words,node_type,parent=None,sibling=None,syn_cats=None):
-        self.logical_form = lf
+        self.lf = lf
         self.words = words
         self.possible_splits = []
         self.parent = parent
@@ -593,22 +593,22 @@ class ParseNode():
             "you're failing to specify a parent for a non-root node"
         assert (sibling is None) or (node_type != 'ROOT'), \
             "you're trying to specify a sibling for the root node"
-        self.sem_cats = self.logical_form.sem_cats
-        if self.logical_form.possible_app_splits == []:
-            self.logical_form.infer_splits()
+        self.sem_cats = self.lf.sem_cats
+        if self.lf.possible_app_splits == []:
+            self.lf.infer_splits()
         if syn_cats is not None:
             self.syn_cats = syn_cats
         else:
             self.syn_cats = lf.sem_cats
-        self.is_leaf = self.logical_form.is_semantic_leaf or len(self.words) == 1
+        self.is_leaf = self.lf.is_semantic_leaf or len(self.words) == 1
         if not self.is_leaf:
             for split_point in range(1,len(self.words)):
                 left_words = self.words[:split_point]
                 right_words = self.words[split_point:]
-                for f,g in self.logical_form.possible_app_splits:
+                for f,g in self.lf.possible_app_splits:
                     if g.sem_cat_is_set:
                         self.add_app_splits(f,g,left_words,right_words)
-                for f,g in self.logical_form.possible_cmp_splits:
+                for f,g in self.lf.possible_cmp_splits:
                     if g.sem_cat_is_set:
                         self.add_cmp_splits(f,g,left_words,right_words)
 
@@ -686,11 +686,11 @@ class ParseNode():
 
     @property
     def lf_str(self):
-        return self.logical_form.subtree_string(alpha_normalized=True)
+        return self.lf.subtree_string(alpha_normalized=True)
 
     def info_if_leaf(self):
-        shell_lf = self.logical_form.subtree_string(as_shell=True,alpha_normalized=True)
-        lf = self.logical_form.subtree_string(alpha_normalized=True)
+        shell_lf = self.lf.subtree_string(as_shell=True,alpha_normalized=True)
+        lf = self.lf.subtree_string(alpha_normalized=True)
         word_str = ' '.join(self.words)
         sem_cats = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.sem_cats)
         syn_cats = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.syn_cats)
@@ -705,7 +705,7 @@ class ParseNode():
     def __repr__(self):
         base = (f"ParseNode\n"
                 f"\tWords: {' '.join(self.words)}\n"
-                f"\tLogical Form: {self.logical_form.subtree_string()}\n"
+                f"\tLogical Form: {self.lf.subtree_string()}\n"
                 f"\tSyntactic Category: {self.syn_cats}\n")
         if hasattr(self,'stored_prob'):
             base += f'\tProb: {self.stored_prob}\n'
