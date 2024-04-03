@@ -59,7 +59,7 @@ pos_marking_dict = {
                     'det:num':set(['NP|N']),
                     'det:poss':set(['NP|N']),
                     'meta':set([None]),
-                    'mod':set(['S|NP|(S|NP)','S|(S|NP)|NP','S|NP|(S|NP)','S|(S|NP)|NP']),
+                    'mod':set(['S|NP|(S|NP)','S|(S|NP)|NP']),
                     'mod:aux':set([None]),
                     'n':set(['N']),
                     'n:gerund':set(['NP']),
@@ -91,6 +91,7 @@ pos_marking_dict = {
 pos_marking_dict['neg'] = set([f'({x})|({x})' for x in pos_marking_dict['v']] +[f'({x})|({x})' for x in pos_marking_dict['mod']] )
 
 pos_marking_dict = {k:set(['X']) if v == set([None]) else v for k,v in pos_marking_dict.items()}
+#pos_marking_dict = {k:v.union(set([c.replace('S','Sq') for c in v])) for k,v in pos_marking_dict.items()}
 
 
 base_lexicon = {k:set(['NP']) for k in ('you','i','me','he','she','it','WHAT','WHO')}

@@ -127,6 +127,7 @@ def fix_posses(lf):
     lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔīmaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔīmaʔ', lf )
     lf = lf.replace('n|ʔābaʔ', 'n:prop|ʔābaʔ' )
     lf = lf.replace('n|ʔīmaʔ', 'n:prop|ʔīmaʔ' )
+    lf = re.sub(r'v\|do\b','mod|do',lf) # make 'do' a modal verb
     lf = re.sub(r'_\d{1,2}\b','',lf) # remove sense numbers, way too fine-grained
     lf = re.sub(r'BARE\(\$\d{1,2},(pro:indef\|[{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'\1',lf)
     lf = re.sub(r'BARE\(\$\d{1,2},(det:num|n:let|on|co)\|([{he_chars}\w-]+)\(\$\d{1,2}\)\)', r'n:prop|\2',lf)
