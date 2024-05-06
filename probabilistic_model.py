@@ -220,24 +220,7 @@ class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
             return 28**-(len(x)/2) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
-    def __init__(self, lr, vocab_thresh):
-        self.lr = lr
-        self.syntaxl = CCGDirichletProcessLearner(10)
-        self.shmeaningl = ShellMeaningDirichletProcessLearner(1)
-        self.meaningl = MeaningDirichletProcessLearner(1)
-        self.wordl = WordSpanDirichletProcessLearner(0.25)
-        self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
-        #self.lf_parts_cache = {'splits':{},'cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
-        self.caches = {'splits':{}, 'cats':{}}
-        self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
-        self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
-        self.sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen anywhere
-        self.syn_cat_memory = DirichletProcess(1)
-        self.lf_memory = DirichletProcess(1)
-        self.shell_lf_memory = DirichletProcess(1)
-        self.leaf_syncat_memory = DirichletProcess(1)
-        self.vocab_thresh = vocab_thresh
-        self.beam_size = 100
+        self.beam_size = 50
 
     def train(self):
         self.syntaxl.train()
@@ -627,6 +610,10 @@ class LanguageAcquirer():
             for b in range(N-a+1):
                 add_prob_of_span(a,b)
 
+        #def set_parents_children(n):
+        #    if n['rule'] == 'leaf':
+        #        return
+        #    for n in
         for pn in probs_table[N-1,0]:
             if pn is not None:
                 pn['syn_cat'] = pn['sem_cat']
@@ -636,7 +623,7 @@ class LanguageAcquirer():
             return 'No parse found'
 
         def show_parse(num):
-            syntax_tree_level = [dict(probs_table[N-1,0][num],idx='1',hor_pos=0)]
+            syntax_tree_level = [dict(probs_table[N-1,0][num],idx='1',hor_pos=0, parent='ROOT')]
             all_syntax_tree_levels = []
             for i in range(N):
                 new_syntax_tree_level = []
@@ -648,9 +635,9 @@ class LanguageAcquirer():
                     left_split = probs_table[left_len-1,left_pos][left_idx]
                     right_split = probs_table[right_len-1,right_pos][right_idx]
                     lsync, rsync = infer_slash(left_split['sem_cat'],right_split['sem_cat'],item['syn_cat'],item['rule'])
-                    left_split = dict(left_split,idx=item['idx'][:-1] + '01',syn_cat=lsync)
+                    left_split = dict(left_split,idx=item['idx'][:-1] + '01',syn_cat=lsync, parent=item)
                                         #hor_pos=left_pos+(left_len-1)/2 - (N-1)/2)
-                    right_split = dict(right_split,idx=item['idx'][:-1] + '21', syn_cat=rsync)
+                    right_split = dict(right_split,idx=item['idx'][:-1] + '21', syn_cat=rsync, parent=item)
                                         #hor_pos=right_pos+(right_len-1)/2 - (N-1)/2)
                     assert 'syn_cat' in left_split.keys() and 'syn_cat' in right_split.keys()
                     item['left_child'] = left_split
@@ -667,6 +654,21 @@ class LanguageAcquirer():
             return all_syntax_tree_levels
 
         favourite_all_syntax_tree_levels = show_parse(-1)
+        def _simple_draw_graph(x, depth):
+            texttree = '\t'*depth
+            for k,v in x.items():
+                if k in ('syn_cat', 'lf', 'words'):
+                    texttree += f'{k}: {v}\t'
+                if k == 'prob':
+                    texttree += f'{k}: {v:.4f}\t'
+            assert(non_leaf:='left_child' in x.keys()) == ('right_child' in x.keys())
+            if non_leaf:
+                texttree += '\n'
+                texttree += _simple_draw_graph(x['left_child'], depth+1) + '\n'
+                texttree += _simple_draw_graph(x['right_child'], depth+1) + '\n'
+            return texttree
+
+        print(_simple_draw_graph(favourite_all_syntax_tree_levels[0][0], depth=0))
         self.draw_graph(favourite_all_syntax_tree_levels)
 
         if ARGS.db_parse:
@@ -676,34 +678,30 @@ class LanguageAcquirer():
     def draw_graph(self,all_syntax_tree_levels,is_gt=False):
         leaves = [n for level in all_syntax_tree_levels for n in level if n['rule']=='leaf']
         leaves.sort(key=lambda x:x['idx'])
+        for i,leaf in enumerate(leaves):
+            leaf['hor_pos'] = i - len(leaves)/2
+        for stl in reversed(all_syntax_tree_levels):
+            for n in stl:
+                if n['rule']=='leaf':
+                    assert 'hor_pos' in n.keys()
+                    continue
+                elif n['parent'] == 'ROOT':
+                    n['hor_pos'] = 0
+                else:
+                    n['hor_pos'] = (n['left_child']['hor_pos'] + n['right_child']['hor_pos']) / 2
         G=nx.Graph()
-        all_words = all_syntax_tree_levels[0][0]['words'].split()
-        #for i in range(len(all_words)):
-            #if all_words.count(all_words[i]) > 1:
-                #matching_idxs = [idx for idx,w in enumerate(all_words) if w == all_words[i]]
-                #for suffix,midx in enumerate(matching_idxs):
-                    #all_words[midx] = all_words[midx] + f'-{suffix}'
 
-        def _wp(w,idx):
-            return nth_in_list(all_words, idx, w) - (len(all_words)-1)/2
-
-        def _wps(words):
-            return sum([_wp(w,sum(w1==w for w1 in words.split()[:i])) for i,w in enumerate(words.split())])/len(words.split())
-
-        for level in all_syntax_tree_levels:
-            for x in level:
-                x['hor_pos'] = _wps(x['words'])
         for j,syntax_tree_level in enumerate(all_syntax_tree_levels):
-            wrong_avg = sum([x['hor_pos'] for x in syntax_tree_level])/len(syntax_tree_level)
-            words_at_level = ' '.join([x['words'] for x in syntax_tree_level])
-            what_avg_should_be = _wps(words_at_level)
+            #wrong_avg = sum([x['hor_pos'] for x in syntax_tree_level])/len(syntax_tree_level)
+            #words_at_level = ' '.join([x['words'] for x in syntax_tree_level])
+            #what_avg_should_be = _wps(words_at_level)
             #print(f'"{words_at_level}" out of {all_words} wrong: {wrong_avg} right: {what_avg_should_be}')
-            correction = what_avg_should_be - wrong_avg
+            #correction = what_avg_should_be - wrong_avg
             for i,node in enumerate(syntax_tree_level):
                 hor_pos = node['hor_pos']
-                if node['rule'] != 'leaf' and j != 0: # keep leaves and root exactly on their bin
-                    hor_pos += correction/2
-                    assert hor_pos <= max([x['hor_pos'] for x in leaves])
+                #if node['rule'] != 'leaf' and j != 0: # keep leaves and root exactly on their bin
+                    #hor_pos += correction/2
+                    #assert hor_pos <= max([x['hor_pos'] for x in leaves])
                 if node['rule'] == 'leaf':
                     combined = 'leaf'
                 else:
