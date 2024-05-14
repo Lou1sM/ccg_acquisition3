@@ -1,6 +1,6 @@
 import numpy as np
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced
-from errors import SemCatError, ZeroProbError
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced, apply_sem_cats
+from errors import SemCatError, ZeroProbError, SynCatError
 import re
 import sys; sys.setrecursionlimit(500)
 from learner_config import pos_marking_dict, base_lexicon, chiltag_to_node_types
@@ -197,7 +197,7 @@ class LogicalForm:
 
     def is_type_congruent(self):
         lf_str = logical_de_type_raise(self.lf_str) if self.is_type_raised() else self.lf_str
-        self.sem_cats = set(ssc for ssc in self.sem_cats if ssc == 'X' or lf_cat_congruent(lf_str,maybe_de_type_raise(ssc)))
+        self.sem_cats = set(ssc for ssc in self.sem_cats if ssc=='X' or lf_cat_congruent(lf_str,ssc))
         return self.sem_cats != set([])
 
     def infer_splits(self):
@@ -278,8 +278,10 @@ class LogicalForm:
             f = f.lambda_abstract(g_sub_var_num)
             if not f.set_cats_from_string():
                 continue
-            if 'S|NP|(S|NP)' in f.sem_cats and g.is_leaf and g.lf_str.startswith('v|'):
-                g = g.spawn_self_like(f'lambda $0.{g.subtree_string()} $0')
+            if 'mod|' in f.lf_str and g.is_leaf and g.lf_str.startswith('v|'):
+                f.infer_splits()
+                if any(sc in f.sem_cats for sc in ['S|NP|VP', 'S|VP', 'Sq|VP']):
+                    g = g.spawn_self_like(f'lambda $0.{g.subtree_string()} $0')
             self.add_split(f,g,'app')
             # if self is a lambda and had it's bound var removed and put in g then try cmp
             if self.node_type == 'lmbda' and any(not is_atomic(x) for x in self.sem_cats) and any(not is_atomic(x) for x in f.sem_cats) and f.node_type == 'lmbda' and any(cat_components(x,allow_atomic=True)[-1] == cat_components(y,allow_atomic=True)[-1] and cat_components(y,allow_atomic=True)[-1]!='X' for x in self.sem_cats for y in f.sem_cats):
@@ -322,7 +324,8 @@ class LogicalForm:
             to_add_to = self.possible_cmp_splits
         assert ( combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True))
         g.infer_splits()
-        f.infer_splits()
+        if not ('mod|' in f.lf_str and g.is_leaf and g.lf_str.startswith('v|')):
+            f.infer_splits() # don't do again if already done in infer_splits
         if self.sem_cat_is_set and g.sem_cat_is_set:
             self.set_f_sem_cat_from_self_and_g(f,g,split_type)
             if not f.cat_consistent():
@@ -334,10 +337,18 @@ class LogicalForm:
             inferred_sem_cats = set([])
             for fsc in f.sem_cats:
                 for gsc in g.sem_cats:
-                    hits = re.findall(fr'[\\/\|]\(?{re.escape(gsc)}\)?$',fsc.replace('\\','\\\\'))
-                    assert len(hits) < 2
-                    new_inferred_sem_cats = set(fsc[:-len(h)] for h in hits if is_bracket_balanced(h))
-                    inferred_sem_cats = inferred_sem_cats | new_inferred_sem_cats
+                    #hits = re.findall(fr'[\\/\|]\(?{re.escape(gsc)}\)?$',fsc.replace('\\','\\\\'))
+                    #assert len(hits) < 2
+                    ##new_inferred_sem_cats = set(fsc[:-len(h)] for h in hits if is_bracket_balanced(h))
+                    #for h in hits:
+                    #    if not is_bracket_balanced(h):
+                    #        continue
+                    #    if '|' in h[1:] and not is_bracketed(h):
+                    #        continue
+                    #    new_inferred_sem_cat = fsc[:-len(h)]
+                    new_inferred_sem_cat = apply_sem_cats(fsc, gsc)
+                    if new_inferred_sem_cat is not None:
+                        inferred_sem_cats = inferred_sem_cats | set([new_inferred_sem_cat])
             if inferred_sem_cats:
                 if self.sem_cats == {'X'}:
                     self.sem_cats = inferred_sem_cats
@@ -348,6 +359,7 @@ class LogicalForm:
                     self.sem_cats = new
                 if not self.cat_consistent():
                     return
+            g.sem_cats = set([gsc for gsc in g.sem_cats if 'X' in gsc or any(apply_sem_cats(fsc, gsc)==sc for fsc in f.sem_cats for sc in self.sem_cats)])
         if not ( ( f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set)):
             breakpoint()
         if not f.sem_cat_is_set:
@@ -370,6 +382,8 @@ class LogicalForm:
         """Return False if sem_cat says type-raised but lf not of type-raised form."""
         if self.sem_cats.intersection(['S|N','Sq|N']):
             return False
+        if 'mod|' in self.lf_str: # mod messes it up because looks type-raised
+            return True
         return is_type_raised(self.subtree_string()) == ('S|(S|NP)' in self.sem_cats)
 
     def set_f_sem_cat_from_self_and_g(self,f,g,comb_type):
@@ -611,11 +625,15 @@ class ParseNode():
                 for f,g in self.lf.possible_cmp_splits:
                     if g.sem_cat_is_set:
                         self.add_cmp_splits(f,g,left_words,right_words)
+                    if 'P' in self.syn_cats:
+                        breakpoint()
 
         if len(self.possible_splits) == 0:
             self.is_leaf = True
         assert not any(x is None for x in self.sem_cats)
         assert not any(x is None for x in self.syn_cats)
+        if len(self.syn_cats)==0:
+            raise SynCatError('parse node is left with no suitable syncats')
 
     def add_cmp_splits(self,f,g,left_words,right_words):
         # just fwd_cmp for now
@@ -658,14 +676,13 @@ class ParseNode():
         left_child_fwd = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',syn_cats=new_syn_cats)
         if 'Sq/(S|NP)' in new_syn_cats:
             print(new_syn_cats)
-            breakpoint()
         #congs = set(x for x in f.sem_cats if any(is_congruent(x,y) for y in new_syn_cats))
         if not (f.was_cached or self.syn_cats==set('X') or set_congruent(f.sem_cats,new_syn_cats)):
             raise SemCatError('no f-semcats are congruent with it\'s new inferred syncats')
         self.append_split(left_child_fwd,right_child_fwd,'fwd_app')
 
         left_child_bck = ParseNode(g,left_words,parent=self,node_type='left_bck_app')
-        new_syn_cats = set(f'{ssync}\\{maybe_brac(lcsync)}' for ssync in self.syn_cats for lcsync in left_child_bck.syn_cats if not (ssync=='S/NP' and lcsync=='NP'))
+        new_syn_cats = set(f'{ssync}\\{maybe_brac(lcsync)}' for ssync in self.syn_cats for lcsync in left_child_bck.syn_cats if not (bool(re.match(r'S/[A-Za-z]+$',ssync)) and lcsync=='NP'))
         if new_syn_cats and self.syn_cats!=set('X'):
             assert f.was_cached or set_congruent(f.sem_cats, new_syn_cats)
             right_child_bck = ParseNode(f,right_words,parent=self,node_type='right_bck_app',syn_cats=new_syn_cats)

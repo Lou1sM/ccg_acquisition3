@@ -114,6 +114,9 @@ exclude_sents = [
     'did I knock down more than you did or did you knock more down than I did', # lf doesn't match
     'be very careful with this one', # lf doesn't match
     'are you silly', # lf doesn't match
+    'not cranberries', # lf wrong, not sure what it should be
+    'two and three what', # lf wrong, not sure what it should be
+    'not if you \'re', # lf doesn't match
     # Hagar
     'huʔ racā xavitā loʔ melafefōn' # lf doesn't match
     #'ʔābaʔ ʔat rocā' # lf doesn't match--one that Mark says should be wh-movement
@@ -164,6 +167,8 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (pro:dem|that $1 (pro:indef|one $1))': 'Q (pro:dem|that $1 (pro:indef|one $1))', # split anything into two words like it is in the sent (which may well be mistranscribed)
     'lambda $0_{r}.v|ciyēr(you,BARE($1,adj|mešulāš($1)),$0)': 'lambda $0_{r}.v|ciyēr(you,BARE($1,n|mešulāš($1)),$0)', # pos of mesulas to n
     'Q (det:art|a (adv|too pro:per|you) (n|pirate (adv|too pro:per|you)))': 'Q (adv|too (cop|be-past pro:per|you (det:art|a n|pirate)))',
+    'Q (not (adv|pretty pro:dem|that))': 'Q (not (adj|pretty pro:dem|that))', # pos of 'pretty'
+    'Q (pro:int|WHAT det:dem|those)': 'Q (v|equals pro:dem|this pro:int|WHAT)', # pos of 'pretty'
     # Hagar
     'v|ciyēr pro:per|ʔat n|ʕigūl-BARE': 'v|ciyēr you n|ʕigūl-BARE', # split anything into two words like it is in the sent (which may well be mistranscribed)
     }

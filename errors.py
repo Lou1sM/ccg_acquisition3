@@ -12,6 +12,12 @@ class SemCatError(CCGLearnerError):
     def __str__(self):
         return 'SemCat Error' if self.msg == '' else f'SemCat Error: {self.msg}'
 
+class SynCatError(CCGLearnerError):
+    """A base class for CCGLearnerError exceptions."""
+
+    def __str__(self):
+        return 'SynCat Error' if self.msg == '' else f'SynCat Error: {self.msg}'
+
 class ZeroProbError(CCGLearnerError):
     """A base class for CCGLearnerError exceptions."""
 

@@ -128,6 +128,19 @@ def possible_syn_cats(sem_cat):
     out_cat,slash,in_cat = cat_components(maybe_debrac(sem_cat),'|')
     return [rest_out+sd+maybe_brac(rest_in) for sd in ('\\','/') for rest_in in possible_syn_cats(in_cat) for rest_out in possible_syn_cats(out_cat)]
 
+def apply_sem_cats(fsc, gsc):
+    hits = re.findall(fr'[\\/\|]\(?{re.escape(gsc)}\)?$',fsc.replace('\\','\\\\'))
+    assert len(hits) < 2
+    if len(hits)==0:
+        return None
+    hit = hits[0][1:]
+    if not is_bracket_balanced(hit):
+        return None
+    if '|' in hit and not is_bracketed(hit):
+        return None
+    psc = fsc[:-len(hits[0])]
+    return psc
+
 def combination_from_sem_cats_and_rule(lsem_cat,rsem_cat,rule):
     if rule == 'fwd_app':
         fin,fslash,fout = cat_components(lsem_cat,'|')
@@ -243,6 +256,8 @@ def is_direct_congruent(sc1,sc2):
 def n_nps(sem_cat):
     if sem_cat == 'NP':
         return 1
+    elif sem_cat == 'VP':
+        return -1
     elif sem_cat in ['Sq','S','N','Swhq']:
         return 0
     else:
@@ -502,12 +517,23 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
         new_g = composed_cat + '/' + gin
         return new_f, new_g # hard-coding fwd slash
 
-def lf_cat_congruent(lf_str, sem_cat):
+def lf_cat_congruent(lf_str, sem_cat_):
+    sem_cat = maybe_de_type_raise(sem_cat_)
     if sem_cat in ('Swhq','N|N', 'N\\N','N/N'):
         what_n_lambdas_should_be = 0
+    elif sem_cat in ('VP'):
+        what_n_lambdas_should_be = 1
     else:
         what_n_lambdas_should_be = len(split_respecting_brackets(sem_cat,sep=['|','\\','/']))-1
     return what_n_lambdas_should_be == n_lambda_binders(lf_str)
+
+#def lf_cat_congruent(lf_str, sem_cat):
+#    if _lf_cat_congruent(lf_str, sem_cat):
+#        return True
+#    if is_type_raised(sem_cat):
+#        return _lf_cat_congruent(lf_str, maybe_de_type_raise(sem_cat))
+#    else:
+#        return False
 
 def parent_cmp_from_f_and_g(f_cat,g_cat,sem_only):
     if f_cat=='X' or g_cat=='X':

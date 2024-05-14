@@ -9,8 +9,8 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, nth_in_list
-from errors import CCGLearnerError, RootSemCatError
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syn_cats, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets
+from errors import CCGLearnerError
 from time import time
 import argparse
 from abc import ABC
@@ -220,6 +220,23 @@ class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
             return 28**-(len(x)/2) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
+    def __init__(self, lr, vocab_thresh):
+        self.lr = lr
+        self.syntaxl = CCGDirichletProcessLearner(10)
+        self.shmeaningl = ShellMeaningDirichletProcessLearner(1)
+        self.meaningl = MeaningDirichletProcessLearner(1)
+        self.wordl = WordSpanDirichletProcessLearner(0.25)
+        self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
+        #self.lf_parts_cache = {'splits':{},'cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
+        self.caches = {'splits':{}, 'cats':{}}
+        self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
+        self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
+        self.sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen anywhere
+        self.syn_cat_memory = DirichletProcess(1)
+        self.lf_memory = DirichletProcess(1)
+        self.shell_lf_memory = DirichletProcess(1)
+        self.leaf_syncat_memory = DirichletProcess(1)
+        self.vocab_thresh = vocab_thresh
         self.beam_size = 50
 
     def train(self):
@@ -610,10 +627,6 @@ class LanguageAcquirer():
             for b in range(N-a+1):
                 add_prob_of_span(a,b)
 
-        #def set_parents_children(n):
-        #    if n['rule'] == 'leaf':
-        #        return
-        #    for n in
         for pn in probs_table[N-1,0]:
             if pn is not None:
                 pn['syn_cat'] = pn['sem_cat']
@@ -692,16 +705,8 @@ class LanguageAcquirer():
         G=nx.Graph()
 
         for j,syntax_tree_level in enumerate(all_syntax_tree_levels):
-            #wrong_avg = sum([x['hor_pos'] for x in syntax_tree_level])/len(syntax_tree_level)
-            #words_at_level = ' '.join([x['words'] for x in syntax_tree_level])
-            #what_avg_should_be = _wps(words_at_level)
-            #print(f'"{words_at_level}" out of {all_words} wrong: {wrong_avg} right: {what_avg_should_be}')
-            #correction = what_avg_should_be - wrong_avg
             for i,node in enumerate(syntax_tree_level):
                 hor_pos = node['hor_pos']
-                #if node['rule'] != 'leaf' and j != 0: # keep leaves and root exactly on their bin
-                    #hor_pos += correction/2
-                    #assert hor_pos <= max([x['hor_pos'] for x in leaves])
                 if node['rule'] == 'leaf':
                     combined = 'leaf'
                 else:
@@ -829,10 +834,6 @@ if __name__ == "__main__":
     la = LanguageAcquirer(ARGS.lr, vt)
     if ARGS.reload_from is not None:
         la.load_from(f'experiments/{ARGS.reload_from}')
-    if 'questions' in ARGS.dset:
-        univ = {'words': ['does', 'a', 'lake', 'talk'], 'lf': 'Q (talk (a lake))'}
-        train_data = train_data[:10] + [univ] + train_data[10:]
-        test_data = [univ] + test_data
     start_time = time()
     all_word_order_probs = []
     all_word_order_probs_no_prior = []
