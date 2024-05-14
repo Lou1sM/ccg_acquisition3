@@ -296,13 +296,7 @@ if __name__ == '__main__':
             n_excluded+=1
             continue
         pl = lf_preproc(lf, sent)
-        if pl.endswith(': '):
-            n_excluded+=1
-            continue
-        if pl is None:
-            n_excluded+=1
-            continue
-        if '_' in pl:
+        if pl.endswith(': ') or pl is None or '_' in pl or pl=='':
             n_excluded+=1
             continue
         assert not any(x in pl for x in exclude_lfs)

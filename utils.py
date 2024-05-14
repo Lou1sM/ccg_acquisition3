@@ -416,17 +416,19 @@ def is_fit_by_type_raise(left_cat,right_cat):
     routout,routslash,routin = cat_components(rout)
     return routin==left_cat, routout
 
+def non_directional(cat):
+    return cat.replace('\\','|').replace('/','|')
 def get_combination(left_cat,right_cat):
     """Inputs can be either syncats or semcats"""
     if is_atomic(left_cat) and is_atomic(right_cat):
         return None, None
-    elif re.search(fr'[/|]\({re.escape(right_cat)}\)$',left_cat):
+    elif re.search(fr'[/|]\({re.escape(right_cat)}\)$',non_directional(left_cat)):
         combined, rule = left_cat[:-len(right_cat)-3],'fwd_app'
-    elif re.search(fr'[/|]{re.escape(right_cat)}$',left_cat) and is_atomic(right_cat):
+    elif re.search(fr'[/|]{re.escape(right_cat)}$',non_directional(left_cat)) and is_atomic(right_cat):
         combined, rule = left_cat[:-len(right_cat)-1],'fwd_app'
-    elif re.search(fr'[\\|]\({re.escape(left_cat)}\)$',right_cat):
+    elif re.search(fr'[\\|]\({re.escape(left_cat)}\)$',non_directional(right_cat)):
         combined, rule = right_cat[:-len(left_cat)-3],'bck_app'
-    elif re.search(fr'[\\|]{re.escape(left_cat)}$',right_cat) and is_atomic(left_cat):
+    elif re.search(fr'[\\|]{re.escape(left_cat)}$',non_directional(right_cat)) and is_atomic(left_cat):
         combined, rule = right_cat[:-len(left_cat)-1],'bck_app'
     elif is_atomic(left_cat) or is_atomic(right_cat): # can't do composition then
         return None, None
@@ -437,7 +439,7 @@ def get_combination(left_cat,right_cat):
             return None, None
         elif maybe_debrac(left_in) == maybe_debrac(right_out):
             combined, rule = ''.join((left_out, left_slash, right_in)), 'fwd_cmp'
-        elif left_out == right_in:
+        elif non_directional(left_in) == right_in or non_directional(right_in) == left_in:
             combined, rule = ''.join((right_out, right_slash, left_in)), 'bck_cmp'
         else:
             return None,None
@@ -452,7 +454,7 @@ def infer_slash(lcat,rcat,parent_cat,rule):
             assert is_direct_congruent(lcat[:-len(rcat)-1],parent_cat)
         else:
             assert is_direct_congruent(lcat[:-len(rcat)-3],parent_cat)
-        out_lcat = parent_cat + '/' + rcat
+        out_lcat = parent_cat + '/' + maybe_brac(rcat)
         out_rcat = rcat
     elif rule == 'bck_app':
         if is_atomic(lcat):
@@ -572,3 +574,6 @@ def parses_of_syn_cats(self,syn_cats):
     for _ in range(len(syn_cats)-1):
         frontiers = [current+[f] for current in frontiers for f in possible_next_frontiers(current[-1])]
     return frontiers
+
+def nth_in_list(l,n,item):
+    return [i for i,x in enumerate(l) if x==item][n]

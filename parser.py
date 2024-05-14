@@ -648,12 +648,17 @@ class ParseNode():
         # CONVENTION: f-child with the words on the left of sentence is the
         # 'left' child, even if bck application, left child is g in that case
         right_child_fwd = ParseNode(g,right_words,parent=self,node_type='right_fwd_app')
+        #if 'S|(S|NP)' in f.sem_cats and 'S|NP' in g.sem_cats:
+            #breakpoint()
         new_syn_cats = set(f'{ssync}/{maybe_brac(rcsync)}' for ssync in self.syn_cats for rcsync in right_child_fwd.syn_cats)
         assert new_syn_cats != 'S/NP\\NP'
         bad_new_syn_cats = [sc for sc in ('X\\S', 'X/S') if sc in new_syn_cats]
         if len(bad_new_syn_cats) > 0:
             raise SemCatError(f"bad new syn cats: {''.join(bad_new_syn_cats)}")
         left_child_fwd = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',syn_cats=new_syn_cats)
+        if 'Sq/(S|NP)' in new_syn_cats:
+            print(new_syn_cats)
+            breakpoint()
         #congs = set(x for x in f.sem_cats if any(is_congruent(x,y) for y in new_syn_cats))
         if not (f.was_cached or self.syn_cats==set('X') or set_congruent(f.sem_cats,new_syn_cats)):
             raise SemCatError('no f-semcats are congruent with it\'s new inferred syncats')
