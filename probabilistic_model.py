@@ -66,6 +66,7 @@ class BaseDirichletProcessLearner(ABC):
         self.eval_alpha = ARGS.eval_alpha
         self.memory = {}
         self.base_distribution_cache = {}
+        self.marg_prob_cache = {}
         self.buffers = []
         self.is_training = True
 
@@ -90,6 +91,19 @@ class BaseDirichletProcessLearner(ABC):
             return base_prob
         mx = self.memory[x].get(y,0)
         return (mx+self.alpha*base_prob)/(self.memory[x]['COUNT']+self.alpha)
+
+    def marg_prob(self, x, ignore_cache=False):
+        if x in self.marg_prob_cache and not ignore_cache:
+            return self.marg_prob_cache[x]
+        prob = self._marg_prob(x)
+        self.marg_prob_cache[x] = prob
+        return prob
+
+    def _marg_prob(self, x):
+        numerator = sum(self.prob(x, k)*v['COUNT'] for k,v in self.memory.items())
+        denominator = sum(v['COUNT'] for k,v in self.memory.items())
+        prob = numerator / denominator
+        return prob
 
     def prob(self,*args,**kwargs):
         return self._prob(*args,**kwargs)
@@ -167,6 +181,13 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
             self._observe(y,maybe_de_type_raise(x),weight)
         else:
             self._observe(y,x,weight)
+
+    #@override
+    def _marg_prob(self, x):
+        denominator = sum(v['COUNT'] for v in self.memory.values())
+        base_prob = self.base_distribution(x)
+        numerator = sum(v['COUNT'] for k,v in self.memory.items() if k in possible_syn_cats(x))
+        return (numerator + self.alpha*base_prob) / (denominator + self.alpha)
 
     def prob(self,y,x, can_be_weird_svo=False):
         if y != 'leaf':
@@ -558,14 +579,14 @@ class LanguageAcquirer():
         if words not in self.mwe_vocab and ' ' not in words:
             print(f'\'{words}\' not seen before as a leaf')
         beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.lf_memory.prob(lf)} for lf in self.lf_vocab]
-        #beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
         beam = self.prune_beam(beam)
 
-        beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.lf_memory.prob(b['lf'])*self.shell_lf_memory.prob(shell_lf))
+        #beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.lf_memory.prob(b['lf'])*self.shell_lf_memory.prob(shell_lf))
+        beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.meaningl.marg_prob(b['lf'])*self.shmeaningl.marg_prob(shell_lf))
             for shell_lf in self.shell_lf_vocab for b in beam]
         beam = self.prune_beam(beam)
-        #beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
-        beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat)/self.shell_lf_memory.prob(b['shell_lf'])*self.sem_cat_memory.prob(sem_cat))
+        #beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat)/self.shell_lf_memory.prob(b['shell_lf'])*self.sem_cat_memory.prob(sem_cat))
+        beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat)/self.shmeaningl.marg_prob(b['shell_lf'])*self.syntaxl.marg_prob(sem_cat))
             for sem_cat in self.sem_cat_vocab for b in beam if sem_cat!='X']
         #beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
         beam = self.prune_beam(beam)
@@ -848,8 +869,8 @@ if __name__ == "__main__":
             if i in ARGS.exclude_points:
                 continue
             words = dpoint['words']
-            if words==['ʔābaʔ', 'ʔat', 'rocā']:
-                continue
+            #if words==['ʔābaʔ', 'ʔat', 'rocā']:
+                #continue
             if ARGS.remove_vowels:
                 words = [remove_vowels(w) for w in words]
             if dpoint != all_data[i+ARGS.start_from]:
@@ -1001,8 +1022,8 @@ if __name__ == "__main__":
             for k,v in all_word_order_probs[-1].items():
                 file_print(f'{k}: {v:.6f}',f)
     #la.parse('do you like it'.split())
-    #la.parse('you see him'.split())
-    #la.parse('did he see it'.split())
+    la.parse('you see him'.split())
+    la.parse('did he see it'.split())
     la.parse('the pencil dropped the name'.split())
     la.parse('did the pencil see the name'.split())
     considered_sem_cats = []
