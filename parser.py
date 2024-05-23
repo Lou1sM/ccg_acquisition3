@@ -143,9 +143,11 @@ class LogicalForm:
             ss = self.stripped_subtree_string
             if debug_set_cats is not None and debug_set_cats==self.subtree_string(recompute=True):
                 breakpoint()
+            ss = ss.replace(' you','')
             if ss == 'not':
                 self.is_semantic_leaf = True
-                self.sem_cats = set(['X'])
+                #self.sem_cats = set(['X'])
+                self.sem_cats = set(['S|NP|(S|NP)'])
                 had_initial_q = False
             elif ss == 'Q':
                 self.is_semantic_leaf = True
@@ -197,7 +199,13 @@ class LogicalForm:
 
     def is_type_congruent(self):
         lf_str = logical_de_type_raise(self.lf_str) if self.is_type_raised() else self.lf_str
-        self.sem_cats = set(ssc for ssc in self.sem_cats if ssc=='X' or lf_cat_congruent(lf_str,ssc))
+        if ' you' in lf_str and '.v|' in lf_str: # imperative
+            if lf_str.startswith('lambda'): # transitive
+                self.sem_cats = {'VP|NP'}
+            else:
+                self.sem_cats = {'VP'} # intransitive
+        else:
+            self.sem_cats = set(ssc for ssc in self.sem_cats if ssc=='X' or lf_cat_congruent(lf_str,ssc))
         return self.sem_cats != set([])
 
     def infer_splits(self):
@@ -360,6 +368,7 @@ class LogicalForm:
                 if not self.cat_consistent():
                     return
             g.sem_cats = set([gsc for gsc in g.sem_cats if 'X' in gsc or any(apply_sem_cats(fsc, gsc)==sc for fsc in f.sem_cats for sc in self.sem_cats)])
+            f.sem_cats = set([fsc for fsc in f.sem_cats if 'X' in fsc or any(apply_sem_cats(fsc, gsc)==sc for gsc in g.sem_cats for sc in self.sem_cats)])
         if not ( ( f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set)):
             breakpoint()
         if not f.sem_cat_is_set:
@@ -607,9 +616,9 @@ class ParseNode():
             "you're failing to specify a parent for a non-root node"
         assert (sibling is None) or (node_type != 'ROOT'), \
             "you're trying to specify a sibling for the root node"
-        self.sem_cats = self.lf.sem_cats
         if self.lf.possible_app_splits == []:
             self.lf.infer_splits()
+        self.sem_cats = self.lf.sem_cats
         if syn_cats is not None:
             self.syn_cats = syn_cats
         else:
@@ -666,8 +675,6 @@ class ParseNode():
         # CONVENTION: f-child with the words on the left of sentence is the
         # 'left' child, even if bck application, left child is g in that case
         right_child_fwd = ParseNode(g,right_words,parent=self,node_type='right_fwd_app')
-        #if 'S|(S|NP)' in f.sem_cats and 'S|NP' in g.sem_cats:
-            #breakpoint()
         new_syn_cats = set(f'{ssync}/{maybe_brac(rcsync)}' for ssync in self.syn_cats for rcsync in right_child_fwd.syn_cats)
         assert new_syn_cats != 'S/NP\\NP'
         bad_new_syn_cats = [sc for sc in ('X\\S', 'X/S') if sc in new_syn_cats]
@@ -807,5 +814,6 @@ class ParseNode():
         #if self.syn_cats == {'S\\NP/NP'} and self.lf_str == 'lambda $0.lambda $1.v|racā $0 $1':
             #breakpoint()
         if self.stored_prob_as_leaf==0:
+            print('Zero prob for \n', self)
             raise ZeroProbError
         return self.stored_prob_as_leaf

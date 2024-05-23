@@ -581,17 +581,13 @@ class LanguageAcquirer():
         beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.lf_memory.prob(lf)} for lf in self.lf_vocab]
         beam = self.prune_beam(beam)
 
-        #beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.lf_memory.prob(b['lf'])*self.shell_lf_memory.prob(shell_lf))
         beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.meaningl.marg_prob(b['lf'])*self.shmeaningl.marg_prob(shell_lf))
             for shell_lf in self.shell_lf_vocab for b in beam]
         beam = self.prune_beam(beam)
-        #beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat)/self.shell_lf_memory.prob(b['shell_lf'])*self.sem_cat_memory.prob(sem_cat))
         beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat)/self.shmeaningl.marg_prob(b['shell_lf'])*self.syntaxl.marg_prob(sem_cat))
             for sem_cat in self.sem_cat_vocab for b in beam if sem_cat!='X']
-        #beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
         beam = self.prune_beam(beam)
         beam = [dict(b,prob=b['prob']*self.syntaxl.prob('leaf',b['sem_cat'])) for b in beam]
-        #beam = sorted(beam,key=lambda x:x['prob'])[-beam_size:]
         beam = self.prune_beam(beam)
         return [dict(b,words=words,rule='leaf',backpointer=None) for b in beam]
 
@@ -612,11 +608,6 @@ class LanguageAcquirer():
                     for right_idx, right_option in enumerate(right_chunk_probs):
                         assert left_option['words'] + ' ' + right_option['words'] == word_span
                         l_cat, r_cat = left_option['sem_cat'], right_option['sem_cat']
-                        #if l_cat == 'Sq|(S|NP)' and r_cat == 'S|NP' and left_option['lf'] =='lambda $0.Q (mod|do ($0 pro:per|you))' and right_option['lf']=='lambda $0.v|like $0 pro:per|it':
-                            #breakpoint()
-                        #should_type_raise, outcat = is_fit_by_type_raise(lsyn_cat,rsyn_cat)
-                        #if should_type_raise:
-                            #lsyn_cat = type_raise(lsyn_cat,'fwd',outcat)
                         combined,rule = get_combination(l_cat,r_cat)
                         if combined is None:
                             continue
@@ -889,6 +880,8 @@ if __name__ == "__main__":
             frac_words_seen = n_words_seen/len(words)
             lf = dpoint['lf']
             has_copula = 'v|hasproperty' in lf or 'v|equals' in lf
+            #if 'him' in words:
+                #breakpoint()
             if not (has_copula and ARGS.exclude_copulae):
                problem_list += la.train_one_step(lf_strs_incl_distractors,words,apply_buffers)
             else:

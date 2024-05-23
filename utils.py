@@ -497,6 +497,8 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
     """Determines the slash directions for both f and g when comb. with fwd_cmp."""
     if parent_cat=='X' or g_cat=='X':
         return 'X', 'X'
+    if is_atomic(g_cat) or is_atomic(parent_cat):
+        return None, None
     try:
         pout,pslash,pin = cat_components(parent_cat)
         gout,gslash,gin = cat_components(g_cat)
@@ -519,13 +521,12 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
 
 def lf_cat_congruent(lf_str, sem_cat_):
     sem_cat = maybe_de_type_raise(sem_cat_)
+    sem_cat = re.sub(r'^VP','S|NP',sem_cat) # if VP on left then no bracks because right-assoc
     if sem_cat in ('Swhq','N|N', 'N\\N','N/N'):
         what_n_lambdas_should_be = 0
-    elif sem_cat in ('VP'):
-        what_n_lambdas_should_be = 1
     else:
         what_n_lambdas_should_be = len(split_respecting_brackets(sem_cat,sep=['|','\\','/']))-1
-    return what_n_lambdas_should_be == n_lambda_binders(lf_str)
+    return what_n_lambdas_should_be == n_lambda_binders(lf_str) + (' you' in lf_str)
 
 #def lf_cat_congruent(lf_str, sem_cat):
 #    if _lf_cat_congruent(lf_str, sem_cat):
