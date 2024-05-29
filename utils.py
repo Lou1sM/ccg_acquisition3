@@ -41,18 +41,19 @@ def is_wellformed_lf(lf):
     splits = split_respecting_brackets(lf)
     if len(splits) > 1:
         return all([is_wellformed_lf(s) for s in splits])
-    if 'lambda' in lf:
-        skolem_matches = re.findall(r'\(lambda (\$\d{1,2})\.[a-z]* \1\)',lf)
-        if len(re.findall(r'lambda',lf)) != len(skolem_matches):
-            return False
-    #first, rest = outermost_first_chunk(lf)
-    #if first != lf:
-        #return is_wellformed_lf(first) and is_wellformed_lf(rest)
     return False
 
 def maybe_de_type_raise(cat):
-    new_cat = re.sub(r'([A-Z]{1,2})[\\/\|]\(\1[\\/\|](.*)\)$',r'\2',cat)
-    return new_cat
+    splits = split_respecting_brackets(cat, sep='|')
+    incat = splits[-1]
+    outcat = '|'.join(splits[:-1])
+    insplits = split_respecting_brackets(incat, sep='|')
+    if len(insplits)==2 and insplits[0]==outcat:
+        return insplits[1]
+    else:
+        return cat
+    #new_cat = re.sub(r'([A-Z]{1,2})[\\/\|]\(\1[\\/\|](.*)\)$',r'\2',cat)
+    #return new_cat
 
 def combine_lfs(f_str,g_str,comb_type,normalize=True):
     increment_g_vars_by = new_var_num(f_str)
@@ -110,6 +111,11 @@ def logical_de_type_raise(lf_str):
     return rest
 
 def get_cmp_of_lfs(f_str,g_str):
+    var_nums = re.findall(r'\$\d{1,2}',f_str+g_str)
+    new_var_num = max([int(x[1:]) for x in var_nums])+1
+    return f'lambda ${new_var_num}.({f_str}) (({g_str}) ${new_var_num})'
+
+def old_get_cmp_of_lfs(f_str,g_str):
     f_lambda_binder,frest,f_first_var_num = first_lambda_body_split(f_str)
     _,grest,g_first_var_num = first_lambda_body_split(g_str)
     #max_var_num = max(f_str.new_var_num,g_str.new_var_num)
@@ -122,11 +128,11 @@ def get_cmp_of_lfs(f_str,g_str):
         breakpoint()
     return f_lambda_binder + subbed_in
 
-def possible_syn_cats(sem_cat):
+def possible_syncs(sem_cat):
     if is_atomic(sem_cat):
         return [sem_cat]
     out_cat,slash,in_cat = cat_components(maybe_debrac(sem_cat),'|')
-    return [rest_out+sd+maybe_brac(rest_in) for sd in ('\\','/') for rest_in in possible_syn_cats(in_cat) for rest_out in possible_syn_cats(out_cat)]
+    return [rest_out+sd+maybe_brac(rest_in) for sd in ('\\','/') for rest_in in possible_syncs(in_cat) for rest_out in possible_syncs(out_cat)]
 
 def apply_sem_cats(fsc, gsc):
     hits = re.findall(fr'[\\/\|]\(?{re.escape(gsc)}\)?$',fsc.replace('\\','\\\\'))
@@ -226,6 +232,7 @@ def beta_normalize(m,verbose=False):
     else:
         normed = ' '.join([left,right])
     if verbose: print(normed)
+    normed = normed.strip()
     return normed
 
 def strip_string(ss):
@@ -332,13 +339,6 @@ def maybe_brac(s,sep=['|','\\','/']):
     else:
         return s
 
-def all_sublists(x):
-    if len(x) == 0:
-        return [[]]
-
-    recursed = all_sublists(x[1:])
-    return recursed + [[x[0]]+item for item in recursed]
-
 def maybe_debrac(s):
     while True:
         if not is_bracketed(s):
@@ -433,6 +433,7 @@ def is_fit_by_type_raise(left_cat,right_cat):
 
 def non_directional(cat):
     return cat.replace('\\','|').replace('/','|')
+
 def get_combination(left_cat,right_cat):
     """Inputs can be either syncats or semcats"""
     if is_atomic(left_cat) and is_atomic(right_cat):
@@ -454,8 +455,10 @@ def get_combination(left_cat,right_cat):
             return None, None
         elif maybe_debrac(left_in) == maybe_debrac(right_out):
             combined, rule = ''.join((left_out, left_slash, right_in)), 'fwd_cmp'
-        elif non_directional(left_in) == right_in or non_directional(right_in) == left_in:
+        elif maybe_debrac(left_out) == maybe_debrac(right_in):
             combined, rule = ''.join((right_out, right_slash, left_in)), 'bck_cmp'
+        #elif non_directional(left_in) == right_in or non_directional(right_in) == left_in:
+            #combined, rule = ''.join((right_out, right_slash, left_in)), 'bck_cmp' what was I doing with this?
         else:
             return None,None
     if combined in ['S|N','S|N|NP']:
@@ -505,19 +508,24 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
     except ValueError:
         breakpoint()
     #assert maybe_debrac(pin) == maybe_debrac(gin)
-    if is_atomic(gout): # only consider if g is type-raised and in that case has slash
+    #if is_atomic(gout): # only consider if g is type-raised and in that case has slash
+        #return None, None
+    #elif gslash == '\\' or pslash == '\\': # disallow bck cmp for now
+        #return None, None
+    #elif sem_only:
+    if gslash not in ['|', pslash]:
         return None, None
-    elif gslash == '\\' or pslash == '\\': # disallow bck cmp for now
+    if pin != gin:
         return None, None
-    elif sem_only:
+    if sem_only:
         assert pslash == '|' and gslash == '|'
         return maybe_brac(pout) + '|' + maybe_brac(gout), g_cat # hard-coding fwd slash
     else:
-        goutout,gout_slash,goutin = cat_components(gout,allow_atomic=True)
-        composed_cat = goutout + '\\' + goutin # has to be mirror of the main slash
-        new_f = pout + '/' + maybe_brac(composed_cat)
-        new_g = composed_cat + '/' + gin
-        return new_f, new_g # hard-coding fwd slash
+        #goutout,gout_slash,goutin = cat_components(gout,allow_atomic=True)
+        #composed_cat = goutout + '\\' + goutin # has to be mirror of the main slash
+        new_f = pout + pslash + maybe_brac(gout)
+        new_g = gout + pslash + gin
+        return new_f, new_g
 
 def lf_cat_congruent(lf_str, sem_cat_):
     sem_cat = maybe_de_type_raise(sem_cat_)
@@ -536,14 +544,14 @@ def lf_cat_congruent(lf_str, sem_cat_):
 #    else:
 #        return False
 
-def parent_cmp_from_f_and_g(f_cat,g_cat,sem_only):
+def parent_cmp_from_f_and_g(f_cat, g_cat, sem_only):
     if f_cat=='X' or g_cat=='X':
         return 'X'
     fout,fslash,fin = cat_components(f_cat,sep=['/','\\','|'])
     gout,gslash,gin = cat_components(g_cat,sep=['/','\\','|'])
     if sem_only or (fslash == '/' and gslash == '/'):
-        assert maybe_debrac(fin) == maybe_debrac(gout)
-        return fout + fslash + maybe_brac(gin)
+        domatch = (maybe_debrac(fin) == maybe_debrac(gout))
+        return fout + fslash + maybe_brac(gin) if domatch else None
 
 def reverse_slash(slash):
     assert slash in ['\\','/']
@@ -566,28 +574,28 @@ def maybe_app(sc1,sc2,direction):
             if applier.endswith(f'{slash}({appliee})'):
                 return applier[:-len(appliee)-3]
 
-def cat_components(syn_cat,allow_atomic=False,sep=None):
-    if is_atomic(syn_cat):
+def cat_components(sync,allow_atomic=False,sep=None):
+    if is_atomic(sync):
         assert allow_atomic
-        return syn_cat
+        return sync
     if sep is None:
         sep = ['\\','/','|']
-    splits = split_respecting_brackets(syn_cat,sep=sep)
+    splits = split_respecting_brackets(sync,sep=sep)
     in_cat = splits[-1]
-    slash = syn_cat[-len(in_cat)-1]
-    out_cat = syn_cat[:-len(in_cat)-1]
+    slash = sync[-len(in_cat)-1]
+    out_cat = sync[:-len(in_cat)-1]
     return out_cat, slash, in_cat
 
-def get_combination_old(left_syn_cat,right_syn_cat):
-    if is_atomic(left_syn_cat) and is_atomic(right_syn_cat):
+def get_combination_old(left_sync,right_sync):
+    if is_atomic(left_sync) and is_atomic(right_sync):
         return None
-    if left_syn_cat in right_syn_cat: # can only be bck app then
-        return maybe_app(left_syn_cat,right_syn_cat,direction='bck')
-    elif right_syn_cat in left_syn_cat: # can only be fwd app then
-        return maybe_app(left_syn_cat,right_syn_cat,direction='fwd')
+    if left_sync in right_sync: # can only be bck app then
+        return maybe_app(left_sync,right_sync,direction='bck')
+    elif right_sync in left_sync: # can only be fwd app then
+        return maybe_app(left_sync,right_sync,direction='fwd')
     else: # see if works by composition
-        left_out, left_slash, left_in = cat_components(left_syn_cat,sep=['\\','/'])
-        right_out, right_slash, right_in = cat_components(right_syn_cat,sep=['\\','/'])
+        left_out, left_slash, left_in = cat_components(left_sync,sep=['\\','/'])
+        right_out, right_slash, right_in = cat_components(right_sync,sep=['\\','/'])
         if left_slash != right_slash: # skip crossed composition
             return None
         elif left_in == right_out:
@@ -595,12 +603,30 @@ def get_combination_old(left_syn_cat,right_syn_cat):
         elif left_out == right_in:
             return ''.join(right_out, right_slash, left_in)
 
-def parses_of_syn_cats(self,syn_cats):
-    """Return all possible parses (often only one) of the given syn_cats in the given order."""
-    frontiers = [[syn_cats]]
-    for _ in range(len(syn_cats)-1):
+def parses_of_syncs(self,syncs):
+    """Return all possible parses (often only one) of the given syncs in the given order."""
+    frontiers = [[syncs]]
+    for _ in range(len(syncs)-1):
         frontiers = [current+[f] for current in frontiers for f in possible_next_frontiers(current[-1])]
     return frontiers
 
+def balanced_substrings(s):
+    open_bracs_idxs = []
+    bss = []
+    for i,c in enumerate(s):
+        if c=='(':
+            open_bracs_idxs.append(i)
+        elif c==')':
+            bss.append(s[open_bracs_idxs.pop():i+1])
+    return bss
+
 def nth_in_list(l,n,item):
     return [i for i,x in enumerate(l) if x==item][n]
+
+def all_sublists(x):
+    if len(x) == 0:
+        return [[]]
+
+    recursed = all_sublists(x[1:])
+    return recursed + [[x[0]]+item for item in recursed]
+

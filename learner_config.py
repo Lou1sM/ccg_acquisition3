@@ -43,12 +43,12 @@ chiltag_to_node_types = {
 pos_marking_dict = {
                     'adj':set(['N|N']),
                     'adv':set(['S|S','(S|NP)|(S|NP)|(S|NP|NP)|(S|NP|NP)']),
-                    'adv:int':set([None]),
-                    'adv:tem':set([None]),
-                    'aux':set([None]),
-                    'chi':set([None]),
+                    'adv:int':set(['X']),
+                    'adv:tem':set(['X']),
+                    'aux':set(['X']),
+                    'chi':set(['X']),
                     #'co':set(['S']),
-                    'co':set([None]),
+                    'co':set(['X']),
                     'conj':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
                     'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # same as above ok for now?
                     'cop':set(['S|S','X']),
@@ -58,18 +58,19 @@ pos_marking_dict = {
                     'det:int':set(['NP']),
                     'det:num':set(['NP|N']),
                     'det:poss':set(['NP|N']),
-                    'meta':set([None]),
+                    'meta':set(['X']),
                     'mod':set(['S|NP|VP','S|VP|NP']),
-                    'mod:aux':set([None]),
+                    'mod:aux':set(['X']),
                     'n':set(['N']),
                     'n:gerund':set(['NP']),
                     'n:let':set(['NP']),
                     'n:prop':set(['NP']),
                     'n:pt':set(['N']), # seems to be for nouns with plural morph.]), like scissors
+                    'neg':set(['VP|VP','(S|NP)|(S|NP)']),
                     #'neg':set(['S|S','(S|NP)|(S|NP)','(S|NP|NP)|(S|NP|NP)']), # ?
-                    'on':set([None]),
-                    'part':set([None]),
-                    'poss':set([None]),
+                    'on':set(['X']),
+                    'part':set(['X']),
+                    'poss':set(['X']),
                     'post':set(['S|S']), # ?
                     'prep':set(['S|NP|NP', 'S|S|NP','NP|NP|NP','S|NP']),
                     'pro:dem':set(['NP']), # ?
@@ -83,15 +84,13 @@ pos_marking_dict = {
                     'pro:rel':set(['NP']),
                     'pro:sub':set(['NP']),
                     'qn':set(['NP|N']),
-                    'sing':set([None]),
+                    'sing':set(['X']),
                     'v':set(['S|NP','S|NP|NP','VP', 'VP|NP']),
                     #'v:obj':set([None]),
-                    'wplay':set([None]),
+                    'wplay':set(['X']),
                     }
 #pos_marking_dict['neg'] = set([f'({x})|({x})' for x in pos_marking_dict['v']] +[f'({x})|({x})' for x in pos_marking_dict['mod']] )
-pos_marking_dict['neg'] = set(['VP|VP'])
 
-pos_marking_dict = {k:set(['X']) if v == set([None]) else v for k,v in pos_marking_dict.items()}
 #pos_marking_dict = {k:v.union(set([c.replace('S','Sq') for c in v])) for k,v in pos_marking_dict.items()}
 
 

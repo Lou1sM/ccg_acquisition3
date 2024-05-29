@@ -12,7 +12,10 @@ full_lfs_to_exclude = [
         'lambda $0_{r}.cop|be-3s_3_there_1_it_2(you,$0)', # don't know how to model but seems wrong
         'adv|just_1(BARE($0,det:num|one_2($0)))', # don't know how to model but seems wrong
         'Q(prep|of_2(BARE($0,det:num|two_1(pro:obj|them_3($0)))))', # don't know how to model but seems wrong
-        'lambda $0_{r}.n|blow_1(you,BARE($1,pro:indef|one_2($1)),$0)', # don't know how to model but seems wrong
+        'lambda $0_{r}.n|blow_1(you,BARE($1,pro:indef|one_2($1)),$0)', # unsure how to model but seems wrong
+        'lambda $1_{e}.lambda $0_{r}.v|do_1(you,$1,$0)',# unsure how to model but defo wrong
+        'lambda $1_{e}.lambda $0_{r}.v|do_1(you,$1,$0)',# unsure how to model but defo wrong
+        'lambda $1_{e}.lambda $0_{r}.not(mod|can_2($1(pro:per|you_1,$0),$0),$0)',# unsure how to model but defo wrong
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         'v|racā pro:per|huʔ n|xavitā-BARE' # doesnt match sent

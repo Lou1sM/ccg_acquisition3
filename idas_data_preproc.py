@@ -250,7 +250,7 @@ def decide_if_question(lf, sent, udtags):
 if __name__ == '__main__':
     import argparse
     ARGS = argparse.ArgumentParser()
-    ARGS.add_argument("-d", "--dset", type=str, choices=['adam', 'hagar'], required=True)
+    ARGS.add_argument("-d", "--dset", type=str, choices=['adam', 'hagar'], default='adam')
     ARGS.add_argument("--db", type=str)
     ARGS.add_argument("--db_sent", type=str)
     ARGS.add_argument("-p", "--print_conversions", action='store_true')
@@ -298,6 +298,10 @@ if __name__ == '__main__':
         pl = lf_preproc(lf, sent)
         if pl.endswith(': ') or pl is None or '_' in pl or pl=='':
             n_excluded+=1
+            continue
+        if pl=="not (n:prop|adam's $0 (n|mouth $0))":
+            breakpoint()
+        if not all(f'lambda {v}.' in pl for v in set(re.findall(r'\$\d{1,2}', pl))):
             continue
         assert not any(x in pl for x in exclude_lfs)
         pl, ps = decide_if_question(pl, ps, udtags)
