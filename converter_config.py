@@ -16,6 +16,7 @@ full_lfs_to_exclude = [
         'lambda $1_{e}.lambda $0_{r}.v|do_1(you,$1,$0)',# unsure how to model but defo wrong
         'lambda $1_{e}.lambda $0_{r}.v|do_1(you,$1,$0)',# unsure how to model but defo wrong
         'lambda $1_{e}.lambda $0_{r}.not(mod|can_2($1(pro:per|you_1,$0),$0),$0)',# unsure how to model but defo wrong
+        'lambda $0_{r}.not(n:gerund|break-presp_3(you,$0),$0)',# unsure how to model but defo wrong
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         'v|racā pro:per|huʔ n|xavitā-BARE' # doesnt match sent

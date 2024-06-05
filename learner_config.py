@@ -59,14 +59,14 @@ pos_marking_dict = {
                     'det:num':set(['NP|N']),
                     'det:poss':set(['NP|N']),
                     'meta':set(['X']),
-                    'mod':set(['S|NP|VP','S|VP|NP']),
+                    'mod':set(['S|NP|(S|NP)','S|(S|NP)|NP']),
                     'mod:aux':set(['X']),
                     'n':set(['N']),
                     'n:gerund':set(['NP']),
                     'n:let':set(['NP']),
                     'n:prop':set(['NP']),
                     'n:pt':set(['N']), # seems to be for nouns with plural morph.]), like scissors
-                    'neg':set(['VP|VP','(S|NP)|(S|NP)']),
+                    'neg':set(['(S|NP)|(S|NP)','(S|NP)|(S|NP)']),
                     #'neg':set(['S|S','(S|NP)|(S|NP)','(S|NP|NP)|(S|NP|NP)']), # ?
                     'on':set(['X']),
                     'part':set(['X']),
@@ -85,7 +85,7 @@ pos_marking_dict = {
                     'pro:sub':set(['NP']),
                     'qn':set(['NP|N']),
                     'sing':set(['X']),
-                    'v':set(['S|NP','S|NP|NP','VP', 'VP|NP']),
+                    'v':set(['S|NP','S|NP|NP','S|NP', 'S|NP|NP']),
                     #'v:obj':set([None]),
                     'wplay':set(['X']),
                     }

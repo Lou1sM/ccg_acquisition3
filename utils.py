@@ -468,33 +468,40 @@ def get_combination(left_cat,right_cat):
 
 def infer_slash(lcat,rcat,parent_cat,rule):
     if rule == 'fwd_app':
-        if is_atomic(rcat):
-            assert is_direct_congruent(lcat[:-len(rcat)-1],parent_cat)
-        else:
-            assert is_direct_congruent(lcat[:-len(rcat)-3],parent_cat)
-        out_lcat = parent_cat + '/' + maybe_brac(rcat)
-        out_rcat = rcat
+        to_remove = len(rcat)+1 if is_atomic(rcat) else len(rcat)+3
+        out_lcat = lcat[:-to_remove]
+        assert is_direct_congruent(out_lcat, parent_cat)
+        #if is_atomic(rcat):
+            #assert is_direct_congruent(lcat[:-len(rcat)-1],parent_cat)
+        #else:
+            #assert is_direct_congruent(lcat[:-len(rcat)-3],parent_cat)
+        inferredlcat = out_lcat + '/' + maybe_brac(rcat)
+        inferredrcat = rcat
     elif rule == 'bck_app':
-        if is_atomic(lcat):
-            assert is_direct_congruent(rcat[:-len(lcat)-1],parent_cat)
-        else:
-            assert is_direct_congruent(rcat[:-len(lcat)-3],parent_cat)
-        out_rcat = rcat[:-len(lcat)-1] + '\\' + lcat
-        out_lcat = lcat
+        to_remove = len(lcat)+1 if is_atomic(lcat) else len(lcat)+3
+        out_rcat = rcat[:-to_remove]
+        assert is_direct_congruent(out_rcat, parent_cat)
+
+        #if is_atomic(lcat):
+            #assert is_direct_congruent(rcat[:-len(lcat)-1],parent_cat)
+        #else:
+            #assert is_direct_congruent(rcat[:-len(lcat)-3],parent_cat)
+        inferredrcat = out_rcat + '\\' + lcat
+        inferredlcat = lcat
     else:
         left_out, left_slash, left_in = cat_components(lcat)
         right_out, right_slash, right_in = cat_components(rcat)
         assert left_slash == right_slash
     if rule == 'fwd_cmp':
-        out_lcat = left_out + '/' + right_in
-        out_rcat = rcat
+        inferredlcat = left_out + '/' + right_in
+        inferredrcat = rcat
     elif rule == 'bck_cmp':
-        out_rcat = right_out + '\\' + left_in
-        out_lcat = lcat
+        inferredrcat = right_out + '\\' + left_in
+        inferredlcat = lcat
 
-    elif '\\' not in out_lcat and '/' not in out_lcat and '\\' not in out_rcat and '/' not in out_rcat:
+    elif '\\' not in inferredlcat and '/' not in inferredlcat and '\\' not in inferredrcat and '/' not in inferredrcat:
         breakpoint()
-    return out_lcat, out_rcat
+    return inferredlcat, inferredrcat
 
 def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
     """Determines the slash directions for both f and g when comb. with fwd_cmp."""
@@ -602,13 +609,6 @@ def get_combination_old(left_sync,right_sync):
             return ''.join(left_out, left_slash, right_in)
         elif left_out == right_in:
             return ''.join(right_out, right_slash, left_in)
-
-def parses_of_syncs(self,syncs):
-    """Return all possible parses (often only one) of the given syncs in the given order."""
-    frontiers = [[syncs]]
-    for _ in range(len(syncs)-1):
-        frontiers = [current+[f] for current in frontiers for f in possible_next_frontiers(current[-1])]
-    return frontiers
 
 def balanced_substrings(s):
     open_bracs_idxs = []

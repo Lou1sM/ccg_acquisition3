@@ -1,6 +1,6 @@
 import numpy as np
 from functools import partial
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced, apply_sem_cats, parent_cmp_from_f_and_g, balanced_substrings
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced, apply_sem_cats, parent_cmp_from_f_and_g, balanced_substrings, non_directional
 from errors import SemCatError, ZeroProbError, SynCatError
 import re
 import sys; sys.setrecursionlimit(500)
@@ -202,9 +202,9 @@ class LogicalForm:
         lf_str = logical_de_type_raise(self.lf_str) if self.is_type_raised() else self.lf_str
         if ' you' in lf_str and '.v|' in lf_str: # imperative
             if lf_str.startswith('lambda'): # transitive
-                self.sem_cats = {'VP|NP'}
+                self.sem_cats = {'S|NP|NP'}
             else:
-                self.sem_cats = {'VP'} # intransitive
+                self.sem_cats = {'S|NP'} # intransitive
         else:
             self.sem_cats = set(ssc for ssc in self.sem_cats if ssc=='X' or lf_cat_congruent(lf_str,ssc))
         return self.sem_cats != set([])
@@ -258,7 +258,7 @@ class LogicalForm:
                 head = head_options[0]
 
         #remove_types = ['entity','verb','quant','noun','neg','raise','WH','adj','prep']
-        remove_types = ['entity','verb','quant','neg','raise','WH','adj','prep','noun'] # no nested nouns
+        remove_types = ['entity','verb','quant','neg','raise','WH','adj','prep','noun','hasproperty'] # no nested nouns
         pridxs = [i for i,d in enumerate(self.descs) if d.node_type in remove_types]
         #if self.n_lambda_binders==2 and len(pridxs)==2:
         #    if re.match(fr'^lambda \$(\d{{1,2}})\.lambda \$(\d{{1,2}})\.{re.escape(self.descs[pridxs[0]].lf_str)} \({re.escape(self.descs[pridxs[1]].lf_str)} \(\$\1 \$\2\)\)', self.lf_str):
@@ -304,8 +304,9 @@ class LogicalForm:
                         entry_point = entry_point.parent
                         break
             if entry_point.sem_cats in [{'S|NP'}, {'S|NP|NP'}] and len(entry_point.parent.children) == len(entry_point.parent.var_descs)+1:
-                print('stepping up to get vars')
-                entry_point = entry_point.parent
+                breakpoint()
+                #print('stepping up to get vars')
+                #entry_point = entry_point.parent
             g = entry_point.copy()
             to_present_as_args_to_g = '' if len(to_remove)==1 and to_remove[0].node_type=='detnoun' else [d for d in entry_point.leaf_descs if d not in to_remove]
             have_embedded_binders = [d for d in to_present_as_args_to_g if d.node_type=='bound_var' and d.binder in entry_point.descs]
@@ -317,6 +318,8 @@ class LogicalForm:
             g_sub_var_num = self.new_var_num
             new_entry_point_in_f_as_str = ' '.join([f'${g_sub_var_num}'] + list(reversed([maybe_brac(n.string,sep=' ') for n in to_present_as_args_to_g])))
             assert entry_point.subtree_string() in self.subtree_string()
+            if any(x is y for x in self.descs for y in f.descs):
+                breakpoint()
             entry_point.__init__(new_entry_point_in_f_as_str,self.idx_in_tree,entry_point.caches)
             if len(to_present_as_args_to_g) >= 3: # then f will end up with arity 4, too high
                 continue
@@ -325,7 +328,7 @@ class LogicalForm:
                 continue
             if 'mod|' in f.lf_str and g.is_leaf and g.lf_str.startswith('v|'):
                 f.infer_splits()
-                if any(sc in f.sem_cats for sc in ['S|NP|VP', 'S|VP', 'Sq|VP']):
+                if any(sc in f.sem_cats for sc in ['S|NP|(S|NP)', 'S|(S|NP)', 'Sq|(S|NP)']):
                     g = g.spawn_self_like(f'lambda $0.{g.subtree_string()} $0')
             self.add_split(f,g,'app')
             # if self is a lambda and had it's bound var removed and put in g then try cmp
@@ -703,7 +706,7 @@ class ParseNode():
                 if is_congruent(gsync, new_inferred_g_sync):
                     if new_inferred_f_sync: inferred_f_syncs.add(new_inferred_f_sync)
                     if new_inferred_g_sync: inferred_g_syncs.add(new_inferred_g_sync)
-                else:
+                elif not (gsync=='S|NP|(S|NP)' and non_directional(ssync)=='S|(S|NP)|NP'):
                     print(f'excluding gsync {gsync} and ssync {ssync} from {self.lf_str} {self.syncs}')
 
         assert 'S/NP\\NP' not in inferred_f_syncs
@@ -738,8 +741,6 @@ class ParseNode():
         if len(bad_new_syncs) > 0:
             raise SemCatError(f"bad new syn cats: {''.join(bad_new_syncs)}")
         left_child_fwd = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',syncs=new_syncs)
-        if 'Sq/(S|NP)' in new_syncs:
-            print(new_syncs)
         #congs = set(x for x in f.sem_cats if any(is_congruent(x,y) for y in new_syncs))
         if not (f.was_cached or self.syncs==set('X') or set_congruent(f.sem_cats,new_syncs)):
             raise SemCatError('no f-semcats are congruent with it\'s new inferred syncats')

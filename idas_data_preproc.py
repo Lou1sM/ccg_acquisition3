@@ -102,7 +102,7 @@ def _decommafy_inner(parse):
             elif is_adj(pred):
                 dpred = decommafy(pred)
                 dpred_pos, dpred_word = dpred.split('|')
-                return f'v|hasproperty {decommafy(arg_splits[0])} adj|{dpred_word}'
+                return f'hasproperty {decommafy(arg_splits[0])} adj|{dpred_word}'
         recursed_list = [decommafy(x) for x in arg_splits]
         if pred in ['and', '']: # can be '' because do-support
             debracced_rl = [maybe_debrac(recursed_list[0])] + recursed_list[1:]

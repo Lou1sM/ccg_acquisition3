@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 from dl_utils.misc import check_dir
 from gt_parse_graphs import gts
@@ -578,6 +579,8 @@ class LanguageAcquirer():
     def leaf_probs_of_word_span(self,words):
         if words not in self.mwe_vocab and ' ' not in words:
             print(f'\'{words}\' not seen before as a leaf')
+        if words == ARGS.db_word_parse:
+            breakpoint()
         beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.lf_memory.prob(lf)} for lf in self.lf_vocab]
         beam = self.prune_beam(beam)
 
@@ -627,8 +630,10 @@ class LanguageAcquirer():
                             mem_correction = self.sync_memory.prob(csync)/self.sem_cat_memory.prob(left_option['sem_cat'])/self.sem_cat_memory.prob(right_option['sem_cat'])
                             prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,csync)*mem_correction
                             bckpntr = (k,j,left_idx), (i-k,j+k,right_idx)
-                            #backpointer contains the coords in probs_table, and the idx in the
+                            #backpointer contains the coords in probs_table (except x is +1), and the idx in the
                             #beam, of the two locations that the current one could be split into
+                            #if left_chunk_probs.index(left_option)==right_chunk_probs.index(right_option)==self.beam_size-1:
+                                #breakpoint()
                             pn = {'sem_cat':combined,'lf':lf,'backpointer':bckpntr,'rule':rule,'prob':prob,'words':word_span,'sync':csync}
                             possible_nexts.append(pn)
 
@@ -698,7 +703,7 @@ class LanguageAcquirer():
 
         if ARGS.db_parse:
             breakpoint()
-        return [x['sem_cat'] for p in probs_table.flatten() if p is not None for x in p]
+        return probs_table[-1,0][-1]
 
     def draw_graph(self,all_syntax_tree_levels,is_gt=False):
         leaves = [n for level in all_syntax_tree_levels for n in level if n['rule']=='leaf']
@@ -787,8 +792,10 @@ if __name__ == "__main__":
     ARGS.add_argument("--db-at", type=int, default=-1)
     ARGS.add_argument("--db-parse", action="store_true")
     ARGS.add_argument("--db-prob-changes-above", type=float, default=1.)
+    ARGS.add_argument("--db-word-parse", type=str, default='')
     ARGS.add_argument("--dblfs", type=str)
     ARGS.add_argument("--dbr", type=str)
+    ARGS.add_argument("--jdbr", type=str)
     ARGS.add_argument("--dbsent", type=str, default='')
     ARGS.add_argument("--dbsss", type=str)
     ARGS.add_argument("--eval-alpha", type=float, default=1.0)
@@ -824,6 +831,8 @@ if __name__ == "__main__":
     if ARGS.dset.lower() not in ARGS.expname.lower():
         ARGS.expname += ARGS.dset[0]
 
+    if ARGS.jdbr is not None:
+        ARGS.dbr = ARGS.jdbr
     expdir = f'experiments/{ARGS.dset}'
     if ARGS.is_test:
         ARGS.expname = 'tmp'
@@ -844,6 +853,10 @@ if __name__ == "__main__":
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
+    if ARGS.jdbr is not None:
+        data_to_use = [x for x in data_to_use if x['lf']==ARGS.jdbr]
+        if len(data_to_use)==0:
+            sys.exit('no data points match this lf, check for typo')
     train_data = [] if ARGS.jreload_from is not None else data_to_use[:int(len(data_to_use)*(1-ARGS.test_frac))]
     test_data = train_data if ARGS.is_test else data_to_use[-len(train_data):]
     vt = 1 if ARGS.n_dpoints==-1 else ARGS.n_dpoints/len(all_data)
@@ -868,8 +881,6 @@ if __name__ == "__main__":
                 #continue
             if ARGS.remove_vowels:
                 words = [remove_vowels(w) for w in words]
-            if dpoint != all_data[i+ARGS.start_from]:
-                breakpoint()
             if words[-1] == '?':
                 words = words[:-1]
             if i == ARGS.db_at:
@@ -907,7 +918,7 @@ if __name__ == "__main__":
                     if prob_change==0:
                         plateaus.append(dict(dpoint,words=' '.join(dpoint['words'])))
                     else:
-                        print(i, round(diff_probs['svo'],7), words, lf)
+                        print(f'good point idx {gpi}: prob {diff_probs["svo"]:.7f}, {words}, {lf}')
                 all_prob_changes.append({'prob update': prob_change, 'dpoint index': i, 'words':' '.join(words), 'lf':lf, 'good':good_point, 'favoured order':forder,'nseen':n_words_seen})
             good_point_idxs.append(gpi)
             all_word_order_probs.append(new_probs_with_prior)
@@ -1018,12 +1029,14 @@ if __name__ == "__main__":
             file_print('Final word order probs:',f)
             for k,v in all_word_order_probs[-1].items():
                 file_print(f'{k}: {v:.6f}',f)
+    la.vocab_thresh = 0.1
     #la.parse('do you like it'.split())
     #la.parse('you see him'.split())
-    la.parse('you lost a pencil'.split())
+    #la.parse('you lost a pencil'.split())
     #la.parse('did he see it'.split())
     #la.parse('the pencil dropped the name'.split())
     #la.parse('did the pencil see the name'.split())
+    la.parse('you were right'.split())
     considered_sem_cats = []
     for dpoint in test_data[:ARGS.n_test]:
         considered_sem_cats += la.parse(dpoint['words'])
