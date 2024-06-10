@@ -2,7 +2,7 @@ import json
 from pprint import pprint as pp
 import numpy as np
 import re
-from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf
+from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf, new_var_num, alpha_normalize
 from converter_config import manual_ida_fixes, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes
 from learner_config import pos_marking_dict
 
@@ -11,7 +11,8 @@ with open('data/hagar_comma_format.txt') as f:
     d=f.read()
 cw_words = set(sorted(re.findall(fr'(?<=co\|)[{he_chars}]+(?=\()',d)))
 
-maybe_det_str = fr'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|\w{he_chars}*\'s\''
+maybe_det_str = fr'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|[\w{he_chars}]*\'s'
+#maybe_det_str = fr'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|\w*\'s'
 def maybe_detnoun_match(x):
     return re.match(fr'({maybe_det_str})\((\$\d{{1,2}}),([\w:]+\|[{he_chars}\w-]*)\(\2\)\)',x)
 
@@ -79,7 +80,7 @@ def _decommafy_inner(parse):
         else:
             if 'that' in det:
                 det = 'det:dem|that'
-            assert det.startswith('det') or det.startswith('qn')
+            assert det.startswith('det') or det.startswith('qn') or det.startswith('n:prop')
         return f'{det} n|{noun_word}'
     if bool(mam := maybe_attrib_noun_match(parse)):
         det, subj, _, noun = mam.groups()
@@ -189,8 +190,7 @@ def lf_preproc(lf, sent):
         lf = lf.replace('pro:rel|that','pro:dem|that')
     if re.search(r'pro:rel\|that\(\$\d,(n|pro:indef)', lf):
         lf = lf.replace('pro:rel|that','det:dem|that')
-    if lf in ['Q', 'and', '(you)', '(WHO)', 'aux|~be((WHAT))']:
-        return ''
+    assert lf not in ['Q', 'and', '(you)', '(WHO)', 'aux|~be((WHAT))']
     dlf = decommafy(lf, debrac=True)
     if ARGS.print_conversions:
         print(f'{lf} --> {dlf}', end='\t')
@@ -201,9 +201,30 @@ def lf_preproc(lf, sent):
             print(f'Fixing: {old_dlf} --> {dlf}')
     if dpoint['idasent'].lstrip('Adam ').startswith('is that') and not dlf.startswith('Q '):
         dlf = f'Q ({dlf})'
-    if dlf == 'v|equals pro:dem|that (det:art|a n|racket)':
-        breakpoint()
     dlf = re.sub(r'BARE \$\d{1,2} \((det:num\|[{he_chars}\w-]+) \((n\|[\w{he_chars}-]+) \$\d{1,2}\)\)', r'\1 \2', dlf)
+
+    #if 'det:art|the n|tape))' in dlf:
+    if (had_q:=dlf.startswith('Q (')):
+        inner = dlf[3:-1]
+    else:
+        inner = dlf
+    maybe_cop_aux = re.match(r'aux\|\~be(-past)? \(part\|', inner)
+    if inner=='aux|~be (part|roll-presp pro:per|you (det:art|the n|tape))':
+        breakpoint()
+    if maybe_cop_aux is not None:
+        cop_aux = maybe_cop_aux.group()
+    #if dlf.startswith('aux|~be (part|'):
+        rest = inner[len('aux|~be (part|'):]
+        verb, _, rest = rest.partition('-')
+        if not ( rest.startswith('presp')):
+            print(lf, sent)
+            return
+        rest = rest.removeprefix('presp ')
+        #prog_marking, _, rest = rest.partition(' ')
+        tense = 'pres' if cop_aux == 'aux|~be (part|' else 'past'
+        dlf = f'cop|{tense} (prog (v|{verb} {rest})'
+        if had_q:
+            dlf = f'Q ({dlf})'
     assert is_wellformed_lf(dlf)
     return dlf
 
@@ -211,8 +232,17 @@ def sent_preproc(lf, sent):
     #sent = sent[6:].rstrip('?.!\n ')
     sent = sent.rstrip('?.! ')
     assert not sent.endswith(' ')
+    maybe_ing_splits = [w for w in sent.split() if w.endswith('ing')]
+    lf_parts = re.split(r'[,\|_\(\)\.-]', lf)
+    for mis in maybe_ing_splits:
+        stem = mis.removesuffix('ing')
+        if stem in lf_parts: # rule out 'something' etc
+            if f'part|{stem}' in lf or f'v|{stem}' in lf:
+                sent = sent.replace(mis, f'{stem} ing')
+                #print('\t' + sent)
     if sent in sent_fixes:
         sent = sent_fixes[sent]
+    sent = sent.replace('n \'t', ' n\'t')
     sent = [w for w in sent.split() if f'co|{w}' not in lf and not(w=='we' and w not in lf)]
     if len(sent)>0 and sent[0] == 'ʔavāl' and 'ʔavāl' not in lf:
         sent = sent[1:]
@@ -236,14 +266,14 @@ def decide_if_question(lf, sent, udtags):
                 lf = lf[len(conj)+2:-1]
     if 'you' not in lf.split() and udtags[0] in ('AUX', 'VERB'):
         if not ( lf.startswith('Q ')):
-            print('should have Q in lf, adding one:', sent, lf)
+            #print('should have Q in lf, adding one:', sent, lf)
             lf = f'Q ({lf})'
     #elif any(w in wh_words for w in sent):
     elif sent[0] in wh_words:
         if not ( lf.startswith('Q ')):
             print('probably should have Q in lf:', sent, lf)
     elif lf.startswith('Q '):
-        print('marked as Q without leading verb, removing:', sent, lf)
+        #print('marked as Q without leading verb, removing:', sent, lf)
         lf = lf[3:-1]
     return lf, sent
 
@@ -296,7 +326,7 @@ if __name__ == '__main__':
             n_excluded+=1
             continue
         pl = lf_preproc(lf, sent)
-        if pl.endswith(': ') or pl is None or '_' in pl or pl=='':
+        if pl is None or pl.endswith(': ') or '_' in pl or pl=='':
             n_excluded+=1
             continue
         if pl=="not (n:prop|adam's $0 (n|mouth $0))":
@@ -305,10 +335,20 @@ if __name__ == '__main__':
             continue
         assert not any(x in pl for x in exclude_lfs)
         pl, ps = decide_if_question(pl, ps, udtags)
+        # need to wait until after Q insertion to do this
+        bare_you_reg = r'(?<!pro:per\|)you(?![a-z])'
+        if re.search(bare_you_reg, pl):
+            #print(pl + '-->', end=' ')
+            nvn = new_var_num(pl)
+            pl = f'lambda ${nvn}.' + re.sub(bare_you_reg, f'${nvn}', pl)
+            pl = alpha_normalize(pl)
+            #print(pl)
         if ARGS.print_conversions:
             print(' '.join(ps))
         if pl == 'Q ()':
             breakpoint()
+        if 'lambda' in pl:
+            assert pl.startswith('lambda')
         dset_data.append({'lf':pl, 'words':ps})
     x=[' '.join(y['words']) for y in dset_data]
     y=dict(zip(*np.unique(x, return_counts=True)))

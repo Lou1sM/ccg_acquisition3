@@ -51,7 +51,7 @@ pos_marking_dict = {
                     'co':set(['X']),
                     'conj':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
                     'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # same as above ok for now?
-                    'cop':set(['S|S','X']),
+                    'cop':set(['S|S','S|NP|(S|NP)', 'S|(S|NP)|NP','X']),
                     'det':set(['NP|N']),
                     'det:art':set(['NP|N']),
                     'det:dem':set(['NP|N']),
@@ -83,7 +83,7 @@ pos_marking_dict = {
                     'pro:refl':set(['NP']),
                     'pro:rel':set(['NP']),
                     'pro:sub':set(['NP']),
-                    'qn':set(['NP|N']),
+                    'qn':set(['NP|N', 'NP|NP']),
                     'sing':set(['X']),
                     'v':set(['S|NP','S|NP|NP','S|NP', 'S|NP|NP']),
                     #'v:obj':set([None]),

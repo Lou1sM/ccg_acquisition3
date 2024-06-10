@@ -255,8 +255,8 @@ class LanguageAcquirer():
         self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
         self.sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen anywhere
         self.sync_memory = DirichletProcess(1)
-        self.lf_memory = DirichletProcess(1)
-        self.shell_lf_memory = DirichletProcess(1)
+        self.leaf_lf_memory = DirichletProcess(1)
+        self.leaf_shell_lf_memory = DirichletProcess(1)
         self.leaf_syncat_memory = DirichletProcess(1)
         self.vocab_thresh = vocab_thresh
         self.beam_size = 50
@@ -314,8 +314,8 @@ class LanguageAcquirer():
         self.leaf_syncat_memory.memory = to_load['leaf_sync']
         self.sem_cat_memory.memory = to_load['sem_cat']
         self.sync_memory.memory = to_load['sync']
-        self.shell_lf_memory.memory = to_load['shell_lf']
-        self.lf_memory.memory = to_load['lf']
+        self.leaf_shell_lf_memory.memory = to_load['shell_lf']
+        self.leaf_lf_memory.memory = to_load['lf']
 
         self.lf_word_counts = pd.read_pickle(join(fpath,'lf_word_counts.pkl'))
         self.shell_lf_lf_counts = pd.read_pickle(join(fpath,'shell_lf_lf_counts.pkl'))
@@ -336,8 +336,8 @@ class LanguageAcquirer():
                   'root_sem_cat': self.root_sem_cat_memory.memory,
                   'sem_cat': self.sem_cat_memory.memory,
                   'sync': self.sync_memory.memory,
-                  'shell_lf': self.shell_lf_memory.memory,
-                  'lf': self.lf_memory.memory,
+                  'shell_lf': self.leaf_shell_lf_memory.memory,
+                  'lf': self.leaf_lf_memory.memory,
                   'leaf_sync': self.leaf_syncat_memory.memory}
 
         distributions_fpath = join(fpath,'distributions.json')
@@ -419,10 +419,6 @@ class LanguageAcquirer():
         new_shmeaningl_buffer = []
         new_meaningl_buffer = []
         new_wordl_buffer = []
-        vp_prob = 0
-        v_prob = 0
-        vps = []; vs=[]
-        h=lambda l: sum(x.prob for x in l)
         for node, _ in prob_cache.items():
             prob = node.prob
             if node.lf == '':
@@ -440,20 +436,12 @@ class LanguageAcquirer():
                 print(node)
             lf = node.lf.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cats, syncs = node.info_if_leaf()
-            if 'S|NP' in sem_cats:
-                vps.append(node)
-                vp_prob += node.prob
-                assert ( np.allclose(h(vps),vp_prob))
-            if 'S|NP|NP' in sem_cats:
-                vs.append(node)
-                v_prob += node.prob
-                assert ( np.allclose(h(vs),v_prob))
             for sc in sem_cats:
                 self.sem_cat_memory.observe(sc, node.prob)
             for sync in sem_cats:
                 self.sync_memory.observe(sync, node.prob)
-            self.shell_lf_memory.observe(shell_lf, node.prob)
-            self.lf_memory.observe(lf, prob)
+            self.leaf_shell_lf_memory.observe(shell_lf, leaf_prob)
+            self.leaf_lf_memory.observe(lf, leaf_prob)
             new_syntaxl_buffer += [('leaf',sync,leaf_prob) for sync in syncs]
             if any(x[1]=='(N|N)' for x in new_syntaxl_buffer):
                 breakpoint()
@@ -463,12 +451,6 @@ class LanguageAcquirer():
                 new_shmeaningl_buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
             new_meaningl_buffer.append((lf,shell_lf,leaf_prob))
             new_wordl_buffer.append((word_str,lf,leaf_prob))
-        #print(f'VP prob update: {vp_prob}\t V prob update: {v_prob}')
-        #v_children=lambda n: [s for ps in n.splits for s in (ps['left'],ps['right']) if 'S|NP|NP' in s.sem_cats]
-        #g=lambda n: sum([s.prob for ps in n.splits for s in (ps['left'],ps['right']) if 'S|NP|NP' in s.sem_cats])
-        #g=lambda n: h(v_children(n))
-        bad_prob = sum(x[2] for x in new_shmeaningl_buffer if x[0]=='lambda $0.lambda $1.vconst $0 $1')
-        good_prob = sum(x[2] for x in new_shmeaningl_buffer if x[0]=='lambda $0.lambda $1.vconst $1 $0')
         self.syntaxl.buffers.append(new_syntaxl_buffer)
         self.shmeaningl.buffers.append(new_shmeaningl_buffer)
         self.meaningl.buffers.append(new_meaningl_buffer)
@@ -581,7 +563,7 @@ class LanguageAcquirer():
             print(f'\'{words}\' not seen before as a leaf')
         if words == ARGS.db_word_parse:
             breakpoint()
-        beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.lf_memory.prob(lf)} for lf in self.lf_vocab]
+        beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.leaf_lf_memory.prob(lf)} for lf in self.lf_vocab]
         beam = self.prune_beam(beam)
 
         beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.meaningl.marg_prob(b['lf'])*self.shmeaningl.marg_prob(shell_lf))
@@ -666,9 +648,7 @@ class LanguageAcquirer():
                     right_split = probs_table[right_len-1,right_pos][right_idx]
                     lsync, rsync = infer_slash(left_split['sem_cat'],right_split['sem_cat'],item['sync'],item['rule'])
                     left_split = dict(left_split,idx=item['idx'][:-1] + '01',sync=lsync, parent=item)
-                                        #hor_pos=left_pos+(left_len-1)/2 - (N-1)/2)
                     right_split = dict(right_split,idx=item['idx'][:-1] + '21', sync=rsync, parent=item)
-                                        #hor_pos=right_pos+(right_len-1)/2 - (N-1)/2)
                     assert 'sync' in left_split.keys() and 'sync' in right_split.keys()
                     item['left_child'] = left_split
                     item['right_child'] = right_split
@@ -691,7 +671,8 @@ class LanguageAcquirer():
                     texttree += f'{k}: {v}\t'
                 if k == 'prob':
                     texttree += f'{k}: {v:.4f}\t'
-            assert(non_leaf:='left_child' in x.keys()) == ('right_child' in x.keys())
+            non_leaf = 'left_child' in x.keys()
+            assert non_leaf == ('right_child' in x.keys())
             if non_leaf:
                 texttree += '\n'
                 texttree += _simple_draw_graph(x['left_child'], depth+1) + '\n'
@@ -746,7 +727,6 @@ class LanguageAcquirer():
 
         for i,node in enumerate(leaves):
             hor_pos = posses_so_far[node['idx']][0]
-            #condensed_shell_lf = node['shell_lf'].replace('lambda ','L')
             condensed_shell_lf = condense(node['shell_lf'])
             G.add_node(treesize+i,pos=(hor_pos,-n_leaves),label=condensed_shell_lf)
             shell_lf_prob = self.shmeaningl.prob(node['shell_lf'],node['sem_cat'])
@@ -806,6 +786,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--jreload-from", type=str)
     ARGS.add_argument("--lr", type=float, default=1.0)
     ARGS.add_argument("--max-lf-len", type=int, default=6)
+    ARGS.add_argument("--max-sent-len", type=int, default=6)
     ARGS.add_argument("--n-distractors", type=int, default=0)
     ARGS.add_argument("--n-dpoints", type=int, default=-1)
     ARGS.add_argument("--n-epochs", type=int, default=1)
@@ -851,7 +832,7 @@ if __name__ == "__main__":
 
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
-    all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len]
+    all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len and len(x['words'])<=ARGS.max_sent_len]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
     if ARGS.jdbr is not None:
         data_to_use = [x for x in data_to_use if x['lf']==ARGS.jdbr]
@@ -1036,7 +1017,12 @@ if __name__ == "__main__":
     #la.parse('did he see it'.split())
     #la.parse('the pencil dropped the name'.split())
     #la.parse('did the pencil see the name'.split())
-    la.parse('you were right'.split())
+    #la.parse('that \'s right'.split())
+    la.parse('you can \'t see'.split())
+    la.parse('you can \'t eat'.split())
+    la.parse('did you name it'.split())
+    la.parse('can you find it'.split())
+    la.parse('will you talk'.split())
     considered_sem_cats = []
     for dpoint in test_data[:ARGS.n_test]:
         considered_sem_cats += la.parse(dpoint['words'])

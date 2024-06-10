@@ -366,6 +366,19 @@ def n_lambda_binders(s):
     assert all(x.startswith('lambda') for x in lambdas)
     #maybe_lambda_list = set(x for x in maybe_lambda_list_ if not x.endswith('_{e}'))
     #maybe_lambda_list = [m for m in maybe_lambda_list if m.startswith('lambda')]
+    #if bool(leading_vars := re.match(r'(\$\d{1,2} ?)*', body)):# don't count type-raised vars
+        #type_raised_vars = leading_vars.group().split()
+        #lambdas = [m for m in lambdas if all(trv not in m for trv in type_raised_vars)]
+    return len(lambdas)
+
+def n_lambda_binders_old(s):
+    if '.' not in s:
+        return 0
+    maybe_lambda_list = split_respecting_brackets(s,sep='.')
+    lambdas, body = maybe_lambda_list[:-1], maybe_lambda_list[-1]
+    assert all(x.startswith('lambda') for x in lambdas)
+    #maybe_lambda_list = set(x for x in maybe_lambda_list_ if not x.endswith('_{e}'))
+    #maybe_lambda_list = [m for m in maybe_lambda_list if m.startswith('lambda')]
     if bool(leading_vars := re.match(r'(\$\d{1,2} ?)*', body)):# don't count type-raised vars
         type_raised_vars = leading_vars.group().split()
         lambdas = [m for m in lambdas if all(trv not in m for trv in type_raised_vars)]
@@ -534,14 +547,19 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
         new_g = gout + pslash + gin
         return new_f, new_g
 
-def lf_cat_congruent(lf_str, sem_cat_):
-    sem_cat = maybe_de_type_raise(sem_cat_)
+def lf_cat_congruent(lf_str, sem_cat):
+    #sem_cat = maybe_de_type_raise(sem_cat_)
+    assert 'VP' not in sem_cat
+    assert ' you' not in lf_str
     sem_cat = re.sub(r'^VP','S|NP',sem_cat) # if VP on left then no bracks because right-assoc
     if sem_cat in ('Swhq','N|N', 'N\\N','N/N'):
         what_n_lambdas_should_be = 0
     else:
         what_n_lambdas_should_be = len(split_respecting_brackets(sem_cat,sep=['|','\\','/']))-1
-    return what_n_lambdas_should_be == n_lambda_binders(lf_str) + (' you' in lf_str)
+    #return what_n_lambdas_should_be == n_lambda_binders(lf_str) + (' you' in lf_str)
+    #if what_n_lambdas_should_be != n_lambda_binders(lf_str) and what_n_lambdas_should_be == n_lambda_binders_old(lf_str):
+        #breakpoint()
+    return what_n_lambdas_should_be == n_lambda_binders(lf_str)
 
 #def lf_cat_congruent(lf_str, sem_cat):
 #    if _lf_cat_congruent(lf_str, sem_cat):
