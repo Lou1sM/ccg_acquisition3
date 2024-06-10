@@ -776,6 +776,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--dblfs", type=str)
     ARGS.add_argument("--dbr", type=str)
     ARGS.add_argument("--jdbr", type=str)
+    ARGS.add_argument("--jdblfs", type=str)
     ARGS.add_argument("--dbsent", type=str, default='')
     ARGS.add_argument("--dbsss", type=str)
     ARGS.add_argument("--eval-alpha", type=float, default=1.0)
@@ -813,7 +814,14 @@ if __name__ == "__main__":
         ARGS.expname += ARGS.dset[0]
 
     if ARGS.jdbr is not None:
+        assert ARGS.jdblfs is None
         ARGS.dbr = ARGS.jdbr
+        just_lf = ARGS.jdbr
+    elif ARGS.jdblfs is not None:
+        ARGS.dblfs = ARGS.jdblfs
+        just_lf = ARGS.jdblfs
+    else:
+        just_lf = None
     expdir = f'experiments/{ARGS.dset}'
     if ARGS.is_test:
         ARGS.expname = 'tmp'
@@ -834,12 +842,14 @@ if __name__ == "__main__":
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len and len(x['words'])<=ARGS.max_sent_len]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
-    if ARGS.jdbr is not None:
-        data_to_use = [x for x in data_to_use if x['lf']==ARGS.jdbr]
+    if just_lf is not None:
+        train_data = [x for x in data_to_use if x['lf']==just_lf]
+        test_data = []
         if len(data_to_use)==0:
             sys.exit('no data points match this lf, check for typo')
-    train_data = [] if ARGS.jreload_from is not None else data_to_use[:int(len(data_to_use)*(1-ARGS.test_frac))]
-    test_data = train_data if ARGS.is_test else data_to_use[-len(train_data):]
+    else:
+        train_data = [] if ARGS.jreload_from is not None else data_to_use[:int(len(data_to_use)*(1-ARGS.test_frac))]
+        test_data = train_data if ARGS.is_test else data_to_use[-len(train_data):]
     vt = 1 if ARGS.n_dpoints==-1 else ARGS.n_dpoints/len(all_data)
     la = LanguageAcquirer(ARGS.lr, vt)
     if ARGS.reload_from is not None:
@@ -867,7 +877,7 @@ if __name__ == "__main__":
             if i == ARGS.db_at:
                 breakpoint()
             start = max(0, i-(ARGS.n_distractors//2))
-            stop = min(len(train_data)-1, i+((ARGS.n_distractors+1)//2)+1)
+            stop = min(len(train_data), i+((ARGS.n_distractors+1)//2)+1)
             lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
             if not ARGS.suppress_prints:
                 print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
@@ -875,7 +885,7 @@ if __name__ == "__main__":
             n_words_seen = sum(w in la.vocab for w in words)
             frac_words_seen = n_words_seen/len(words)
             lf = dpoint['lf']
-            has_copula = 'v|hasproperty' in lf or 'v|equals' in lf
+            has_copula = 'hasproperty' in lf or 'equals' in lf
             #if 'him' in words:
                 #breakpoint()
             if not (has_copula and ARGS.exclude_copulae):

@@ -32,7 +32,7 @@ chiltag_to_node_types = {
                     'pro:int': 'WH',
                     'pro:obj': 'entity',
                     'pro:per': 'entity',
-                    'pro:poss': 'quant',
+                    'pro:poss': 'entity',
                     'pro:refl': 'entity',
                     'pro:sub': 'entity',
                     'qn': 'quant',

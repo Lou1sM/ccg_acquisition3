@@ -177,7 +177,7 @@ class LogicalForm:
                 self.is_semantic_leaf = ' ' not in ss.lstrip('BARE ')
                 if not self.is_semantic_leaf:
                     self.sem_cats = set(['X'])
-                elif ss == 'v|hasproperty':
+                elif ss == 'hasproperty':
                     self.is_semantic_leaf = True
                     self.sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
                 elif '|' in ss:
@@ -265,7 +265,7 @@ class LogicalForm:
                 self.add_split(fcmp, gcmp, 'cmp')
         if has_q:=any(x.node_type=='Q' for x in self.descs):
             qidx = [i for i,x in enumerate(self.descs) if x.node_type=='Q'][0]
-            head_options = [x for x in self.leaf_descs if x.node_type in ['verb','raise','quant']]
+            head_options = [x for x in self.leaf_descs if x.node_type in ['verb', 'raise', 'quant', 'hasproperty']]
             if len(head_options)==0:
                 head_options = [x for x in self.leaf_descs if x.node_type in ['quant','prep','adv','aux']]
             if len(head_options)==0:
@@ -279,6 +279,8 @@ class LogicalForm:
         pridxs = [i for i,d in enumerate(self.descs) if d.node_type in remove_types]
         if debug_split_lf is not None and debug_split_lf == self.subtree_string(recompute=True):
             breakpoint()
+        #if self.lf_str == 'lambda $0.Q (hasproperty pro:per|it $0)':
+            #breakpoint()
         for ridxs_raw in all_sublists(pridxs):
             if len(ridxs_raw) in (0,len(pridxs)): continue
             if self.sem_cats.intersection({'S','S|NP'}) and \
@@ -324,6 +326,8 @@ class LogicalForm:
             have_embedded_binders = [d for d in to_present_as_args_to_g if d.node_type=='bound_var' and d.binder in entry_point.descs]
             to_present_as_args_to_g = [x for x in to_present_as_args_to_g if x not in have_embedded_binders]
             assert len(to_present_as_args_to_g) == len(entry_point.leaf_descs) - len(removees) - len(have_embedded_binders)
+            #if ridxs==[8, 9] and self.lf_str=='lambda $0.not (mod|can ($0 (det:art|the n|tractor)))':
+                #breakpoint()
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
             if (g.n_lambda_binders > 4) or (strip_string(g.subtree_string().replace(' AND','')) == ''): # don't consider only variables
                 continue
@@ -338,14 +342,16 @@ class LogicalForm:
             f = f.lambda_abstract(g_sub_var_num)
             if not f.set_cats_from_string():
                 continue
-            if 'mod|' in f.lf_str and g.is_leaf and g.lf_str.startswith('v|'):
+            #if self.lf_str == 'lambda $1.prog (v|play $1)' and ridxs==[4]:
+                #breakpoint()
+            if ('mod|' in f.lf_str or 'prog' in f.lf_str) and g.is_leaf and g.lf_str.startswith('v|'):
                 f.infer_splits()
                 if any(sc in f.sem_cats for sc in ['S|NP|(S|NP)', 'S|(S|NP)', 'Sq|(S|NP)']):
-                    if self.lf_str == 'lambda $0.$0 v|eat mod|will':
-                        breakpoint()
+                    #if self.lf_str == 'lambda $0.$0 v|eat mod|will':
+                        #breakpoint()
                 #if not re.search(fr'\$\d{{1,2}} {re.escape(g.lf_str)}', self.lf_str): # self is sibling of gapping
-                if re.search(fr'[\.\(]{re.escape(g.lf_str)}', self.lf_str):
-                    g = g.spawn_self_like(f'lambda $0.{g.subtree_string()} $0')
+                    if re.search(fr'[\.\(]{re.escape(g.lf_str)}', self.lf_str):
+                        g = g.spawn_self_like(f'lambda $0.{g.subtree_string()} $0')
             self.add_split(f,g,'app')
             # if self is a lambda and had it's bound var removed and put in g then try cmp
             if self.node_type == 'lmbda' and any(not is_atomic(x) for x in self.sem_cats) and any(not is_atomic(x) for x in f.sem_cats) and f.node_type == 'lmbda' and any(cat_components(x,allow_atomic=True)[-1] == cat_components(y,allow_atomic=True)[-1] and cat_components(y,allow_atomic=True)[-1]!='X' for x in self.sem_cats for y in f.sem_cats):
