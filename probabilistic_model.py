@@ -10,7 +10,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str, non_directional
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str
 from errors import CCGLearnerError
 from time import time
 import argparse
@@ -171,17 +171,14 @@ class BaseDirichletProcessLearner(ABC):
 
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        #if self.is_training:
-            #return 1
-        #else:
         n_slashes = len(re.findall(r'[\\/\|]',x))
         return (0.5555)*0.9**(n_slashes+1) # Omri 2017 had 0.2
 
     def observe(self,y,x,weight):
-        if y == 'leaf':
-            self._observe(y,maybe_de_type_raise(x),weight)
-        else:
-            self._observe(y,x,weight)
+        #if y == 'leaf':
+            #self._observe(y,maybe_de_type_raise(x),weight)
+        #else:
+        self._observe(y,x,weight)
 
     #@override
     def _marg_prob(self, x):
@@ -215,11 +212,8 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
         return norm_factor * np.e**(-2*n_vars - n_constants)
 
     def prob(self,y,x):
-        #if x not in ['N','Swhq'] and len(split_respecting_brackets(x,sep=['/','\\','|'])) != n_lambda_binders(y)+1:
         if not lf_cat_congruent(y,x):
-            #print(y,x)
             return 0
-        #y = maybe_de_type_raise(y_)
         base_prob = self.base_distribution(y)
         if x not in self.memory:
             return base_prob
@@ -373,8 +367,6 @@ class LanguageAcquirer():
 
     def make_parse_node(self,lf_str,words):
         lf = self.get_lf(lf_str)
-        #if lf.sem_cats == set('X'):
-            #raise RootSemCatError(lf.lf_str)
 
         if ' '.join([lf_str]+words) in self.parse_node_cache:
             parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
@@ -783,55 +775,6 @@ class LanguageAcquirer():
         st = _simple_draw_graph(root, 0)
         print(st)
 
-    def old_test_with_gt(self, lf, words):
-        root = la.make_parse_node(lf, words)
-        root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=True)
-        def parsenode2dict(x):
-            #left_child, right_child, prob = x.best_split
-            #return {'sem_cat': x.sem_cats, 'lf':x.lf_str, 'prob':x.below_prob, 'words':x.words, 'syncs': x.syncs, 'left_child':left_child, 'right_child':right_child}
-            parent = 'ROOT' if x.parent is None else x.parent
-            return {'all_sem_cats': x.sem_cats, 'lf':x.lf_str, 'prob':x.below_prob, 'words':x.words, 'syncs': x.syncs, 'best_split':x.best_split, 'idx':'1', 'parent':parent, 'shell_lf':x.lf.subtree_string(as_shell=True)}
-        tree_level = [parsenode2dict(root)]
-        all_tree_levels = []
-        for i in range(len(words)):
-            breakpoint()
-            new_tree_level = []
-            for item in tree_level:
-                left_child_pn, right_child_pn, _ = item['best_split']
-                assert (left_child_pn == 'leaf')==(right_child_pn == 'leaf')
-                combinations =[]
-                if left_child_pn == 'leaf':
-                    item['rule'] = 'leaf'
-                    assert len(item['all_sem_cats']) == 1
-                    item['sem_cat'] = item['all_sem_cats'].pop()
-                    assert len(item['syncs']) == 1
-                    item['sync'] = item['all_syncs'].pop()
-                    continue
-                for lsync in left_child_pn.syncs:
-                    for rsync in right_child_pn.syncs:
-                        comb, rule = get_combination(lsync, rsync)
-                        assert comb in item['syncs']
-                        combinations.append((comb,rule))
-                if len(combinations) != 1:
-                    breakpoint()
-                comb, rule = combinations[0]
-
-                left_child = dict(parsenode2dict(left_child_pn),idx=item['idx'][:-1] + '01',sync=lsync, parent=item)
-                right_child = dict(parsenode2dict(right_child_pn),idx=item['idx'][:-1] + '21', sync=rsync, parent=item)
-                assert 'sync' in left_child.keys() and 'sync' in right_child.keys()
-                # this is crucial, set sync and children of node in the previous tree
-                # level before appending that level to all_tree_levels
-                item['sync'] = comb
-                item['sem_cat'] = non_directional(comb)
-                item['rule'] = rule
-                item['left_child'] = left_child
-                item['right_child'] = right_child
-                new_tree_level.append(left_child)
-                new_tree_level.append(right_child)
-            all_tree_levels.append(tree_level)
-            tree_level = copy(new_tree_level)
-        self.draw_graph(all_tree_levels)
-
 def remove_vowels(w):
     for v in ('a','e','i','o','u'):
         w = w.replace(v, '')
@@ -959,13 +902,10 @@ if __name__ == "__main__":
             frac_words_seen = n_words_seen/len(words)
             lf = dpoint['lf']
             has_copula = 'hasproperty' in lf or 'equals' in lf
-            #if 'him' in words:
-                #breakpoint()
             if not (has_copula and ARGS.exclude_copulae):
                problem_list += la.train_one_step(lf_strs_incl_distractors,words,apply_buffers)
             else:
                 print('excluding')
-            #if ((i+1)%plot_every == 0 or ARGS.is_test):
             la.eval()
             new_probs_with_prior = la.probs_of_word_orders(False)
             new_probs_without_prior = la.probs_of_word_orders(True)
@@ -976,7 +916,6 @@ if __name__ == "__main__":
                 good_point = diff_probs['svo'] == diff_probs.max()
                 if not good_point and prob_change > 1e-5 and not ARGS.suppress_prints:
                     print(new_probs_with_prior)
-                #all_prob_changes.append((prob_change,(words,lf_strs_incl_distractors)))
                 if n_words_seen==len(words) and len(split_respecting_brackets(lf))>=3 and not lf.startswith('Q ') and not 'adv|' in lf and len(split_respecting_brackets(lf))>=3 and 'you' not in lf.split() and not lf.startswith('prep|') and not 'not' in lf and not (has_copula and ARGS.dset=='hagar'):
                     gpi+=1
                     if prob_change==0:
@@ -1096,9 +1035,7 @@ if __name__ == "__main__":
     la.vocab_thresh = 0.1
     cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
     for dp in cant_points:
-        #la.test_with_gt('not (mod|can (v|write (det:art|the n|tractor)))', ['the', 'tractor', 'can', "n't", 'write'])
         la.test_with_gt(dp['lf'], dp['words'])
-    breakpoint()
     la.parse('you can n\'t eat'.split())
     la.parse('you are miss ing it'.split())
     la.parse('do you like it'.split())
@@ -1124,6 +1061,5 @@ if __name__ == "__main__":
             la.draw_graph(gt,is_gt=True)
     pdf = pd.DataFrame(plateaus)
     pprint(set(considered_sem_cats))
-    breakpoint()
     print(pdf)
     pdf.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_plateaus.csv')

@@ -1,10 +1,10 @@
 import numpy as np
 from functools import partial
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced, apply_sem_cats, parent_cmp_from_f_and_g, balanced_substrings, non_directional, base_cats_from_str
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, is_wellformed_lf, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, lambda_match, is_bracket_balanced, apply_sem_cats, parent_cmp_from_f_and_g, balanced_substrings, non_directional, base_cats_from_str
 from errors import SemCatError, ZeroProbError, SynCatError
 import re
 import sys; sys.setrecursionlimit(500)
-from learner_config import pos_marking_dict, base_lexicon, chiltag_to_node_types
+from learner_config import pos_marking_dict, chiltag_to_node_types
 
 
 # is_leaf means it's atomic in lambda calculus
@@ -158,25 +158,8 @@ class LogicalForm:
             self.caches['cats'][self.lf_str] = self.sem_cats, self.is_semantic_leaf, is_congruent
         return is_congruent
 
-    #def cat_consistent(self):
-    #    """Return False if sem_cat says type-raised but lf not of type-raised form."""
-    #    if self.sem_cats.intersection(['S|N','Sq|N']):
-    #        return False
-    #    if 'mod|' in self.lf_str: # mod messes it up because looks type-raised
-    #        return True
-    #    return is_type_raised(self.subtree_string()) == ('S|(S|NP)' in self.sem_cats)
-
     def is_cat_congruent(self):
-        #lf_str = logical_de_type_raise(self.lf_str) if self.is_type_raised() else self.lf_str
         assert ' you' not in self.lf_str
-        #if self.sem_cats.intersection(['S|N','Sq|N','NP|NP']):
-            #return False
-        #if ' you' in lf_str and '.v|' in lf_str: # imperative
-        #    if lf_str.startswith('lambda'): # transitive
-        #        self.sem_cats = {'S|NP|NP'}
-        #    else:
-        #        self.sem_cats = {'S|NP'} # intransitive
-        #else:
         self.sem_cats = set(ssc for ssc in self.sem_cats if ssc=='X' or lf_cat_congruent(self.lf_str,ssc))
         return self.sem_cats != set([])
 
@@ -192,8 +175,6 @@ class LogicalForm:
         if self.lf_str.startswith('lambda'):
             maybe_cmps = [x for x in balanced_substrings(self.lf_str) if f'${self.var_num}' in x and strip_string(x)!='']
             for mc in maybe_cmps:
-                #lmbdas_to_include = sorted(re.findall(r'\$\d{1,2}', mc))
-                #lmbdas_to_include_ord_appear = sorted(lmbdas_to_include, key=lambda x:self.lf_str.index(x))
                 lmbdas_to_include = sorted(re.findall(r'\$\d{1,2}', mc), key=lambda x:self.lf_str.index(x))
                 assert all('lambda '+x in self.lf_str.rpartition('.')[0] for x in lmbdas_to_include)
                 g_lambda_terms = '.'.join(f'lambda {x}' for x in lmbdas_to_include)
@@ -331,7 +312,6 @@ class LogicalForm:
             return
         if g.sem_cats == {'NP|N'} and not g.lf_str.split('.')[1].startswith('not') and not g.lf_str.split('.')[1].startswith('Q'):
             breakpoint()
-        #if not g.cat_consistent():
         if not g.is_cat_congruent():
             return
         assert f != self
@@ -339,7 +319,6 @@ class LogicalForm:
         if split_type == 'cmp':
             assert f.subtree_string().startswith('lambda')
             assert g.subtree_string().startswith('lambda')
-            #f.sem_cats = set(['X'])
             to_add_to = self.cmp_splits
         assert ( combine_lfs(f.subtree_string(),g.subtree_string(),split_type,normalize=True) == self.subtree_string(alpha_normalized=True))
         g.infer_splits()
@@ -347,7 +326,6 @@ class LogicalForm:
             f.infer_splits() # don't do again if already done in infer_splits
         if self.sem_cat_is_set and g.sem_cat_is_set:
             self.set_f_sem_cat_from_self_and_g(f,g,split_type)
-            #if not f.cat_consistent():
             if not f.is_cat_congruent():
                 return
         if f.sem_cats.intersection(['S|N','S|NP|N']):
@@ -362,22 +340,14 @@ class LogicalForm:
                     new_inferred_sem_cat = comb_fn(fsc, gsc)
                     if new_inferred_sem_cat is not None:
                         new_inferred_sem_cat = maybe_debrac(new_inferred_sem_cat)
-                        #self.sem_cats = self.sem_cats | set([new_inferred_sem_cat])
                         inferred_sem_cats = inferred_sem_cats | set([new_inferred_sem_cat])
-        #if self.sem_cats != {'X'}:
-            #self.sem_cats = set(sc for sc in self.sem_cats if sc!='X')
         if len(inferred_sem_cats) == 0:
             return
         else:
             if self.sem_cats == {'X'}:
                 self.sem_cats = inferred_sem_cats
             else:
-                #new = self.sem_cats.intersection(inferred_sem_cats)
                 self.sem_cats = self.sem_cats.union(inferred_sem_cats)
-                #if not new:
-                    #breakpoint()
-            #if not self.is_cat_congruent():
-                #return
             g.sem_cats = set([gsc for gsc in gcats_to_use if 'X' in gsc or any(comb_fn(fsc, gsc)==sc for fsc in fcats_to_use for sc in self.sem_cats)])
             f.sem_cats = set([fsc for fsc in fcats_to_use if 'X' in fsc or any(comb_fn(fsc, gsc)==sc for gsc in gcats_to_use for sc in self.sem_cats)])
         if 'NP|NP' in f.sem_cats:
@@ -387,7 +357,6 @@ class LogicalForm:
         if not ( ( f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set)):
             breakpoint()
         if not f.sem_cat_is_set:
-            #print(f.lf_str,' + ',g.lf_str)
             return
         if not ( not (self.sem_cats == set(['S']) and g.sem_cats == set(['N']))):
             breakpoint()
@@ -447,11 +416,6 @@ class LogicalForm:
         new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,caches=self.caches,parent=self.parent)
         new.sem_cats = self.sem_cats
         return new
-
-    def is_type_raised(self):
-        is_tr = any(is_cat_type_raised(ssc) for ssc in self.sem_cats)
-        assert is_tr == any(is_cat_type_raised(ssc) for ssc in self.sem_cats)
-        return is_tr
 
     @property
     def stripped_subtree_string(self):
@@ -753,15 +717,17 @@ class ParseNode():
         shell_lf = self.lf.subtree_string(as_shell=True,alpha_normalized=True)
         lf = self.lf.subtree_string(alpha_normalized=True)
         word_str = ' '.join(self.words)
-        sem_cats = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.sem_cats)
-        syncs = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.syncs)
-        if sem_cats != self.sem_cats: # has been de-type-raised
-            assert syncs != self.syncs or any('X' in sync for sync in syncs)
-            assert all(any(maybe_debrac(maybe_de_type_raise(s1))==s2 for s1 in self.sem_cats) for s2 in sem_cats)
-            assert all(any(maybe_debrac(maybe_de_type_raise(s1))==s2 for s1 in self.syncs) for s2 in syncs)
-            shell_lf = alpha_normalize(logical_de_type_raise(shell_lf))
-            lf = alpha_normalize(logical_de_type_raise(lf))
-        return word_str, lf, shell_lf, sem_cats, syncs
+        #sem_cats = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.sem_cats)
+        #syncs = set(maybe_debrac(maybe_de_type_raise(ssc)) for ssc in self.syncs)
+        #if sem_cats != self.sem_cats: # has been de-type-raised
+            #assert syncs != self.syncs or any('X' in sync for sync in syncs)
+            #assert all(any(maybe_debrac(maybe_de_type_raise(s1))==s2 for s1 in self.sem_cats) for s2 in sem_cats)
+            #assert all(any(maybe_debrac(maybe_de_type_raise(s1))==s2 for s1 in self.syncs) for s2 in syncs)
+            #shell_lf = alpha_normalize(logical_de_type_raise(shell_lf))
+        shell_lf = alpha_normalize(shell_lf)
+        #lf = alpha_normalize(logical_de_type_raise(lf))
+        lf = alpha_normalize(lf)
+        return word_str, lf, shell_lf, self.sem_cats, self.syncs
 
     def __repr__(self):
         base = (f"ParseNode\n"
