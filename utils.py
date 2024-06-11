@@ -24,13 +24,19 @@ def lambda_match(maybe_lambda_str):
     #return re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.',maybe_lambda_str)
     return re.match(LAMBDA_RE_STR, maybe_lambda_str)
 
-def is_wellformed_lf(lf):
+def is_wellformed_lf(lf, should_be_normed=False):
     if lf == '': return True
     if bool(re.search(r'lambda(?! \$\d)',lf)): # rule out this simple string
     #if bool(re.search(r'lambda(?! (WHAT1|WHO1|\$\d))', lf)):
         return False
     if lf.count('.') != lf.count('lambda'):
         return False
+    if should_be_normed:
+        if not lf.startswith('Q') and bool(re.search(r'(?<!\.)Q', lf)): # Q should only be at beginning
+            return False
+        lambdas, body = all_lambda_body_splits(lf)
+        if lf.count('.') != lambdas.count('.'):
+            return False
     lf = maybe_debrac(lf)
     if bool(re.match(r'[a-zA-Z0-9_]+',lf)):
         return True
@@ -551,6 +557,8 @@ def lf_cat_congruent(lf_str, sem_cat):
     #sem_cat = maybe_de_type_raise(sem_cat_)
     assert 'VP' not in sem_cat
     assert ' you' not in lf_str
+    if sem_cat in ('S|N', 'NP|NP'):
+        return False
     sem_cat = re.sub(r'^VP','S|NP',sem_cat) # if VP on left then no bracks because right-assoc
     if sem_cat in ('Swhq','N|N', 'N\\N','N/N'):
         what_n_lambdas_should_be = 0

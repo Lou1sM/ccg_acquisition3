@@ -51,7 +51,7 @@ pos_marking_dict = {
                     'co':set(['X']),
                     'conj':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
                     'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # same as above ok for now?
-                    'cop':set(['S|S','S|NP|(S|NP)', 'S|(S|NP)|NP','X']),
+                    'cop':set(['S|NP|(S|NP)', 'S|(S|NP)|NP','S|NP|(N|N)', 'S|(N|N)|NP']),
                     'det':set(['NP|N']),
                     'det:art':set(['NP|N']),
                     'det:dem':set(['NP|N']),
@@ -72,7 +72,8 @@ pos_marking_dict = {
                     'part':set(['X']),
                     'poss':set(['X']),
                     'post':set(['S|S']), # ?
-                    'prep':set(['S|NP|NP', 'S|S|NP','NP|NP|NP','S|NP']),
+                    #'prep':set(['S|NP|NP', 'S|S|NP','NP|NP|NP','S|NP']),
+                    'prep':set(['X']),
                     'pro:dem':set(['NP']), # ?
                     'pro:exist':set(['NP']),
                     'pro:indef':set(['NP']),
@@ -102,7 +103,7 @@ base_lexicon['not'] = set(['X'])
 
 agt_lexicon =[
         ("'ll", ['lambda $0.lambda $1.mod|~will ($0 $1) || S\\NP/(S\\NP)']),# ?
-        ("'re",[ 'lambda $0.lambda $1.v|hasproperty $1 $0 || S\\NP/NP','lambda $0.lambda $1.v|equals $1 $0 || S\\NP/NP']),
+        ("'re",['lambda $0.lambda $1.v|hasproperty $1 $0 || S\\NP/NP','lambda $0.lambda $1.v|equals $1 $0 || S\\NP/NP', 'lambda $0.lambda $1.v|hasproperty $0 $1 || Sq/NP/NP','lambda $0.lambda $1.v|equals $0 $1 || Sq/NP/NP']),
         ("'s", ['lambda $0.lambda $1.v|equals $1 $0 || S\\NP/NP','lambda $0.lambda $1.v|hasproperty $1 $0 || S\\NP/NP']),
         ('Adam', ['n:prop|adam || NP']),
         ('I', ['pro:sub|i || NP']),
@@ -111,11 +112,11 @@ agt_lexicon =[
         ('another', ['lambda $0.qn|another $0 || NP/N']),
         ('are', ['lambda $0.lambda $1.v|equals $0 $1 || S\\NP/NP','lambda $0.lambda $1.v|hasproperty $1 $0 || S\\NP/NP']),
         ('break', ['lambda $0.lambda $1.v|break $1 $0 || S\\NP/NP']),
-        ('can', ['lambda $0.lambda $1.mod|can ($0 $1) || S\\NP/(S\\NP)','lambda $0.lambda $1.mod|can ($0 $1) || S/NP/(S\\NP)']),
-        ('d', ['lambda $0.lambda $1.mod|do ($0 $1) || S\\NP/(S\\NP)','lambda $0.lambda $1.mod|do ($0 $1) || S/NP/(S\\NP)']), #?
-        ('did', ['lambda $0.lambda $1.mod|do-past ($0 $1) || S/NP','lambda $0.lambda $1.mod|do-past ($0 $1) || S/NP/(S\\NP)']),
-        ('do', ['lambda $0.lambda $1.v|do $1 $0 || S\\NP/NP','lambda $0.lambda $1.mod|do ($0 $1) || S/NP/(S\\NP)']),
-        ('does', ['lambda $0.lambda $1.mod|do-3s ($1 $0) || S\\NP/(S\\NP)','lambda $0.lambda $1.mod|do-3s ($0 $1) || S/NP/(S\\NP)']), #?
+        ('can', ['lambda $0.lambda $1.mod|can ($0 $1) || S\\NP/(S\\NP)','lambda $0.lambda $1.mod|can ($1 $0) || S/NP/(S|NP)']),
+        ('d', ['lambda $0.lambda $1.mod|do ($0 $1) || S\\NP/(S|NP)','lambda $0.lambda $1.mod|do ($1 $0) || S/NP/(S|NP)']),
+        ('did', ['lambda $0.lambda $1.mod|do-past ($0 $1) || S\\NP/(S|NP)','lambda $0.lambda $1.mod|do-past ($1 $0) || S/(S|NP)/NP']),
+        ('do', ['lambda $0.lambda $1.v|do $1 $0 || S\\NP/NP', 'lambda $0.lambda $1.mod|do $0 $1 || S\\NP/(S|NP)','lambda $0.lambda $1.mod|do ($1 $0) || S/NP/(S|NP)']),
+        ('does', ['lambda $0.lambda $1.mod|do-3s ($0 $1) || S\\NP/(S|NP)','lambda $0.lambda $1.mod|do-3s ($1 $0) || S/NP/(S|NP)']), #?
         ('dropped', ['lambda $0.lambda $1.v|drop-past $1 $0 || S\\NP/NP']),
         ('have', ['lambda $0.lambda $1.v|have $1 $0 || S\\NP/NP']),
         ('he', ['pro:sub|he || NP']),
@@ -138,7 +139,7 @@ agt_lexicon =[
         ('pencil', ['n|pencil || N']),
         ('say', ['lambda $0.lambda $1.v|say $1 $0 || S\\NP/NP']),
         ('see', ['lambda $0.lambda $1.v|see $1 $0 || S\\NP/NP']),
-        ('shall', ['lambda $0.lambda $1.mod|shall ($0 $1) || S\\NP/(S\\NP)']),
+        ('shall', ['lambda $0.lambda $1.mod|shall ($0 $1) || S\\NP/(S|NP)','lambda $0.lambda $1.mod|shall ($1 $0) || S/(S|NP)/NP']),
         ('some', ['lambda $0.qn|some $0 || NP/N']),
         ('that', ['pro:dem|that || NP','lambda $0.pro:det|that $0 || NP/N']),
         ('the', ['lambda $0.det:art|the $0 || NP/N']),

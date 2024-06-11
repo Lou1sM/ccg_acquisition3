@@ -140,6 +140,7 @@ exclude_sents = [
     'not cranberries', # lf wrong, not sure what it should be
     'two and three what', # lf wrong, not sure what it should be
     'not if you \'re', # lf doesn't match
+    'that what honey', # lf doesn't match
     # Hagar
     'huʔ racā xavitā loʔ melafefōn' # lf doesn't match
     #'ʔābaʔ ʔat rocā' # lf doesn't match--one that Mark says should be wh-movement

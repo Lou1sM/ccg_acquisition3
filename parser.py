@@ -146,6 +146,7 @@ class LogicalForm:
             return is_congruent
         else:
             ss = self.stripped_subtree_string
+            #self.sem_cats = base_cats_from_str(ss)
             if debug_set_cats is not None and debug_set_cats==self.subtree_string(recompute=True):
                 breakpoint()
             ss = ss.replace(' you','')
@@ -182,7 +183,7 @@ class LogicalForm:
                     self.sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
                 elif '|' in ss:
                     pos_marking = ss.split('|')[0]
-                    if pos_marking == 'n' and ss.rstrip('BARE').endswith('pl'):
+                    if pos_marking == 'n' and ss.endswith('pl-BARE'):
                         self.sem_cats = set(['NP','N'])
                     elif pos_marking == 'n:prop' and ss.endswith('\'s'):
                         self.sem_cats = set(['NP|N'])
@@ -219,8 +220,8 @@ class LogicalForm:
     def is_cat_congruent(self):
         #lf_str = logical_de_type_raise(self.lf_str) if self.is_type_raised() else self.lf_str
         assert ' you' not in self.lf_str
-        if self.sem_cats.intersection(['S|N','Sq|N']):
-            return False
+        #if self.sem_cats.intersection(['S|N','Sq|N','NP|NP']):
+            #return False
         #if ' you' in lf_str and '.v|' in lf_str: # imperative
         #    if lf_str.startswith('lambda'): # transitive
         #        self.sem_cats = {'S|NP|NP'}
@@ -430,6 +431,10 @@ class LogicalForm:
                 #return
             g.sem_cats = set([gsc for gsc in gcats_to_use if 'X' in gsc or any(comb_fn(fsc, gsc)==sc for fsc in fcats_to_use for sc in self.sem_cats)])
             f.sem_cats = set([fsc for fsc in fcats_to_use if 'X' in fsc or any(comb_fn(fsc, gsc)==sc for gsc in gcats_to_use for sc in self.sem_cats)])
+        if 'NP|NP' in f.sem_cats:
+            breakpoint()
+        if 'NP|NP' in g.sem_cats:
+            breakpoint()
         if not ( ( f.sem_cat_is_set or not self.sem_cat_is_set or not g.sem_cat_is_set)):
             breakpoint()
         if not f.sem_cat_is_set:

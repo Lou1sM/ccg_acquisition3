@@ -10,7 +10,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf
 from errors import CCGLearnerError
 from time import time
 import argparse
@@ -609,8 +609,11 @@ class LanguageAcquirer():
                         for csync in possible_syncs(combined):
                             lsync, rsync = infer_slash(left_option['sem_cat'],right_option['sem_cat'],csync,rule)
                             split = lsync + ' + ' + rsync
-                            mem_correction = self.sync_memory.prob(csync)/self.sem_cat_memory.prob(left_option['sem_cat'])/self.sem_cat_memory.prob(right_option['sem_cat'])
-                            prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,csync)*mem_correction
+                            if lf_cat_congruent(lf, combined) and is_wellformed_lf(lf, should_be_normed=True):
+                                mem_correction_semcat = self.syntaxl.marg_prob(csync)/self.syntaxl.marg_prob(left_option['sem_cat'])/self.syntaxl.marg_prob(right_option['sem_cat'])
+                                prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,csync)*mem_correction_semcat
+                            else:
+                                prob = 0
                             bckpntr = (k,j,left_idx), (i-k,j+k,right_idx)
                             #backpointer contains the coords in probs_table (except x is +1), and the idx in the
                             #beam, of the two locations that the current one could be split into
@@ -658,9 +661,6 @@ class LanguageAcquirer():
                 if all([x['rule']=='leaf' for x in syntax_tree_level]):
                     break
                 syntax_tree_level = copy(new_syntax_tree_level)
-            if ARGS.db_parse:
-                print(probs_table)
-                pprint(all_syntax_tree_levels)
             return all_syntax_tree_levels
 
         favourite_all_syntax_tree_levels = show_parse(-1)
@@ -1021,18 +1021,22 @@ if __name__ == "__main__":
             for k,v in all_word_order_probs[-1].items():
                 file_print(f'{k}: {v:.6f}',f)
     la.vocab_thresh = 0.1
-    #la.parse('do you like it'.split())
+    la.parse('you can n\'t eat'.split())
+    la.parse('you are miss ing it'.split())
+    la.parse('do you like it'.split())
     #la.parse('you see him'.split())
     #la.parse('you lost a pencil'.split())
     #la.parse('did he see it'.split())
     #la.parse('the pencil dropped the name'.split())
     #la.parse('did the pencil see the name'.split())
     #la.parse('that \'s right'.split())
-    la.parse('you can \'t see'.split())
-    la.parse('you can \'t eat'.split())
+    la.parse('you can n\'t see'.split())
+    la.parse('you can n\'t eat'.split())
     la.parse('did you name it'.split())
     la.parse('can you find it'.split())
     la.parse('will you talk'.split())
+    la.parse('are you run ing'.split())
+    la.parse('I \'m think ing'.split())
     considered_sem_cats = []
     for dpoint in test_data[:ARGS.n_test]:
         considered_sem_cats += la.parse(dpoint['words'])

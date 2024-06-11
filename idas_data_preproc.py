@@ -235,6 +235,8 @@ def sent_preproc(lf, sent):
     assert not sent.endswith(' ')
     maybe_ing_splits = [w for w in sent.split() if w.endswith('ing')]
     lf_parts = re.split(r'[,\|_\(\)\.-]', lf)
+    if sent.startswith('because ') and 'because' not in lf: # often not in lf
+        sent = sent.removeprefix('because ')
     global ings
     global falseings
     def inlf(x): return x in lf_parts and (f'part|{x}' in lf or f'v|{x}' in lf)
