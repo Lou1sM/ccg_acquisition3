@@ -3,13 +3,16 @@ from pprint import pprint as pp
 import numpy as np
 import re
 from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf, new_var_num, alpha_normalize
-from converter_config import manual_ida_fixes, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes
+from converter_config import manual_ida_fixes, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes, neg_conts
 from learner_config import pos_marking_dict
 
 
 with open('data/hagar_comma_format.txt') as f:
     d=f.read()
 cw_words = set(sorted(re.findall(fr'(?<=co\|)[{he_chars}]+(?=\()',d)))
+
+ings = []
+falseings = []
 
 maybe_det_str = fr'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|[\w{he_chars}]*\'s'
 #maybe_det_str = fr'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|\w*\'s'
@@ -209,8 +212,6 @@ def lf_preproc(lf, sent):
     else:
         inner = dlf
     maybe_cop_aux = re.match(r'aux\|\~be(-past)? \(part\|', inner)
-    if inner=='aux|~be (part|roll-presp pro:per|you (det:art|the n|tape))':
-        breakpoint()
     if maybe_cop_aux is not None:
         cop_aux = maybe_cop_aux.group()
     #if dlf.startswith('aux|~be (part|'):
@@ -234,15 +235,36 @@ def sent_preproc(lf, sent):
     assert not sent.endswith(' ')
     maybe_ing_splits = [w for w in sent.split() if w.endswith('ing')]
     lf_parts = re.split(r'[,\|_\(\)\.-]', lf)
+    global ings
+    global falseings
+    def inlf(x): return x in lf_parts and (f'part|{x}' in lf or f'v|{x}' in lf)
     for mis in maybe_ing_splits:
         stem = mis.removesuffix('ing')
-        if stem in lf_parts: # rule out 'something' etc
-            if f'part|{stem}' in lf or f'v|{stem}' in lf:
-                sent = sent.replace(mis, f'{stem} ing')
+        if len(stem)>1 and inlf(stem):
+            #lemma = stem
+            sent = sent.replace(mis, f'{stem} ing')
+            ings.append(mis)
+        elif len(stem)>1 and inlf(stem+'e'): # e.g. 'hiding'
+            #lemma = stem+'e'
+            sent = sent.replace(mis, f'{stem}e ing')
+            ings.append(mis)
+        elif len(stem)>1 and stem[-1]==stem[-2] and inlf(stem[:-1]):
+            #lemma = stem[:-1] # e.g. 'hitting'
+            sent = sent.replace(mis, f'{stem[:-1]} ing')
+            ings.append(mis)
+        else:
+            #if mis in ings:
+                #breakpoint()
+            falseings.append(mis)
+
                 #print('\t' + sent)
     if sent in sent_fixes:
         sent = sent_fixes[sent]
-    sent = sent.replace('n \'t', ' n\'t')
+    #sent = sent.replace('n \'t', ' n\'t')
+    sent = sent.replace(' \'t', '\'t')
+    if (had_neg:=any(w in sent for w in neg_conts)): print(sent, end=' ')
+    sent = ' '.join(neg_conts.get(w,w) for w in sent.split(' '))
+    if had_neg: print('-->', sent)
     sent = [w for w in sent.split() if f'co|{w}' not in lf and not(w=='we' and w not in lf)]
     if len(sent)>0 and sent[0] == 'ʔavāl' and 'ʔavāl' not in lf:
         sent = sent[1:]
@@ -269,9 +291,9 @@ def decide_if_question(lf, sent, udtags):
             #print('should have Q in lf, adding one:', sent, lf)
             lf = f'Q ({lf})'
     #elif any(w in wh_words for w in sent):
-    elif sent[0] in wh_words:
-        if not ( lf.startswith('Q ')):
-            print('probably should have Q in lf:', sent, lf)
+    #elif sent[0] in wh_words:
+        #if not ( lf.startswith('Q ')):
+            #print('probably should have Q in lf:', sent, lf)
     elif lf.startswith('Q '):
         #print('marked as Q without leading verb, removing:', sent, lf)
         lf = lf[3:-1]
@@ -356,6 +378,13 @@ if __name__ == '__main__':
     pp(hist_counts[:20])
     dset = {'data':dset_data, 'hist_counts':hist_counts}
 
+    def printcounts(countslist):
+        x,y=np.unique(countslist, return_counts=True)
+        print(dict(zip(list(x), list(y))))
+
+    printcounts(ings)
+    printcounts(falseings)
+    breakpoint()
     print(f'Num Excluded Points: {n_excluded}')
     print(f'Num Remaining Points: {len(dset_data)}')
     with open(f'data/{ARGS.dset}.json','w') as f:

@@ -1,3 +1,18 @@
+
+neg_conts = {
+                'won\'t': 'wo n\'t',
+                'can\'t': 'can n\'t',
+                'don\'t': 'do n\'t',
+                'shouldn\'t': 'should n\'t',
+                'couldn\'t': 'could n\'t',
+                'wouldn\'t': 'would n\'t',
+                'musn\'t': 'mus n\'t',
+                'isn\'t': 'is n\'t',
+                'aren\'t': 'are n\'t',
+                'weren\'t': 'were n\'t',
+                'amn\'t': 'am n\'t',
+                }
+
 full_lfs_to_exclude = [
         # Adam
         'lambda $0_{r}.cop|be-pres_1(part|write-presp_3(pro:per|you_2,det:art|a_4($1,n|letter_5($1)),$0),$0)',
@@ -42,6 +57,7 @@ partial_lfs_to_exclude = [
         ',lambda $1_{r}', # means embedded S and haven't yet removed the event vars from them
         'BARE($0,pro:indef|something_1($0))', # sent is wrong
         'co|oh_1_no_2', # malformed
+        'adj|talk', # malformed
         # Hagar
         'qn|gam', # wrong pos
         'qn|raq', # wrong pos
@@ -143,6 +159,10 @@ premanual_ida_fixes = {
     'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
     'lambda $1_{e}.lambda $0_{r}.$1(co|dum_dum_3,$0)':'lambda $1_{e}.lambda $0_{r}.$1(n:prop|dum_dum_4,$0)', # pos of 'dum_dum' to n:prop from co
     'lambda $0_{r}.n|stop_1(you,$0)':'lambda $0_{r}.v|stop_1(you,$0)', # pos of 'stop' to v
+    'lambda $0_{r}.n|talk_1(you,$0)':'lambda $0_{r}.v|talk_1(you,$0)', # pos of 'talk' to v
+    'lambda $0_{r}.Q(n|talk_2(you,$0))':'lambda $0_{r}.Q(v|talk_2(you,$0))', # pos of 'talk' to v
+    'lambda $0_{r}.Q(mod|do-3s_1(n|talk_4(det:art|the_2($1,n|microphone_3($1)),$0),$0))':'lambda $0_{r}.Q(mod|do-3s_1(v|talk_4(det:art|the_2($1,n|microphone_3($1)),$0),$0))', # pos of 'talk' to v
+    'lambda $0_{r}.Q(mod|can_1(n|talk_3(BARE($1,n|bread_2($1)),$0),$0))':'lambda $0_{r}.Q(mod|can_1(v|talk_3(BARE($1,n|bread_2($1)),$0),$0))', # pos of 'talk' to v
     #'lambda $0_{r}.det:art|the_3(pro:per|you_2,n|drive-dv_4(pro:per|you_2,$0))':'lambda $0_{r}.Q(det:art|the_3(pro:per|you_2,n|drive-dv_4(pro:per|you_2,$0)))', # add Q
     #'lambda $0_{r}.n|pillow-pl_3(pro:dem|those_2,$0)': 'lambda $0_{r}.Q(n|pillow-pl_3(pro:dem|those_2,$0))', # add Q
     #'lambda $0_{r}.cop|be-pres_1(part|fix-presp_3(pro:per|you_2,det:art|the_4($1,n|dog_5($1)),$0),$0)': 'lambda $0_{r}.Q(cop|be-pres_1(part|fix-presp_3(pro:per|you_2,det:art|the_4($1,n|dog_5($1)),$0),$0))',# add Q
@@ -183,6 +203,7 @@ manual_ida_fixes = { # applied after conversion to no-comma form
 manual_sent_fixes = {
     "'s busy": "Adam 's busy", # my fault, my preproc removes all 'Adam's
     "is a clown": "Adam is a clown", # my fault, my preproc removes all 'Adam's
+    "because you spilled it": "you spilled it", # to match lf
     }
 
 hagar_svo_sentences = {
