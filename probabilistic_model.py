@@ -10,7 +10,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str, non_directional
 from errors import CCGLearnerError
 from time import time
 import argparse
@@ -643,11 +643,11 @@ class LanguageAcquirer():
             return 'No parse found'
 
         def show_parse(num):
-            syntax_tree_level = [dict(probs_table[N-1,0][num],idx='1',hor_pos=0, parent='ROOT')]
-            all_syntax_tree_levels = []
+            tree_level = [dict(probs_table[N-1,0][num],idx='1',hor_pos=0, parent='ROOT')]
+            all_tree_levels = []
             for i in range(N):
-                new_syntax_tree_level = []
-                for item in syntax_tree_level:
+                new_tree_level = []
+                for item in tree_level:
                     if item['rule'] == 'leaf':
                         continue
                     backpointer = item['backpointer']
@@ -660,15 +660,15 @@ class LanguageAcquirer():
                     assert 'sync' in left_split.keys() and 'sync' in right_split.keys()
                     item['left_child'] = left_split
                     item['right_child'] = right_split
-                    new_syntax_tree_level.append(left_split)
-                    new_syntax_tree_level.append(right_split)
-                all_syntax_tree_levels.append(syntax_tree_level)
-                if all([x['rule']=='leaf' for x in syntax_tree_level]):
+                    new_tree_level.append(left_split)
+                    new_tree_level.append(right_split)
+                all_tree_levels.append(tree_level)
+                if all([x['rule']=='leaf' for x in tree_level]):
                     break
-                syntax_tree_level = copy(new_syntax_tree_level)
-            return all_syntax_tree_levels
+                tree_level = copy(new_tree_level)
+            return all_tree_levels
 
-        favourite_all_syntax_tree_levels = show_parse(-1)
+        favourite_all_tree_levels = show_parse(-1)
         def _simple_draw_graph(x, depth):
             texttree = '\t'*depth
             for k,v in x.items():
@@ -684,19 +684,19 @@ class LanguageAcquirer():
                 texttree += _simple_draw_graph(x['right_child'], depth+1) + '\n'
             return texttree
 
-        print(_simple_draw_graph(favourite_all_syntax_tree_levels[0][0], depth=0))
-        self.draw_graph(favourite_all_syntax_tree_levels)
+        print(_simple_draw_graph(favourite_all_tree_levels[0][0], depth=0))
+        self.draw_graph(favourite_all_tree_levels)
 
         if ARGS.db_parse:
             breakpoint()
         return probs_table[-1,0][-1]
 
-    def draw_graph(self,all_syntax_tree_levels,is_gt=False):
-        leaves = [n for level in all_syntax_tree_levels for n in level if n['rule']=='leaf']
+    def draw_graph(self,all_tree_levels,is_gt=False):
+        leaves = [n for level in all_tree_levels for n in level if n['rule']=='leaf']
         leaves.sort(key=lambda x:x['idx'])
         for i,leaf in enumerate(leaves):
             leaf['hor_pos'] = i - len(leaves)/2
-        for stl in reversed(all_syntax_tree_levels):
+        for stl in reversed(all_tree_levels):
             for n in stl:
                 if n['rule']=='leaf':
                     assert 'hor_pos' in n.keys()
@@ -707,8 +707,8 @@ class LanguageAcquirer():
                     n['hor_pos'] = (n['left_child']['hor_pos'] + n['right_child']['hor_pos']) / 2
         G=nx.Graph()
 
-        for j,syntax_tree_level in enumerate(all_syntax_tree_levels):
-            for i,node in enumerate(syntax_tree_level):
+        for j,tree_level in enumerate(all_tree_levels):
+            for i,node in enumerate(tree_level):
                 hor_pos = node['hor_pos']
                 if node['rule'] == 'leaf':
                     combined = 'leaf'
@@ -722,7 +722,7 @@ class LanguageAcquirer():
                     G.add_edge(node['idx'],node['idx'][:-2]+'1')
 
         G.add_node('root',pos=(-1,0),label='ROOT')
-        root_weight = self.root_sem_cat_memory.prob(all_syntax_tree_levels[0][0]['sync'])
+        root_weight = self.root_sem_cat_memory.prob(all_tree_levels[0][0]['sync'])
         G.add_edge('root','1',weight=round(root_weight,3))
         treesize = len(G.nodes())
         n_leaves = len(leaves)
@@ -763,6 +763,74 @@ class LanguageAcquirer():
         plt.clf()
         if ARGS.show_graphs:
             os.system(f'/usr/bin/xdg-open "experiments/{ARGS.expname}/plotted_graphs/{fname}.png"')
+
+    def test_with_gt(self, lf, words):
+        root = la.make_parse_node(lf, words)
+        root_prob = root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=False)
+        root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=True)
+        def _simple_draw_graph(x, depth):
+            texttree = '\t'*depth
+            texttree += f'LF: {x.lf_str}\tSync: {x.syncs}\tWords: {" ".join(x.words)}\tRelprob: {x.below_prob/root_prob:.4f}'
+            left_child, right_child, _ = x.best_split
+            non_leaf = left_child!='leaf'
+            assert non_leaf == (right_child!='leaf')
+            if non_leaf:
+                texttree += '\n'
+                texttree += _simple_draw_graph(left_child, depth+1) + '\n'
+                texttree += _simple_draw_graph(right_child, depth+1) + '\n'
+            return texttree
+
+        st = _simple_draw_graph(root, 0)
+        print(st)
+
+    def old_test_with_gt(self, lf, words):
+        root = la.make_parse_node(lf, words)
+        root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=True)
+        def parsenode2dict(x):
+            #left_child, right_child, prob = x.best_split
+            #return {'sem_cat': x.sem_cats, 'lf':x.lf_str, 'prob':x.below_prob, 'words':x.words, 'syncs': x.syncs, 'left_child':left_child, 'right_child':right_child}
+            parent = 'ROOT' if x.parent is None else x.parent
+            return {'all_sem_cats': x.sem_cats, 'lf':x.lf_str, 'prob':x.below_prob, 'words':x.words, 'syncs': x.syncs, 'best_split':x.best_split, 'idx':'1', 'parent':parent, 'shell_lf':x.lf.subtree_string(as_shell=True)}
+        tree_level = [parsenode2dict(root)]
+        all_tree_levels = []
+        for i in range(len(words)):
+            breakpoint()
+            new_tree_level = []
+            for item in tree_level:
+                left_child_pn, right_child_pn, _ = item['best_split']
+                assert (left_child_pn == 'leaf')==(right_child_pn == 'leaf')
+                combinations =[]
+                if left_child_pn == 'leaf':
+                    item['rule'] = 'leaf'
+                    assert len(item['all_sem_cats']) == 1
+                    item['sem_cat'] = item['all_sem_cats'].pop()
+                    assert len(item['syncs']) == 1
+                    item['sync'] = item['all_syncs'].pop()
+                    continue
+                for lsync in left_child_pn.syncs:
+                    for rsync in right_child_pn.syncs:
+                        comb, rule = get_combination(lsync, rsync)
+                        assert comb in item['syncs']
+                        combinations.append((comb,rule))
+                if len(combinations) != 1:
+                    breakpoint()
+                comb, rule = combinations[0]
+
+                left_child = dict(parsenode2dict(left_child_pn),idx=item['idx'][:-1] + '01',sync=lsync, parent=item)
+                right_child = dict(parsenode2dict(right_child_pn),idx=item['idx'][:-1] + '21', sync=rsync, parent=item)
+                assert 'sync' in left_child.keys() and 'sync' in right_child.keys()
+                # this is crucial, set sync and children of node in the previous tree
+                # level before appending that level to all_tree_levels
+                item['sync'] = comb
+                item['sem_cat'] = non_directional(comb)
+                item['rule'] = rule
+                item['left_child'] = left_child
+                item['right_child'] = right_child
+                new_tree_level.append(left_child)
+                new_tree_level.append(right_child)
+            all_tree_levels.append(tree_level)
+            tree_level = copy(new_tree_level)
+        self.draw_graph(all_tree_levels)
 
 def remove_vowels(w):
     for v in ('a','e','i','o','u'):
@@ -1026,6 +1094,11 @@ if __name__ == "__main__":
             for k,v in all_word_order_probs[-1].items():
                 file_print(f'{k}: {v:.6f}',f)
     la.vocab_thresh = 0.1
+    cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
+    for dp in cant_points:
+        #la.test_with_gt('not (mod|can (v|write (det:art|the n|tractor)))', ['the', 'tractor', 'can', "n't", 'write'])
+        la.test_with_gt(dp['lf'], dp['words'])
+    breakpoint()
     la.parse('you can n\'t eat'.split())
     la.parse('you are miss ing it'.split())
     la.parse('do you like it'.split())

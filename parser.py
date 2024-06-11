@@ -794,16 +794,17 @@ class ParseNode():
         self.split_prob = split_prob
         if self in prob_cache:
             return prob_cache[self]
-        all_probs = [self.prob_as_leaf(syntaxl,shell_meaningl,meaningl,wordl)]
+        all_probs = [('leaf','leaf',self.prob_as_leaf(syntaxl,shell_meaningl,meaningl,wordl))]
         for ps in self.splits:
             split_prob = max(syntaxl.prob(f'{psl} + {psr}',ss) for psl in ps['left'].syncs for psr in ps['right'].syncs for ss in self.syncs)
             if split_prob == 0:
                 breakpoint()
             left_below_prob = ps['left'].propagate_below_probs(syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map)
             right_below_prob = ps['right'].propagate_below_probs(syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map)
-            all_probs.append(left_below_prob*right_below_prob*split_prob)
+            all_probs.append((ps['left'], ps['right'], left_below_prob*right_below_prob*split_prob))
 
-        below_prob = max(all_probs) if is_map else sum(all_probs)
+        self.best_split = max(all_probs, key=lambda x:x[2])
+        below_prob = max([x[2] for x in all_probs]) if is_map else sum([x[2] for x in all_probs])
         if below_prob == 0:
             breakpoint()
         prob_cache[self] = below_prob
