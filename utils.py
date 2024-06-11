@@ -1,4 +1,5 @@
 import re
+from learner_config import pos_marking_dict, base_lexicon
 
 
 LAMBDA_RE_STR = r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.'
@@ -11,6 +12,60 @@ def de_q(lf):
 
 def lf_acc(lf_pred, lf_gt):
     return de_q(lf_pred) == de_q(lf_gt)
+
+def base_cats_from_str(ss):
+    ss = ss.replace(' you','')
+    if ss == 'not':
+        is_semantic_leaf = True
+        #sem_cats = set(['X'])
+        sem_cats = set(['S|NP|(S|NP)'])
+        had_initial_q = False
+    elif ss == 'prog':
+        is_semantic_leaf = True
+        sem_cats = set(['S|NP|(S|NP)'])
+        had_initial_q = False
+    elif ss == 'Q':
+        is_semantic_leaf = True
+        sem_cats = set(['X'])
+        had_initial_q = True
+    elif re.match(r'Q v\|do-(past|3s|2s|1s)_\d',ss):
+        is_semantic_leaf = True
+        sem_cats = set(['X'])
+        had_initial_q = True
+    else:
+        had_initial_q = ss.startswith('Q ')
+        if had_initial_q:
+            ss = ss.lstrip('Q ')
+            if not is_bracketed(ss):
+                breakpoint()
+            ss = ss[1:-1].strip()
+        ss = maybe_debrac(ss[4:]) if (notstart:=ss.startswith('not ')) else ss
+        is_semantic_leaf = ' ' not in ss.lstrip('BARE ')
+        if not is_semantic_leaf:
+            sem_cats = set(['X'])
+        elif ss == 'hasproperty':
+            is_semantic_leaf = True
+            sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
+        elif '|' in ss:
+            pos_marking = ss.split('|')[0]
+            if pos_marking == 'n' and ss.endswith('pl-BARE'):
+                sem_cats = set(['NP','N'])
+            elif pos_marking == 'n:prop' and ss.endswith('\'s'):
+                sem_cats = set(['NP|N'])
+            elif pos_marking == 'n' and ss.endswith('BARE'):
+                sem_cats = set(['NP'])
+            elif pos_marking == 'n:prop' and ss.endswith('\'s\''):
+                sem_cats = set(['NP|N']) # e.g. John's
+            else:
+                sem_cats = pos_marking_dict.get(pos_marking,set(['X']))
+        else:
+            word_level_form = ss.split('_')[0] if '_' in ss else ss
+            if word_level_form.startswith('Q '):
+                word_level_form = word_level_form[2:]
+            sem_cats = base_lexicon.get(word_level_form,set(['X']))
+        if had_initial_q:
+            sem_cats = set('Sq'+sc[1:] if sc.startswith('S|') else sc for sc in sem_cats)
+    return sem_cats, is_semantic_leaf
 
 def new_var_num(lf_str):
     vars_in_self = re.findall(r'\$\d{1,2}',lf_str)

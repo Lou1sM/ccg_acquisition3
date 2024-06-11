@@ -1,6 +1,6 @@
 import numpy as np
 from functools import partial
-from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced, apply_sem_cats, parent_cmp_from_f_and_g, balanced_substrings, non_directional
+from utils import split_respecting_brackets, is_bracketed, all_sublists, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, maybe_de_type_raise, logical_de_type_raise, is_wellformed_lf, is_type_raised, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, is_cat_type_raised, lambda_match, is_bracket_balanced, apply_sem_cats, parent_cmp_from_f_and_g, balanced_substrings, non_directional, base_cats_from_str
 from errors import SemCatError, ZeroProbError, SynCatError
 import re
 import sys; sys.setrecursionlimit(500)
@@ -146,60 +146,9 @@ class LogicalForm:
             return is_congruent
         else:
             ss = self.stripped_subtree_string
-            #self.sem_cats = base_cats_from_str(ss)
             if debug_set_cats is not None and debug_set_cats==self.subtree_string(recompute=True):
                 breakpoint()
-            ss = ss.replace(' you','')
-            if ss == 'not':
-                self.is_semantic_leaf = True
-                #self.sem_cats = set(['X'])
-                self.sem_cats = set(['S|NP|(S|NP)'])
-                had_initial_q = False
-            elif ss == 'prog':
-                self.is_semantic_leaf = True
-                self.sem_cats = set(['S|NP|(S|NP)'])
-                had_initial_q = False
-            elif ss == 'Q':
-                self.is_semantic_leaf = True
-                self.sem_cats = set(['X'])
-                had_initial_q = True
-            elif re.match(r'Q v\|do-(past|3s|2s|1s)_\d',ss):
-                self.is_semantic_leaf = True
-                self.sem_cats = set(['X'])
-                had_initial_q = True
-            else:
-                had_initial_q = ss.startswith('Q ')
-                if had_initial_q:
-                    ss = ss.lstrip('Q ')
-                    if not is_bracketed(ss):
-                        breakpoint()
-                    ss = ss[1:-1].strip()
-                ss = maybe_debrac(ss[4:]) if (notstart:=ss.startswith('not ')) else ss
-                self.is_semantic_leaf = ' ' not in ss.lstrip('BARE ')
-                if not self.is_semantic_leaf:
-                    self.sem_cats = set(['X'])
-                elif ss == 'hasproperty':
-                    self.is_semantic_leaf = True
-                    self.sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
-                elif '|' in ss:
-                    pos_marking = ss.split('|')[0]
-                    if pos_marking == 'n' and ss.endswith('pl-BARE'):
-                        self.sem_cats = set(['NP','N'])
-                    elif pos_marking == 'n:prop' and ss.endswith('\'s'):
-                        self.sem_cats = set(['NP|N'])
-                    elif pos_marking == 'n' and ss.endswith('BARE'):
-                        self.sem_cats = set(['NP'])
-                    elif pos_marking == 'n:prop' and ss.endswith('\'s\''):
-                        self.sem_cats = set(['NP|N']) # e.g. John's
-                    else:
-                        self.sem_cats = pos_marking_dict.get(pos_marking,set(['X']))
-                else:
-                    word_level_form = ss.split('_')[0] if '_' in ss else ss
-                    if word_level_form.startswith('Q '):
-                        word_level_form = word_level_form[2:]
-                    self.sem_cats = base_lexicon.get(word_level_form,set(['X']))
-                if had_initial_q:
-                    self.sem_cats = set('Sq'+sc[1:] if sc.startswith('S|') else sc for sc in self.sem_cats)
+            self.sem_cats, self.is_semantic_leaf = base_cats_from_str(ss)
         assert self.sem_cats!=''
         assert self.sem_cats is not None
         assert not any(sc is None for sc in self.sem_cats)

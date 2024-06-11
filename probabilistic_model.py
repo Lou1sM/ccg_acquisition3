@@ -10,7 +10,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, maybe_de_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str
 from errors import CCGLearnerError
 from time import time
 import argparse
@@ -606,14 +606,19 @@ class LanguageAcquirer():
                         if comb_type == 'cmp':
                             f = logical_type_raise(f)
                         lf = combine_lfs(f,g,comb_type)
+                        what_cats_should_be, _ = base_cats_from_str(lf)
+                        if 'X' not in what_cats_should_be and combined not in what_cats_should_be:
+                            breakpoint()
+                            continue
+                        if not lf_cat_congruent(lf, combined):
+                            continue
+                        if not is_wellformed_lf(lf, should_be_normed=True):
+                            continue
                         for csync in possible_syncs(combined):
                             lsync, rsync = infer_slash(left_option['sem_cat'],right_option['sem_cat'],csync,rule)
                             split = lsync + ' + ' + rsync
-                            if lf_cat_congruent(lf, combined) and is_wellformed_lf(lf, should_be_normed=True):
-                                mem_correction_semcat = self.syntaxl.marg_prob(csync)/self.syntaxl.marg_prob(left_option['sem_cat'])/self.syntaxl.marg_prob(right_option['sem_cat'])
-                                prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,csync)*mem_correction_semcat
-                            else:
-                                prob = 0
+                            mem_correction_semcat = self.syntaxl.marg_prob(csync)/self.syntaxl.marg_prob(left_option['sem_cat'])/self.syntaxl.marg_prob(right_option['sem_cat'])
+                            prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,csync)*mem_correction_semcat
                             bckpntr = (k,j,left_idx), (i-k,j+k,right_idx)
                             #backpointer contains the coords in probs_table (except x is +1), and the idx in the
                             #beam, of the two locations that the current one could be split into

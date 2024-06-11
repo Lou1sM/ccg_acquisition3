@@ -211,18 +211,26 @@ def lf_preproc(lf, sent):
         inner = dlf[3:-1]
     else:
         inner = dlf
-    maybe_cop_aux = re.match(r'aux\|\~be(-past)? \(part\|', inner)
+    maybe_cop_aux = re.match(r'(aux\|\~be-past|aux\|\~be-past|cop\|be-pres|cop\|be-past) \(part\|', inner)
     if maybe_cop_aux is not None:
         cop_aux = maybe_cop_aux.group()
     #if dlf.startswith('aux|~be (part|'):
-        rest = inner[len('aux|~be (part|'):]
+        #rest = inner[len('aux|~be (part|'):]
+        rest = inner[len(cop_aux):]
         verb, _, rest = rest.partition('-')
         if not ( rest.startswith('presp')):
             print(lf, sent)
             return
         rest = rest.removeprefix('presp ')
         #prog_marking, _, rest = rest.partition(' ')
-        tense = 'pres' if cop_aux == 'aux|~be (part|' else 'past'
+        #tense = 'pres' if cop_aux == 'aux|~be (part|' else 'past'
+        tense = 'past' if 'past' in cop_aux else 'pres'
+        if 'were' in sent or 'was' in sent:
+            assert tense=='past'
+        elif 'is' in sent or 'are' in sent:
+            assert tense=='pres'
+        else:
+            breakpoint()
         dlf = f'cop|{tense} (prog (v|{verb} {rest})'
         if had_q:
             dlf = f'Q ({dlf})'
