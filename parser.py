@@ -145,10 +145,10 @@ class LogicalForm:
             self.sem_cats, self.is_semantic_leaf, is_congruent = self.caches['cats'][self.lf_str]
             return is_congruent
         else:
-            ss = self.stripped_subtree_string
+            #ss = self.stripped_subtree_string
             if debug_set_cats is not None and debug_set_cats==self.subtree_string(recompute=True):
                 breakpoint()
-            self.sem_cats, self.is_semantic_leaf = base_cats_from_str(ss)
+            self.sem_cats, self.is_semantic_leaf = base_cats_from_str(self.lf_str)
         assert self.sem_cats!=''
         assert self.sem_cats is not None
         assert not any(sc is None for sc in self.sem_cats)

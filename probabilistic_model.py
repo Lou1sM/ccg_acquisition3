@@ -255,7 +255,7 @@ class LanguageAcquirer():
         self.leaf_shell_lf_memory = DirichletProcess(1)
         self.leaf_syncat_memory = DirichletProcess(1)
         self.vocab_thresh = vocab_thresh
-        self.beam_size = 50
+        self.beam_size = 10
 
     def train(self):
         self.syntaxl.train()
@@ -557,6 +557,7 @@ class LanguageAcquirer():
         beam = self.prune_beam(beam)
         beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat)/self.shmeaningl.marg_prob(b['shell_lf'])*self.syntaxl.marg_prob(sem_cat))
             for sem_cat in self.sem_cat_vocab for b in beam if sem_cat!='X']
+        beam = [b for b in beam if 'X' in base_cats_from_str(b['lf'])[0] or b['sem_cat'] in base_cats_from_str(b['lf'])[0]]
         beam = self.prune_beam(beam)
         beam = [dict(b,prob=b['prob']*self.syntaxl.prob('leaf',b['sem_cat'])) for b in beam]
         beam = self.prune_beam(beam)
@@ -589,12 +590,11 @@ class LanguageAcquirer():
                             f,g = right_option['lf'], left_option['lf']
                         else:
                             breakpoint()
-                        if comb_type == 'cmp':
-                            f = logical_type_raise(f)
+                        #if comb_type == 'cmp':
+                            #f = logical_type_raise(f)
                         lf = combine_lfs(f,g,comb_type)
                         what_cats_should_be, _ = base_cats_from_str(lf)
                         if 'X' not in what_cats_should_be and combined not in what_cats_should_be:
-                            breakpoint()
                             continue
                         if not lf_cat_congruent(lf, combined):
                             continue
@@ -1030,8 +1030,8 @@ if __name__ == "__main__":
     la.vocab_thresh = 0.1
     la.parse('you can n\'t eat'.split())
     cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
-    for dp in cant_points:
-        la.test_with_gt(dp['lf'], dp['words'])
+    #for dp in cant_points:
+        #la.test_with_gt(dp['lf'], dp['words'])
     la.parse('you are miss ing it'.split())
     la.parse('do you like it'.split())
     #la.parse('you see him'.split())

@@ -12,7 +12,8 @@ def de_q(lf):
 def lf_acc(lf_pred, lf_gt):
     return de_q(lf_pred) == de_q(lf_gt)
 
-def base_cats_from_str(ss):
+def base_cats_from_str(unstripped_str):
+    ss = strip_string(unstripped_str)
     ss = ss.replace(' you','')
     if ss == 'not':
         is_semantic_leaf = True
