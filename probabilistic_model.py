@@ -193,7 +193,9 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
             if outcat is None: #only time this should happen is during inference with crossed cmp
                 return 0
             if not is_direct_congruent(outcat,x):
-                return 0
+                other_way_around, _ = get_combination(y.split(' + ')[1], y.split(' + ')[0])
+                if not is_direct_congruent(other_way_around, x):
+                    return 0
         assert x != 'NP + S/NP\\NP' or not self.is_training
         base_prob = self.base_distribution(y)
         if x not in self.memory:
@@ -345,17 +347,6 @@ class LanguageAcquirer():
         self.marginal_syn_counts.to_pickle(join(fpath,'marginal_syn_counts.pkl'))
         self.syn_word_probs.to_pickle(join(fpath,'syn_word_probs.pkl'))
 
-    def show_word_meanings(self,word): # prob of meaning given word assuming flat prior over meanings
-        distr = self.wordl.inverse_distribution(word)
-        probs = sorted(distr.items(), key=lambda x:x[1])[-15:]
-        print(f'\nLearned Meaning for \'{word}\'')
-        print('\n'.join([f'{prob:.3f}: {word}' for word,prob in probs]))
-
-    def show_word(self,word,f=None):
-        meanings = self.word_to_lf_probs.loc[word].sort_values()[-10:]
-        file_print(f'\nLearned meanings for \'{word}\'',f)
-        file_print('\n'.join([f'{word}: {100*prob:.2f}%' for word,prob in meanings.items() if prob > 1e-4]),f)
-
     def get_lf(self,lf_str):
         if lf_str in self.full_lfs_cache:
             lf = self.full_lfs_cache[lf_str]
@@ -387,7 +378,11 @@ class LanguageAcquirer():
                 new_prob_cache = {}
                 new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                            self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
+                if ARGS.print_train_interps:
+                    self.test_with_gt(lfs, words)
                 if lfs == ARGS.dbr:
+                    #self.syntaxl.prob('S|NP/(S|NP) + S|NP/(S|NP)', 'S\\NP/(S|NP)')
+                    self.test_with_gt(lfs, words)
                     breakpoint()
             except CCGLearnerError as e:
                 new_problem_list.append((dpoint,e))
@@ -412,7 +407,6 @@ class LanguageAcquirer():
         new_meaningl_buffer = []
         new_wordl_buffer = []
         for node, _ in prob_cache.items():
-            prob = node.prob
             if node.lf == '':
                 breakpoint()
             if node.parent is not None and not node.is_g:
@@ -758,11 +752,11 @@ class LanguageAcquirer():
 
     def test_with_gt(self, lf, words):
         root = la.make_parse_node(lf, words)
-        root_prob = root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=False)
+        #root_prob = root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=False)
         root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=True)
         def _simple_draw_graph(x, depth):
             texttree = '\t'*depth
-            texttree += f'LF: {x.lf_str}\tSync: {x.syncs}\tWords: {" ".join(x.words)}\tRelprob: {x.below_prob/root_prob:.4f}'
+            texttree += f'LF: {x.lf_str}\tSync: {x.syncs}\tWords: {" ".join(x.words)}\tRelprob: {x.rel_prob:.4f}'
             left_child, right_child, _ = x.best_split
             non_leaf = left_child!='leaf'
             assert non_leaf == (right_child!='leaf')
@@ -785,6 +779,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--cat-to-sample-from", type=str, default='S')
     ARGS.add_argument("--condition-on-syncats", action="store_true")
     ARGS.add_argument("--db-after", action="store_true")
+    ARGS.add_argument("--print-train-interps", action="store_true")
     ARGS.add_argument("--db-at", type=int, default=-1)
     ARGS.add_argument("--db-parse", action="store_true")
     ARGS.add_argument("--db-prob-changes-above", type=float, default=1.)
@@ -1033,10 +1028,10 @@ if __name__ == "__main__":
             for k,v in all_word_order_probs[-1].items():
                 file_print(f'{k}: {v:.6f}',f)
     la.vocab_thresh = 0.1
+    la.parse('you can n\'t eat'.split())
     cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
     for dp in cant_points:
         la.test_with_gt(dp['lf'], dp['words'])
-    la.parse('you can n\'t eat'.split())
     la.parse('you are miss ing it'.split())
     la.parse('do you like it'.split())
     #la.parse('you see him'.split())

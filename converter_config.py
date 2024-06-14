@@ -35,6 +35,9 @@ full_lfs_to_exclude = [
         'lambda $0_{r}.Q(cop|be-pres_1(v|finish-past_3(pro:per|you_2,$0),$0))',# unsure how to model but v on finish is wrong
         'lambda $0_{r}.Q(cop|be-pres_1(v|crowd-past_3(pro:per|you_2,$0),$0))',# unsure how to model but v on crowd is wrong
         'lambda $0_{r}.Q(cop|be-3s_1(v|block-past_4(det:art|the_2($1,n|road_3($1)),$0),$0))',# unsure how to model but v on block is wrong
+        'BARE($0,det:num|one_1(det:num|two_2(det:num|three_3(det:num|four_4(det:num|five_5($0))))))',# unsure how to model but defo wrong
+        'BARE($0,Q(det:num|two_1(v|break_2($0))))',# unsure how to model but defo wrong
+        'lambda $0_{r}.Q(adv:int|where_1(qn|all_3(det:art|the_4($1,n|penny-pl_5($1))),$0))',# unsure how to model but defo wrong
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         'v|racā pro:per|huʔ n|xavitā-BARE' # doesnt match sent
@@ -164,6 +167,12 @@ premanual_ida_fixes = {
     'lambda $0_{r}.Q(n|talk_2(you,$0))':'lambda $0_{r}.Q(v|talk_2(you,$0))', # pos of 'talk' to v
     'lambda $0_{r}.Q(mod|do-3s_1(n|talk_4(det:art|the_2($1,n|microphone_3($1)),$0),$0))':'lambda $0_{r}.Q(mod|do-3s_1(v|talk_4(det:art|the_2($1,n|microphone_3($1)),$0),$0))', # pos of 'talk' to v
     'lambda $0_{r}.Q(mod|can_1(n|talk_3(BARE($1,n|bread_2($1)),$0),$0))':'lambda $0_{r}.Q(mod|can_1(v|talk_3(BARE($1,n|bread_2($1)),$0),$0))', # pos of 'talk' to v
+    'lambda $0_{r}.aux|have-3s_2(n:prop|paul_1,det:poss|his_3,$0)':'lambda $0_{r}.v|have-3s_2(n:prop|paul_1,det:poss|his_3,$0)', # pos of 'has' to v
+    'lambda $0_{r}.Q(mod|do-3s_1(aux|have_4(det:poss|your_2($1,n|pencil_3($1)),BARE($2,n|number-pl_5($2)),$0),$0))':'lambda $0_{r}.Q(mod|do-3s_1(v|have_4(det:poss|your_2($1,n|pencil_3($1)),BARE($2,n|number-pl_5($2)),$0),$0))', # pos of 'have' to v
+    'lambda $0_{r}.mod|~will_2(aux|get_3(pro:sub|i_1,pro:per|you_4,$0),$0)':'lambda $0_{r}.mod|~will_2(v|get_3(pro:sub|i_1,pro:per|you_4,$0),$0)', # pos of 'get' to v
+    'lambda $0_{r}.mod|can_2(aux|get_3(pro:per|you_1,pro:per|it_4,$0),$0)':'lambda $0_{r}.mod|can_2(v|get_3(pro:per|you_1,pro:per|it_4,$0),$0)', # pos of 'get' to v
+    'lambda $0_{r}.aux|~be_2(n:gerund|get-presp_3(pro:per|you_1,pro:per|it_4,$0),$0)':'lambda $0_{r}.aux|~be_2(v|get-part(pro:per|you_1,pro:per|it_4,$0),$0)', # pos of 'get' to v
+    'lambda $0_{r}.aux|have-3s_1(n:prop|adam_2,BARE($1,det:num|two_3(n|pencil-pl_4($1))),$0)':'lambda $0_{r}.v|have-3s_1(n:prop|adam_2,BARE($1,det:num|two_3(n|pencil-pl_4($1))),$0)', # pos of 'have' to v
     #'lambda $0_{r}.det:art|the_3(pro:per|you_2,n|drive-dv_4(pro:per|you_2,$0))':'lambda $0_{r}.Q(det:art|the_3(pro:per|you_2,n|drive-dv_4(pro:per|you_2,$0)))', # add Q
     #'lambda $0_{r}.n|pillow-pl_3(pro:dem|those_2,$0)': 'lambda $0_{r}.Q(n|pillow-pl_3(pro:dem|those_2,$0))', # add Q
     #'lambda $0_{r}.cop|be-pres_1(part|fix-presp_3(pro:per|you_2,det:art|the_4($1,n|dog_5($1)),$0),$0)': 'lambda $0_{r}.Q(cop|be-pres_1(part|fix-presp_3(pro:per|you_2,det:art|the_4($1,n|dog_5($1)),$0),$0))',# add Q

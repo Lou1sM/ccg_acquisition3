@@ -196,9 +196,9 @@ class LogicalForm:
                 self.add_split(fcmp, gcmp, 'cmp')
         if has_q:=any(x.node_type=='Q' for x in self.descs):
             qidx = [i for i,x in enumerate(self.descs) if x.node_type=='Q'][0]
-            head_options = [x for x in self.leaf_descs if x.node_type in ['verb', 'raise', 'quant', 'hasproperty']]
+            head_options = [x for x in self.leaf_descs if x.node_type in ['verb', 'raise', 'hasproperty', 'part']]
             if len(head_options)==0:
-                head_options = [x for x in self.leaf_descs if x.node_type in ['quant','prep','adv','aux']]
+                head_options = [x for x in self.leaf_descs if x.node_type in ['prep','quant','adv','aux']]
             if len(head_options)==0:
                 self.app_splits = set()
                 self.cmp_splits = set()
@@ -206,14 +206,18 @@ class LogicalForm:
             else:
                 head = head_options[0]
 
-        remove_types = ['det', 'noun', 'quant'] if self.node_type=='detnoun' else ['entity','verb','neg','raise','WH','adj','prep','detnoun','hasproperty', 'cop', 'prog']
+        #remove_types = ['det', 'noun', 'quant'] if self.node_type=='detnoun' else ['entity','verb','neg','raise','WH','adj','prep','detnoun','hasproperty', 'cop', 'prog']
+        remove_types = ['det', 'noun', 'quant'] if self.node_type=='detnoun' else ['entity','verb','neg','raise','WH','adj','prep','detnoun','hasproperty', 'cop', 'prog', 'composite']
         pridxs = [i for i,d in enumerate(self.descs) if d.node_type in remove_types]
+        cns = [x for x in self.leaf_descs if x.node_type not in ['lmbda', 'composite', 'bound_var', 'unbound_var']]
         if debug_split_lf is not None and debug_split_lf == self.subtree_string(recompute=True):
             breakpoint()
         #if self.lf_str == 'lambda $0.Q (hasproperty pro:per|it $0)':
             #breakpoint()
         for ridxs_raw in all_sublists(pridxs):
             if len(ridxs_raw) in (0,len(pridxs)): continue
+            if len(ridxs_raw) != 1:
+                continue
             if self.sem_cats.intersection({'S','S|NP'}) and \
                 all(self.descs[ri].sem_cats.intersection({'N'}) for ri in ridxs_raw):
                     continue # this would result in illegitimate cats, like S|N or S|NP|N
@@ -252,11 +256,16 @@ class LogicalForm:
                         changed = True
                         entry_point = entry_point.parent
                         break
+            entry_point_cns = [x for x in entry_point.leaf_descs if x.node_type not in ['lmbda', 'composite', 'bound_var', 'unbound_var']]
+            if len(entry_point_cns) == len(cns):
+                continue
+            assert entry_point!=self
             g = entry_point.copy()
-            to_present_as_args_to_g = '' if len(removees)==1 and removees[0].node_type=='detnoun' else [d for d in entry_point.leaf_descs if d not in removees]
+            #to_present_as_args_to_g = '' if len(removees)==1 and removees[0].node_type=='detnoun' else [d for d in entry_point.leaf_descs if d not in removees]
+            to_present_as_args_to_g = '' if len(removees)==1 and removees[0].node_type=='detnoun' else [d for d in entry_point.leaf_descs if d.node_type in ('bound_var', 'unbound_var')]
             have_embedded_binders = [d for d in to_present_as_args_to_g if d.node_type=='bound_var' and d.binder in entry_point.descs]
             to_present_as_args_to_g = [x for x in to_present_as_args_to_g if x not in have_embedded_binders]
-            assert len(to_present_as_args_to_g) == len(entry_point.leaf_descs) - len(removees) - len(have_embedded_binders)
+            #assert len(to_present_as_args_to_g) == len(entry_point.leaf_descs) - len(removees) - len(have_embedded_binders)
             #if ridxs==[8, 9] and self.lf_str=='lambda $0.not (mod|can ($0 (det:art|the n|tractor)))':
                 #breakpoint()
             g = g.turn_nodes_to_vars(to_present_as_args_to_g)
@@ -393,10 +402,8 @@ class LogicalForm:
             print(self, f, g)
             f.sem_cats = f.sem_cats | new_inferred_sem_cats
         else:
-            #f.sem_cats = f.sem_cats.intersection(new_inferred_sem_cats) if f.sem_cat_is_set else new_inferred_sem_cats
             f.sem_cats = set_congruent(new_inferred_sem_cats, f.sem_cats)
         if not f.sem_cats:
-            #raise SemCatError('no f-semcats are congruent with it\'s new inferred semcats')
             if len(old_fsc)>0:
                 print(f'fsem_cats were {old_fsc}, inferred are {new_inferred_sem_cats}')
             return
@@ -757,6 +764,7 @@ class ParseNode():
         other.sibling = self
 
     def propagate_below_probs(self,syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map):
+        """Recursively called on children, and use results for this node, so probs are propagated up the tree."""
         self.split_prob = split_prob
         if self in prob_cache:
             return prob_cache[self]
@@ -770,14 +778,16 @@ class ParseNode():
             all_probs.append((ps['left'], ps['right'], left_below_prob*right_below_prob*split_prob))
 
         self.best_split = max(all_probs, key=lambda x:x[2])
-        below_prob = max([x[2] for x in all_probs]) if is_map else sum([x[2] for x in all_probs])
-        if below_prob == 0:
+        self.below_prob = max([x[2] for x in all_probs]) if is_map else sum([x[2] for x in all_probs])
+        self.rel_prob = self.below_prob/sum([x[2] for x in all_probs])
+        if self.below_prob == 0:
             breakpoint()
-        prob_cache[self] = below_prob
-        self.below_prob = below_prob
-        return below_prob
+        prob_cache[self] = self.below_prob
+        #self.below_prob = self.below_prob
+        return self.below_prob
 
     def propagate_above_probs(self,passed_above_prob): #reuse split_prob from propagate_below_probs
+        """Recursively called on children, passing results from this node, so probs are propagated down the tree."""
         self.above_prob = passed_above_prob*self.split_prob
         for ps in self.splits:
             # this is how to get cousins probs

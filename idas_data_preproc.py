@@ -143,6 +143,7 @@ def fix_posses(lf):
     lf =re.sub(rf'co\|[\w{he_chars}]+,', '', lf)
     lf =re.sub(rf'co\|[\w{he_chars}]+', '', lf)
     lf = lf.replace('()', '')
+    lf = lf.replace('mod:aux|', 'mod|')
     return lf
 
 def lf_preproc(lf, sent):
@@ -211,7 +212,9 @@ def lf_preproc(lf, sent):
         inner = dlf[3:-1]
     else:
         inner = dlf
-    maybe_cop_aux = re.match(r'(aux\|\~be-past|aux\|\~be-past|cop\|be-pres|cop\|be-past) \(part\|', inner)
+    if (had_not:=inner.startswith('not (')):
+        inner = inner[5:-1]
+    maybe_cop_aux = re.match(r'(aux|cop)\|(\~?)be(-past|-pres|-3s|-1s|) \(part\|', inner)
     if maybe_cop_aux is not None:
         cop_aux = maybe_cop_aux.group()
     #if dlf.startswith('aux|~be (part|'):
@@ -226,14 +229,23 @@ def lf_preproc(lf, sent):
         #tense = 'pres' if cop_aux == 'aux|~be (part|' else 'past'
         tense = 'past' if 'past' in cop_aux else 'pres'
         if 'were' in sent or 'was' in sent:
-            assert tense=='past'
-        elif 'is' in sent or 'are' in sent:
-            assert tense=='pres'
+            if not ( tense=='past'):
+                print('marked cop tense wrong for {dlf} {sent}')
+            tense = 'past'
+        elif any(w in sent for w in ['is', 'are', '\'s', '\'re', '\'m', 'am']):
+            if not ( tense=='pres'):
+                breakpoint()
         else:
             breakpoint()
         dlf = f'cop|{tense} (prog (v|{verb} {rest})'
+        if had_not:
+            dlf = f'not ({dlf})'
         if had_q:
             dlf = f'Q ({dlf})'
+    if 'aux' in dlf and 'aux|have' not in dlf:
+        print(dlf)
+    if dlf.count('cop')==2:
+        breakpoint()
     assert is_wellformed_lf(dlf)
     return dlf
 
@@ -272,9 +284,9 @@ def sent_preproc(lf, sent):
         sent = sent_fixes[sent]
     #sent = sent.replace('n \'t', ' n\'t')
     sent = sent.replace(' \'t', '\'t')
-    if (had_neg:=any(w in sent for w in neg_conts)): print(sent, end=' ')
+    #if (had_neg:=any(w in sent for w in neg_conts)): print(sent, end=' ')
     sent = ' '.join(neg_conts.get(w,w) for w in sent.split(' '))
-    if had_neg: print('-->', sent)
+    #if had_neg: print('-->', sent)
     sent = [w for w in sent.split() if f'co|{w}' not in lf and not(w=='we' and w not in lf)]
     if len(sent)>0 and sent[0] == 'ʔavāl' and 'ʔavāl' not in lf:
         sent = sent[1:]

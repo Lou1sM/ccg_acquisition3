@@ -3,7 +3,6 @@ from learner_config import pos_marking_dict, base_lexicon
 
 
 LAMBDA_RE_STR = r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.'
-#LAMBDA_RE_STR = r'^lambda (WHAT1|WHO1|\$\d{1,2}|\$\d{1,2}_\{e\}|\$\d{1,2}_\{r\}|\$\d{1,2}_\{<r,t>\}|\$\d{1,2}\{<<e,e>,e>\})?\.'
 def de_q(lf):
     lambda_binder, body = all_lambda_body_splits(lf)
     if body.startswith('Q '):
@@ -113,8 +112,6 @@ def maybe_de_type_raise(cat):
         return insplits[1]
     else:
         return cat
-    #new_cat = re.sub(r'([A-Z]{1,2})[\\/\|]\(\1[\\/\|](.*)\)$',r'\2',cat)
-    #return new_cat
 
 def combine_lfs(f_str,g_str,comb_type,normalize=True):
     increment_g_vars_by = new_var_num(f_str)
@@ -175,19 +172,6 @@ def get_cmp_of_lfs(f_str,g_str):
     var_nums = re.findall(r'\$\d{1,2}',f_str+g_str)
     new_var_num = max([int(x[1:]) for x in var_nums])+1
     return f'lambda ${new_var_num}.({f_str}) (({g_str}) ${new_var_num})'
-
-def old_get_cmp_of_lfs(f_str,g_str):
-    f_lambda_binder,frest,f_first_var_num = first_lambda_body_split(f_str)
-    _,grest,g_first_var_num = first_lambda_body_split(g_str)
-    #max_var_num = max(f_str.new_var_num,g_str.new_var_num)
-    var_nums = re.findall(r'\$\d{1,2}',f_str+g_str)
-    new_var_num = max([int(x[1:]) for x in var_nums])+1
-    f_lambda_binder = f_lambda_binder.replace(f'${f_first_var_num}',f'${new_var_num}')
-    to_sub_in = grest.replace(f'${g_first_var_num}',f'${new_var_num}')
-    subbed_in = frest.replace(f'${f_first_var_num}',f'({to_sub_in})')
-    if not is_wellformed_lf(f_lambda_binder+subbed_in):
-        breakpoint()
-    return f_lambda_binder + subbed_in
 
 def possible_syncs(sem_cat):
     if is_atomic(sem_cat):
@@ -297,7 +281,6 @@ def beta_normalize(m,verbose=False):
     return normed
 
 def strip_string(ss):
-    #ss = re.sub(r'(lambda \$\d{1,2})+\.','', ss)
     ss = re.sub(r'^(lambda \$\d{1,2}\.)+','', ss)
     #ss = re.sub(r'( ?\$\d+)+$','',ss.replace('(','').replace(')',''))
     ss = re.sub(r' ?\$\d{1,2}','', ss)
@@ -432,63 +415,6 @@ def n_lambda_binders(s):
         #lambdas = [m for m in lambdas if all(trv not in m for trv in type_raised_vars)]
     return len(lambdas)
 
-def n_lambda_binders_old(s):
-    if '.' not in s:
-        return 0
-    maybe_lambda_list = split_respecting_brackets(s,sep='.')
-    lambdas, body = maybe_lambda_list[:-1], maybe_lambda_list[-1]
-    assert all(x.startswith('lambda') for x in lambdas)
-    #maybe_lambda_list = set(x for x in maybe_lambda_list_ if not x.endswith('_{e}'))
-    #maybe_lambda_list = [m for m in maybe_lambda_list if m.startswith('lambda')]
-    if bool(leading_vars := re.match(r'(\$\d{1,2} ?)*', body)):# don't count type-raised vars
-        type_raised_vars = leading_vars.group().split()
-        lambdas = [m for m in lambdas if all(trv not in m for trv in type_raised_vars)]
-    return len(lambdas)
-
-def translate_by_unify(x,y):
-    """Equate corresponding subexpressions in x and y to form a translation between subexpressions"""
-    translation = {}
-    x_list = re.split(r'[ ,().]',x)
-    y_list = re.split(r'[ ,().]',y)
-    assert len(x_list) == len(y_list)
-    new_var_n_diff = 'none'
-    for x_term,y_term in zip(x_list,y_list):
-        if 'lambda' not in x_term:
-            assert 'lambda' not in y_term
-            if '$' in x_term:
-                assert '$' in y_term
-                new_new_var_n_diff = int(y_term[1:]) - int(x_term[1:])
-                assert new_var_n_diff in ['none',new_new_var_n_diff]
-                new_var_n_diff = new_new_var_n_diff
-            if x_term!=y_term:
-                translation[x_term] = y_term
-    return translation
-
-def translate(s,trans_dict):
-    if len(trans_dict)==0:
-        return s
-    var_trans_sources = [x for x in trans_dict.keys() if '$' in x]
-    var_trans_targets = [x for x in trans_dict.values() if '$' in x]
-    if var_trans_sources != []:
-        max_var_in_source_language = max(var_trans_sources, key=lambda x: int(x[1:]))
-        max_var_in_target_language = max(var_trans_targets, key=lambda x: int(x[1:]))
-        new_var_n_diff = int(max_var_in_target_language[1:])-int(max_var_in_source_language[1:])
-        for var in re.findall(r'\$\d',s):
-            if var not in trans_dict:
-                trans_dict[var] = f'${int(var[1:])+new_var_n_diff}'
-    trans_dict1 = {k:v[0]+'£'+''.join(v[1:]) for k,v in trans_dict.items()}
-    trans_dict2 = {k[0]+'£'+''.join(k[1:]):k for k in trans_dict.values()}
-    for old,new in trans_dict1.items():
-        s = s.replace(old,new)
-    for old,new in trans_dict2.items():
-        s = s.replace(old,new)
-    return s
-
-def simple_translate(s,trans_dict):
-    for old,new in trans_dict.items():
-        s = s.replace(old,new)
-    return s
-
 def file_print(s,f):
     print(s)
     print(s,file=f)
@@ -609,11 +535,14 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
         return new_f, new_g
 
 def lf_cat_congruent(lf_str, sem_cat):
-    #sem_cat = maybe_de_type_raise(sem_cat_)
     assert 'VP' not in sem_cat
     assert ' you' not in lf_str
-    if sem_cat in ('S|N', 'NP|NP'):
+    #if sem_cat in ('S|N', 'NP|NP'):
+    if sem_cat in ('S|N',):
         return False
+    if sem_cat == 'NP|NP' and not strip_string(lf_str).startswith('qn|'):
+        return False
+
     sem_cat = re.sub(r'^VP','S|NP',sem_cat) # if VP on left then no bracks because right-assoc
     if sem_cat in ('Swhq','N|N', 'N\\N','N/N'):
         what_n_lambdas_should_be = 0
@@ -623,14 +552,6 @@ def lf_cat_congruent(lf_str, sem_cat):
     #if what_n_lambdas_should_be != n_lambda_binders(lf_str) and what_n_lambdas_should_be == n_lambda_binders_old(lf_str):
         #breakpoint()
     return what_n_lambdas_should_be == n_lambda_binders(lf_str)
-
-#def lf_cat_congruent(lf_str, sem_cat):
-#    if _lf_cat_congruent(lf_str, sem_cat):
-#        return True
-#    if is_type_raised(sem_cat):
-#        return _lf_cat_congruent(lf_str, maybe_de_type_raise(sem_cat))
-#    else:
-#        return False
 
 def parent_cmp_from_f_and_g(f_cat, g_cat, sem_only):
     if f_cat=='X' or g_cat=='X':
@@ -673,23 +594,6 @@ def cat_components(sync,allow_atomic=False,sep=None):
     slash = sync[-len(in_cat)-1]
     out_cat = sync[:-len(in_cat)-1]
     return out_cat, slash, in_cat
-
-def get_combination_old(left_sync,right_sync):
-    if is_atomic(left_sync) and is_atomic(right_sync):
-        return None
-    if left_sync in right_sync: # can only be bck app then
-        return maybe_app(left_sync,right_sync,direction='bck')
-    elif right_sync in left_sync: # can only be fwd app then
-        return maybe_app(left_sync,right_sync,direction='fwd')
-    else: # see if works by composition
-        left_out, left_slash, left_in = cat_components(left_sync,sep=['\\','/'])
-        right_out, right_slash, right_in = cat_components(right_sync,sep=['\\','/'])
-        if left_slash != right_slash: # skip crossed composition
-            return None
-        elif left_in == right_out:
-            return ''.join(left_out, left_slash, right_in)
-        elif left_out == right_in:
-            return ''.join(right_out, right_slash, left_in)
 
 def balanced_substrings(s):
     open_bracs_idxs = []
