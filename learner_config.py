@@ -49,8 +49,8 @@ pos_marking_dict = {
                     'chi':set(['X']),
                     #'co':set(['S']),
                     'co':set(['X']),
-                    'conj':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
-                    'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # same as above ok for now?
+                    'conj':set(['S|S|S']),
+                    'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
                     'cop':set(['S|NP|(S|NP)', 'S|(S|NP)|NP','S|NP|(N|N)', 'S|(N|N)|NP']),
                     'det':set(['NP|N']),
                     'det:art':set(['NP|N']),
@@ -77,7 +77,7 @@ pos_marking_dict = {
                     'pro:dem':set(['NP']), # ?
                     'pro:exist':set(['NP']),
                     'pro:indef':set(['NP']),
-                    'pro:int':set(['NP']),
+                    'pro:int':set(['NP', 'Swhq|(S|NP)']),
                     'pro:obj':set(['NP']),
                     'pro:per':set(['NP']),
                     'pro:poss':set(['NP']),

@@ -46,6 +46,9 @@ def base_cats_from_str(unstripped_str):
         elif ss == 'hasproperty':
             is_semantic_leaf = True
             sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
+        elif ss in ('cop|pres', 'cop|past'):
+            is_semantic_leaf = True
+            sem_cats = set(['S|(S|NP)|NP','S|NP|(S|NP)'])
         elif '|' in ss:
             pos_marking = ss.split('|')[0]
             if pos_marking == 'n' and ss.endswith('pl-BARE'):
@@ -87,8 +90,12 @@ def is_wellformed_lf(lf, should_be_normed=False):
     if lf.count('.') != lf.count('lambda'):
         return False
     if should_be_normed:
-        if not lf.startswith('Q') and bool(re.search(r'(?<!\.)Q', lf)): # Q should only be at beginning
-            return False
+        if lf.startswith('Q'):
+            if not is_bracketed(lf[2:]): # Q should operate on whole sentence
+                return False
+        else:
+            if bool(re.search(r'(?<!\.)Q', lf)): # Q should only be at beginning
+                return False
         lambdas, body = all_lambda_body_splits(lf)
         if lf.count('.') != lambdas.count('.'):
             return False
@@ -552,7 +559,8 @@ def lf_cat_congruent(lf_str, sem_cat):
     #return what_n_lambdas_should_be == n_lambda_binders(lf_str) + (' you' in lf_str)
     #if what_n_lambdas_should_be != n_lambda_binders(lf_str) and what_n_lambdas_should_be == n_lambda_binders_old(lf_str):
         #breakpoint()
-    return what_n_lambdas_should_be == n_lambda_binders(lf_str)
+    #return n_lambda_binders(lf_str) == what_n_lambdas_should_be
+    return n_lambda_binders(lf_str) <= what_n_lambdas_should_be
 
 def parent_cmp_from_f_and_g(f_cat, g_cat, sem_only):
     if f_cat=='X' or g_cat=='X':

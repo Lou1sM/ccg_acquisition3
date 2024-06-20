@@ -352,7 +352,7 @@ class LanguageAcquirer():
             lf = self.full_lfs_cache[lf_str]
             #lf.set_cats_as_root(lf_str) # in case was in cache as embedded S, so got X
         else:
-            lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss)
+            lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss, verbose_as=ARGS.verbose_as)
             self.full_lfs_cache[lf_str] = lf
         return lf
 
@@ -549,7 +549,7 @@ class LanguageAcquirer():
             print(f'\'{words}\' not seen before as a leaf')
         if words == ARGS.db_word_parse:
             breakpoint()
-        beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.leaf_lf_memory.prob(lf)} for lf in self.lf_vocab]
+        beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.leaf_lf_memory.prob(lf)} for lf in self.lf_vocab if is_wellformed_lf(lf, should_be_normed=True)]
         beam = self.prune_beam(beam)
 
         beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.meaningl.marg_prob(b['lf'])*self.shmeaningl.marg_prob(shell_lf))
@@ -561,6 +561,8 @@ class LanguageAcquirer():
         beam = self.prune_beam(beam)
         beam = [dict(b,prob=b['prob']*self.syntaxl.prob('leaf',b['sem_cat'])) for b in beam]
         beam = self.prune_beam(beam)
+        if any(x['lf'] == 'Q (mod|do-past pro:per|you) n|name' for x in beam):
+            breakpoint()
         return [dict(b,words=words,rule='leaf',backpointer=None) for b in beam]
 
     def parse(self,words):
@@ -572,6 +574,8 @@ class LanguageAcquirer():
         def add_prob_of_span(i,j):
             word_span = ' '.join(words[j:j+i])
             possible_nexts = self.leaf_probs_of_word_span(word_span)
+            if any(x['lf'] == 'Q (mod|do-past pro:per|you) n|name' for x in possible_nexts):
+                breakpoint()
             for k in range(1,i):
                 left_chunk_probs = probs_table[k-1,j]
                 right_chunk_probs = probs_table[i-k-1,j+k] # total len is always i, -1s bc 0-index
@@ -593,12 +597,12 @@ class LanguageAcquirer():
                         #if comb_type == 'cmp':
                             #f = logical_type_raise(f)
                         lf = combine_lfs(f,g,comb_type)
+                        if not is_wellformed_lf(lf, should_be_normed=True):
+                            continue
                         what_cats_should_be, _ = base_cats_from_str(lf)
                         if 'X' not in what_cats_should_be and combined not in what_cats_should_be:
                             continue
                         if not lf_cat_congruent(lf, combined):
-                            continue
-                        if not is_wellformed_lf(lf, should_be_normed=True):
                             continue
                         for csync in possible_syncs(combined):
                             lsync, rsync = infer_slash(left_option['sem_cat'],right_option['sem_cat'],csync,rule)
@@ -780,6 +784,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--condition-on-syncats", action="store_true")
     ARGS.add_argument("--db-after", action="store_true")
     ARGS.add_argument("--print-train-interps", action="store_true")
+    ARGS.add_argument("--verbose-as", action="store_true")
     ARGS.add_argument("--db-at", type=int, default=-1)
     ARGS.add_argument("--db-parse", action="store_true")
     ARGS.add_argument("--db-prob-changes-above", type=float, default=1.)
@@ -1028,20 +1033,20 @@ if __name__ == "__main__":
             for k,v in all_word_order_probs[-1].items():
                 file_print(f'{k}: {v:.6f}',f)
     la.vocab_thresh = 0.1
-    la.parse('you can n\'t eat'.split())
+    #la.parse('you can n\'t eat'.split())
     cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
     #for dp in cant_points:
         #la.test_with_gt(dp['lf'], dp['words'])
-    la.parse('you are miss ing it'.split())
-    la.parse('do you like it'.split())
+    #la.parse('you are miss ing it'.split())
+    #la.parse('do you like it'.split())
     #la.parse('you see him'.split())
     #la.parse('you lost a pencil'.split())
     #la.parse('did he see it'.split())
     #la.parse('the pencil dropped the name'.split())
     #la.parse('did the pencil see the name'.split())
     #la.parse('that \'s right'.split())
-    la.parse('you can n\'t see'.split())
-    la.parse('you can n\'t eat'.split())
+    #la.parse('you can n\'t see'.split())
+    #la.parse('you can n\'t eat'.split())
     la.parse('did you name it'.split())
     la.parse('can you find it'.split())
     la.parse('will you talk'.split())

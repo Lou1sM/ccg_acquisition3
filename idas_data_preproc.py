@@ -61,6 +61,9 @@ def decommafy(parse, debrac=False):
         prefix += 'Q ('
         suffix += ')'
     inner_lf = _decommafy_inner(body)
+    splits = split_respecting_brackets(inner_lf)
+    if len(splits)==3:
+        inner_lf = f'{splits[0]} {splits[2]} {splits[1]}'
     lf = prefix + inner_lf + suffix
     if debrac:
         lf = maybe_debrac(lf)
@@ -106,7 +109,7 @@ def _decommafy_inner(parse):
             elif is_adj(pred):
                 dpred = decommafy(pred)
                 dpred_pos, dpred_word = dpred.split('|')
-                return f'hasproperty {decommafy(arg_splits[0])} adj|{dpred_word}'
+                return f'hasproperty adj|{dpred_word} {decommafy(arg_splits[0])}'
         recursed_list = [decommafy(x) for x in arg_splits]
         if pred in ['and', '']: # can be '' because do-support
             debracced_rl = [maybe_debrac(recursed_list[0])] + recursed_list[1:]
@@ -230,7 +233,7 @@ def lf_preproc(lf, sent):
         tense = 'past' if 'past' in cop_aux else 'pres'
         if 'were' in sent or 'was' in sent:
             if not ( tense=='past'):
-                print('marked cop tense wrong for {dlf} {sent}')
+                print(f'marked cop tense wrong for {dlf} {sent}')
             tense = 'past'
         elif any(w in sent for w in ['is', 'are', '\'s', '\'re', '\'m', 'am']):
             if not ( tense=='pres'):
@@ -326,9 +329,9 @@ if __name__ == '__main__':
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument("-d", "--dset", type=str, choices=['adam', 'hagar'], default='adam')
     ARGS.add_argument("--db", type=str)
-    ARGS.add_argument("--db_sent", type=str)
-    ARGS.add_argument("-p", "--print_conversions", action='store_true')
-    ARGS.add_argument("-f", "--print_fixes", action='store_true')
+    ARGS.add_argument("--db-sent", type=str)
+    ARGS.add_argument("-p", "--print-conversions", action='store_true')
+    ARGS.add_argument("-f", "--print-fixes", action='store_true')
     ARGS = ARGS.parse_args()
 
     #with open(f'data/{ARGS.dset}_comma_format.txt') as f:

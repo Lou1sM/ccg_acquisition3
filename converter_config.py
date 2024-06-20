@@ -38,6 +38,7 @@ full_lfs_to_exclude = [
         'BARE($0,det:num|one_1(det:num|two_2(det:num|three_3(det:num|four_4(det:num|five_5($0))))))',# unsure how to model but defo wrong
         'BARE($0,Q(det:num|two_1(v|break_2($0))))',# unsure how to model but defo wrong
         'lambda $0_{r}.Q(adv:int|where_1(qn|all_3(det:art|the_4($1,n|penny-pl_5($1))),$0))',# unsure how to model but defo wrong
+        'lambda $2_{e}.lambda $0_{r}.mod|do-3s_3(v|have_6(n:prop|cromer_5_mr_4,BARE($1,$2(qn|many_2($1))),$0),$0)',# unsure how to model but probs wrong
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         'v|racā pro:per|huʔ n|xavitā-BARE' # doesnt match sent
