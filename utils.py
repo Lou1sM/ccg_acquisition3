@@ -39,7 +39,7 @@ def base_cats_from_str(unstripped_str):
             if not is_bracketed(ss):
                 breakpoint()
             ss = ss[1:-1].strip()
-        ss = maybe_debrac(ss[4:]) if (notstart:=ss.startswith('not ')) else ss
+        #ss = maybe_debrac(ss[4:]) if (notstart:=ss.startswith('not ')) else ss
         is_semantic_leaf = ' ' not in ss.lstrip('BARE ')
         if not is_semantic_leaf:
             sem_cats = set(['X'])
@@ -61,6 +61,17 @@ def base_cats_from_str(unstripped_str):
                 sem_cats = set(['NP|N']) # e.g. John's
             else:
                 sem_cats = pos_marking_dict.get(pos_marking,set(['X']))
+            if ss.startswith('v|'):
+                if n_lambda_binders(unstripped_str) == 3:
+                    sem_cats = {'S|NP|NP|NP'}
+                    if ss != 'v|give':
+                        print(ss, 'getting 3 args')
+                elif n_lambda_binders(unstripped_str) == 2:
+                    sem_cats = {'S|NP|NP'}
+                elif n_lambda_binders(unstripped_str) <= 1:
+                    sem_cats = {'S|NP'}
+                else:
+                    breakpoint()
         else:
             word_level_form = ss.split('_')[0] if '_' in ss else ss
             if word_level_form.startswith('Q '):
