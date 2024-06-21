@@ -201,11 +201,6 @@ def lf_preproc(lf, sent):
     dlf = decommafy(lf, debrac=True)
     if ARGS.print_conversions:
         print(f'{lf} --> {dlf}', end='\t')
-    if dlf in manual_ida_fixes.keys():
-        old_dlf = dlf
-        dlf = manual_ida_fixes[dlf]
-        if ARGS.print_fixes:
-            print(f'Fixing: {old_dlf} --> {dlf}')
     if dpoint['idasent'].lstrip('Adam ').startswith('is that') and not dlf.startswith('Q '):
         dlf = f'Q ({dlf})'
     dlf = re.sub(r'BARE \$\d{1,2} \((det:num\|[{he_chars}\w-]+) \((n\|[\w{he_chars}-]+) \$\d{1,2}\)\)', r'\1 \2', dlf)
@@ -231,6 +226,12 @@ def lf_preproc(lf, sent):
         #prog_marking, _, rest = rest.partition(' ')
         #tense = 'pres' if cop_aux == 'aux|~be (part|' else 'past'
         tense = 'past' if 'past' in cop_aux else 'pres'
+        if 'I' in sent and ('\'m' in sent or 'am' in sent or 'was' in sent):
+            person = '1s'
+        elif 'you' in sent and ('\'re' in sent or 'are' in sent or 'were' in sent):
+            person = '2s'
+        else:
+            person = '3s'
         if 'were' in sent or 'was' in sent:
             if not ( tense=='past'):
                 print(f'marked cop tense wrong for {dlf} {sent}')
@@ -240,7 +241,7 @@ def lf_preproc(lf, sent):
                 breakpoint()
         else:
             breakpoint()
-        dlf = f'cop|{tense} (prog (v|{verb} {rest})'
+        dlf = f'cop|{tense}-{person} (prog (v|{verb} {rest})'
         if had_not:
             dlf = f'not ({dlf})'
         if had_q:
@@ -250,37 +251,48 @@ def lf_preproc(lf, sent):
     if dlf.count('cop')==2:
         breakpoint()
     assert is_wellformed_lf(dlf)
+    if 'the what' in sent:
+        dlf = dlf.replace('pro:int|WHAT', '(det:art|the n|WHAT)')
+    if 'a what' in sent:
+        dlf = dlf.replace('pro:int|WHAT', '(det:art|a n|WHAT)')
+    if dlf in manual_ida_fixes.keys():
+        old_dlf = dlf
+        dlf = manual_ida_fixes[dlf]
+        if ARGS.print_fixes:
+            print(f'Fixing: {old_dlf} --> {dlf}')
+    dlf = dlf.replace('cow+boy', 'cowboy')
     return dlf
 
 def sent_preproc(lf, sent):
     #sent = sent[6:].rstrip('?.!\n ')
     sent = sent.rstrip('?.! ')
     assert not sent.endswith(' ')
-    maybe_ing_splits = [w for w in sent.split() if w.endswith('ing')]
-    lf_parts = re.split(r'[,\|_\(\)\.-]', lf)
     if sent.startswith('because ') and 'because' not in lf: # often not in lf
         sent = sent.removeprefix('because ')
-    global ings
-    global falseings
-    def inlf(x): return x in lf_parts and (f'part|{x}' in lf or f'v|{x}' in lf)
-    for mis in maybe_ing_splits:
-        stem = mis.removesuffix('ing')
-        if len(stem)>1 and inlf(stem):
-            #lemma = stem
-            sent = sent.replace(mis, f'{stem} ing')
-            ings.append(mis)
-        elif len(stem)>1 and inlf(stem+'e'): # e.g. 'hiding'
-            #lemma = stem+'e'
-            sent = sent.replace(mis, f'{stem}e ing')
-            ings.append(mis)
-        elif len(stem)>1 and stem[-1]==stem[-2] and inlf(stem[:-1]):
-            #lemma = stem[:-1] # e.g. 'hitting'
-            sent = sent.replace(mis, f'{stem[:-1]} ing')
-            ings.append(mis)
-        else:
-            #if mis in ings:
-                #breakpoint()
-            falseings.append(mis)
+    if ARGS.tokenize_ing:
+        maybe_ing_splits = [w for w in sent.split() if w.endswith('ing')]
+        lf_parts = re.split(r'[,\|_\(\)\.-]', lf)
+        global ings
+        global falseings
+        def inlf(x): return x in lf_parts and (f'part|{x}' in lf or f'v|{x}' in lf)
+        for mis in maybe_ing_splits:
+            stem = mis.removesuffix('ing')
+            if len(stem)>1 and inlf(stem):
+                #lemma = stem
+                sent = sent.replace(mis, f'{stem} ing')
+                ings.append(mis)
+            elif len(stem)>1 and inlf(stem+'e'): # e.g. 'hiding'
+                #lemma = stem+'e'
+                sent = sent.replace(mis, f'{stem}e ing')
+                ings.append(mis)
+            elif len(stem)>1 and stem[-1]==stem[-2] and inlf(stem[:-1]):
+                #lemma = stem[:-1] # e.g. 'hitting'
+                sent = sent.replace(mis, f'{stem[:-1]} ing')
+                ings.append(mis)
+            else:
+                #if mis in ings:
+                    #breakpoint()
+                falseings.append(mis)
 
                 #print('\t' + sent)
     if sent in sent_fixes:
@@ -327,11 +339,12 @@ def decide_if_question(lf, sent, udtags):
 if __name__ == '__main__':
     import argparse
     ARGS = argparse.ArgumentParser()
-    ARGS.add_argument("-d", "--dset", type=str, choices=['adam', 'hagar'], default='adam')
-    ARGS.add_argument("--db", type=str)
-    ARGS.add_argument("--db-sent", type=str)
-    ARGS.add_argument("-p", "--print-conversions", action='store_true')
-    ARGS.add_argument("-f", "--print-fixes", action='store_true')
+    ARGS.add_argument('-d', '--dset', type=str, choices=['adam', 'hagar'], default='adam')
+    ARGS.add_argument('--db', type=str)
+    ARGS.add_argument('--db-sent', type=str)
+    ARGS.add_argument('-p', '--print-conversions', action='store_true')
+    ARGS.add_argument('-f', '--print-fixes', action='store_true')
+    ARGS.add_argument('--tokenize-ing', action='store_true')
     ARGS = ARGS.parse_args()
 
     #with open(f'data/{ARGS.dset}_comma_format.txt') as f:
@@ -409,7 +422,6 @@ if __name__ == '__main__':
 
     printcounts(ings)
     printcounts(falseings)
-    breakpoint()
     print(f'Num Excluded Points: {n_excluded}')
     print(f'Num Remaining Points: {len(dset_data)}')
     with open(f'data/{ARGS.dset}.json','w') as f:

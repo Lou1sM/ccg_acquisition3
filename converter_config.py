@@ -38,7 +38,11 @@ full_lfs_to_exclude = [
         'BARE($0,det:num|one_1(det:num|two_2(det:num|three_3(det:num|four_4(det:num|five_5($0))))))',# unsure how to model but defo wrong
         'BARE($0,Q(det:num|two_1(v|break_2($0))))',# unsure how to model but defo wrong
         'lambda $0_{r}.Q(adv:int|where_1(qn|all_3(det:art|the_4($1,n|penny-pl_5($1))),$0))',# unsure how to model but defo wrong
+        'lambda $0_{r}.not(cop|~be_2(v|eat_5(pro:per|it_1,$0),$0),$0)',# unsure how to model but probs wrong
+        'lambda $0_{r}.adv|too_4(adj|just_3(adj|noise-dn_5(pro:per|it_1,$0)))',# unsure how to model but probs wrong
         'lambda $2_{e}.lambda $0_{r}.mod|do-3s_3(v|have_6(n:prop|cromer_5_mr_4,BARE($1,$2(qn|many_2($1))),$0),$0)',# unsure how to model but probs wrong
+        'lambda $1_{e}.lambda $0_{r}.v|have_2(v|get-past_4(pro:sub|they_3,$1,$0),$0)',# unsure how to model but probs wrong
+        'lambda $0_{r}.not(pro:dem|this_1(pro:per|it_3,n|way_2(pro:per|it_3,$0)),$0)',# unsure how to model but defo wrong
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         'v|racā pro:per|huʔ n|xavitā-BARE' # doesnt match sent
@@ -207,6 +211,10 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (det:art|a (adv|too pro:per|you) (n|pirate (adv|too pro:per|you)))': 'Q (adv|too (cop|be-past pro:per|you (det:art|a n|pirate)))',
     'Q (not (adv|pretty pro:dem|that))': 'Q (not (adj|pretty pro:dem|that))', # pos of 'pretty'
     'Q (pro:int|WHAT det:dem|those)': 'Q (v|equals pro:dem|this pro:int|WHAT)', # pos of 'pretty'
+    'lambda $0.part|play-presp (det:art|the n|piano) $0': 'lambda $0.prog(v|play (det:art|the n|piano) $0)', # make prog
+    "not (n:prop|daddy's' (hasproperty pro:dem|that adj|suitcase) pro:dem|that)": "not (equals (n:prop|daddy's' n|suitcase) pro:dem|that)", # make prog
+    'Q (cop|pres (prog (v|take pro:int|WHAT pro:per|you)))': 'Q (cop|pres (prog (v|take (det:art|the n|WHAT) pro:per|you)))',
+    'lambda $0.Q (part|play-presp n|game-pl-BARE $0)': 'cop|pres-3s (prog (v|play n|game-pl-BARE $0))',
     # Hagar
     'v|ciyēr pro:per|ʔat n|ʕigūl-BARE': 'v|ciyēr you n|ʕigūl-BARE', # split anything into two words like it is in the sent (which may well be mistranscribed)
     }

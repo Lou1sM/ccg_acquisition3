@@ -10,7 +10,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str
+from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str, non_directional
 from errors import CCGLearnerError
 from time import time
 import argparse
@@ -38,6 +38,18 @@ def get_root(n):
             root = root.parent
     return root
 
+def comb_either_way_around(y, x):
+    if y == 'leaf':
+        return True
+    outcat, _ = get_combination(*y.split(' + '))
+    if outcat is None: #only time this should happen is during inference with crossed cmp
+        return False
+    if not is_direct_congruent(outcat,x):
+        other_way_around, _ = get_combination(y.split(' + ')[1], y.split(' + ')[0])
+        if not is_direct_congruent(other_way_around, x):
+            return False
+    return True
+
 class DirichletProcess():
     def __init__(self,alpha):
         self.memory = {'COUNT':0}
@@ -57,7 +69,7 @@ class DirichletProcess():
         count = self.memory['COUNT']
         return mx/count if ignore_prior else (mx+self.alpha*base_prob)/(count+self.alpha)
 
-    def top_k(self, k=10):
+    def topk(self, k=10):
         return sorted([(k,self.prob(k)) for k in self.memory.keys() if k not in ('X','COUNT')],key=lambda x:x[1],reverse=True)[:k]
 
 class BaseDirichletProcessLearner(ABC):
@@ -69,6 +81,7 @@ class BaseDirichletProcessLearner(ABC):
         self.base_distribution_cache = {}
         self.marg_prob_cache = {}
         self.buffers = []
+        self.long_term_buffer = []
         self.is_training = True
 
     def train(self):
@@ -124,12 +137,25 @@ class BaseDirichletProcessLearner(ABC):
         """Can be overwritten if necessary."""
         return self._observe(*args,**kwargs)
 
-    def flush_top_buffer(self, lr=1.0):
-        top_buffer = self.buffers.pop(0)
-        for _ in range(len(top_buffer)):
-            y, x, weight = top_buffer.pop()
-            self.observe(y, x, weight*lr)
-        assert len(top_buffer) == 0
+    def refresh(self):
+        self.memory = {}
+        self.flush_selected_buffer('long-term')
+        self.long_term_buffer = []
+
+    def flush_selected_buffer(self, bname):
+        if bname=='top':
+            selected_buffer = self.buffers.pop(0)
+        elif bname=='long-term':
+            selected_buffer = self.long_term_buffer
+        else:
+            breakpoint()
+        self.flush_buffer(selected_buffer)
+
+    def flush_buffer(self, buffer):
+        for _ in range(len(buffer)):
+            y, x, weight = buffer.pop()
+            self.observe(y, x, weight)
+        assert len(buffer) == 0
 
     def inverse_distribution(self,y): # conditional on y
         seen_before = any([y in d for d in self.memory.values()])
@@ -166,7 +192,7 @@ class BaseDirichletProcessLearner(ABC):
     def show_commons(self, x):
         print(sorted([(k,v) for k,v in self.memory[x].items()], key=lambda x:x[1],reverse=True)[:10])
 
-    def top_k(self,x,k=10):
+    def topk(self,x,k=10):
         return sorted(self.memory[x].items(), key=lambda x:x[1], reverse=True)[:k]
 
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
@@ -178,7 +204,10 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
         #if y == 'leaf':
             #self._observe(y,maybe_de_type_raise(x),weight)
         #else:
-        self._observe(y,x,weight)
+        x = non_directional(x)
+        y = non_directional(y)
+        if comb_either_way_around(y, x):
+            self._observe(y, x, weight)
 
     #@override
     def _marg_prob(self, x):
@@ -188,15 +217,10 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
         return (numerator + self.alpha*base_prob) / (denominator + self.alpha)
 
     def prob(self,y,x, can_be_weird_svo=False):
-        if y != 'leaf':
-            outcat, _ = get_combination(*y.split(' + '))
-            if outcat is None: #only time this should happen is during inference with crossed cmp
-                return 0
-            if not is_direct_congruent(outcat,x):
-                other_way_around, _ = get_combination(y.split(' + ')[1], y.split(' + ')[0])
-                if not is_direct_congruent(other_way_around, x):
-                    return 0
+        if not comb_either_way_around(y, x):
+            return 0
         assert x != 'NP + S/NP\\NP' or not self.is_training
+        x, y = non_directional(x), non_directional(y)
         base_prob = self.base_distribution(y)
         if x not in self.memory:
             if y == 'leaf':
@@ -208,10 +232,13 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
 
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        n_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
-        n_constants = float('const' in x)+float('quant' in x)
-        norm_factor = (np.e+1)/(np.e**2 - np.e - 1)
-        return norm_factor * np.e**(-2*n_vars - n_constants)
+        #n_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
+        #n_constants = float('const' in x)+float('quant' in x)
+        #norm_factor = (np.e+1)/(np.e**2 - np.e - 1)
+        #return norm_factor * np.e**(-2*n_vars - n_constants)
+        parts = re.split(r'[ \(\)\.]', x)
+        parts = [p for p in parts if p!='' and '$' not in p]
+        return 4**-len(parts)
 
     def prob(self,y,x):
         if not lf_cat_congruent(y,x):
@@ -224,18 +251,22 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
 
 class MeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        n_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
-        n_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
-        norm_factor = (np.e+1)/(np.e**2 - np.e - 1)
-        return norm_factor * np.e**(-2*n_vars - n_constants)
+        #n_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
+        #n_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
+        #norm_factor = (np.e+1)/(np.e**2 - np.e - 1)
+        #return norm_factor * np.e**(-2*n_vars - n_constants)
+        parts = re.split(r'[ \(\)\.]', x)
+        parts = [p for p in parts if p!='' and '$' not in p]
+        return 4**-len(parts)
 
 class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution(self,x):
+        x = x.replace(' ','').replace('\'','')
         assert len(x) > 0
         if ARGS.remove_vowels:
             return 14**-len(x)
         else:
-            return 28**-(len(x)/2) # kinda approximate num phonetic chunks
+            return 14**-len(x) # kinda approximate num phonetic chunks
 
 class LanguageAcquirer():
     def __init__(self, lr, vocab_thresh):
@@ -256,6 +287,17 @@ class LanguageAcquirer():
         self.leaf_syncat_memory = DirichletProcess(1)
         self.vocab_thresh = vocab_thresh
         self.beam_size = 10
+        self.learners = {'syntax': self.syntaxl, 'shmeaning': self.shmeaningl, 'meaning':self.meaningl, 'word': self.wordl}
+
+    def refresh(self):
+        for b in self.buffers.values():
+            b.refresh
+        self.root_sem_cat_memory.memory = {}
+        self.sem_cat_memory.memory = {}
+        self.sync_memory.memory = {}
+        self.leaf_lf_memory.memory = {}
+        self.leaf_shell_lf_memory.memory = {}
+        self.leaf_syncat_memory.memory = {}
 
     def train(self):
         self.syntaxl.train()
@@ -268,6 +310,30 @@ class LanguageAcquirer():
         self.shmeaningl.eval()
         self.meaningl.eval()
         self.wordl.eval()
+
+    @property
+    def full_lf_vocab(self):
+        return [k for k,v in self.wordl.memory.items()]
+
+    @property
+    def full_shell_lf_vocab(self):
+        return [k for k,v in self.meaningl.memory.items()]
+
+    @property
+    def full_sem_cat_vocab(self):
+        return [k for k,v in self.shmeaningl.memory.items()]
+
+    @property
+    def full_sync_vocab(self):
+        return [k for k,v in self.syntaxl.memory.items()]
+
+    @property
+    def full_splits_vocab(self):
+        return list(set([k for x in self.syntaxl.memory.values() for k in x.keys() if k!='COUNT']))
+
+    @property
+    def full_mwe_vocab(self):
+        return list(set([k for x in self.wordl.memory.values() for k in x.keys() if k!='COUNT']))
 
     @property
     def lf_vocab(self):
@@ -295,8 +361,7 @@ class LanguageAcquirer():
 
     @property
     def vocab(self):
-        return list(set([w for x in self.wordl.memory.values()
-                        for w in x.keys() if ' ' not in w]))
+        return list(set([w for x in self.wordl.memory.values() for w in x.keys() if ' ' not in w]))
 
     def load_from(self,fpath):
         distributions_fpath = join(fpath,'distributions.json')
@@ -368,7 +433,7 @@ class LanguageAcquirer():
             self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
         return parse_root
 
-    def train_one_step(self,lf_strs,words,apply_buffers):
+    def train_one_step(self, lf_strs, words, apply_buffers, put_in_ltbs):
         prob_cache = {}
         root_prob = 0
         new_problem_list = []
@@ -380,9 +445,13 @@ class LanguageAcquirer():
                            self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
                 if ARGS.print_train_interps:
                     self.test_with_gt(lfs, words)
-                if lfs == ARGS.dbr:
+                if lfs == ARGS.dbr or (ARGS.dbw is not None and ARGS.dbw in ' '.join(words)):
                     #self.syntaxl.prob('S|NP/(S|NP) + S|NP/(S|NP)', 'S\\NP/(S|NP)')
-                    self.test_with_gt(lfs, words)
+                    if not ARGS.print_train_interps:
+                        self.test_with_gt(lfs, words)
+                    gtparsestr, is_good, is_root_good = root.gt_parse()
+                    assert is_good
+                    print(gtparsestr)
                     breakpoint()
             except CCGLearnerError as e:
                 new_problem_list.append((dpoint,e))
@@ -402,19 +471,18 @@ class LanguageAcquirer():
                 else:
                     prob_cache[n] = p
             root_prob += new_root_prob
-        new_syntaxl_buffer = []
-        new_shmeaningl_buffer = []
-        new_meaningl_buffer = []
-        new_wordl_buffer = []
+        #new_syntaxl_buffer = []
+        #new_shmeaningl_buffer = []
+        #new_meaningl_buffer = []
+        #new_wordl_buffer = []
+        buffers = {x:[] for x in self.learners.keys()}
         for node, _ in prob_cache.items():
-            if node.lf == '':
-                breakpoint()
             if node.parent is not None and not node.is_g:
                 update_weight = node.prob / root_prob # for conditional
                 if node.is_fwd:
-                    new_syntaxl_buffer += [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
+                    buffers['syntax'] += [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
                 else:
-                    new_syntaxl_buffer += [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
+                    buffers['syntax'] += [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
             for sync in node.syncs:
                 self.leaf_syncat_memory.observe(sync, leaf_prob)
@@ -428,29 +496,42 @@ class LanguageAcquirer():
                 self.sync_memory.observe(sync, node.prob)
             self.leaf_shell_lf_memory.observe(shell_lf, leaf_prob)
             self.leaf_lf_memory.observe(lf, leaf_prob)
-            new_syntaxl_buffer += [('leaf',sync,leaf_prob) for sync in syncs]
-            if any(x[1]=='(N|N)' for x in new_syntaxl_buffer):
+            buffers['syntax'] += [('leaf',sync,leaf_prob) for sync in syncs]
+            if any(x[1]=='(N|N)' for x in buffers['syntax']):
                 breakpoint()
             if ARGS.condition_on_syncats:
-                new_shmeaningl_buffer += [(shell_lf,sync,leaf_prob) for sync in syncs]
+                buffers['shmeaning'] += [(shell_lf,sync,leaf_prob) for sync in syncs]
             else:
-                new_shmeaningl_buffer += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
-            new_meaningl_buffer.append((lf,shell_lf,leaf_prob))
-            new_wordl_buffer.append((word_str,lf,leaf_prob))
-        self.syntaxl.buffers.append(new_syntaxl_buffer)
-        self.shmeaningl.buffers.append(new_shmeaningl_buffer)
-        self.meaningl.buffers.append(new_meaningl_buffer)
-        self.wordl.buffers.append(new_wordl_buffer)
-        if apply_buffers:
-            self.syntaxl.flush_top_buffer()
-            self.shmeaningl.flush_top_buffer()
-            self.meaningl.flush_top_buffer()
-            self.wordl.flush_top_buffer()
-            assert all(len(x.buffers) == ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
-        else:
-            assert all(len(x.buffers) <= ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
-        if '' in self.lf_vocab:
-            breakpoint()
+                buffers['shmeaning'] += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
+            buffers['meaning'].append((lf,shell_lf,leaf_prob))
+            buffers['word'].append((word_str,lf,leaf_prob))
+
+        for lname, learner in self.learners.items():
+            buffer = buffers[lname]
+            learner.buffers.append(buffer)
+            if put_in_ltbs:
+                learner.long_term_buffer += buffer
+            if apply_buffers:
+                learner.flush_selected_buffer('top')
+                assert len(learner.buffers) == ARGS.n_distractors
+            else:
+                assert len(learner.buffers) <= ARGS.n_distractors
+        #self.syntaxl.buffers.append(new_syntaxl_buffer)
+        #self.syntaxl.long_buffer += new_syntaxl_buffer
+        #self.shmeaningl.buffers.append(new_shmeaningl_buffer)
+        #self.shmeaningl.long_buffer += new_shmeaningl_buffer
+        #self.meaningl.buffers.append(new_meaningl_buffer)
+        #self.meaningl.long_buffer += new_meaningl_buffer
+        #self.wordl.buffers.append(new_wordl_buffer)
+        #self.wordl.long_buffer += new_wordl_buffer
+        #if apply_buffers:
+        #    self.syntaxl.flush_top_buffer()
+        #    self.shmeaningl.flush_top_buffer()
+        #    self.meaningl.flush_top_buffer()
+        #    self.wordl.flush_top_buffer()
+        #    assert all(len(x.buffers) == ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
+        #else:
+        #    assert all(len(x.buffers) <= ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
         return new_problem_list
 
     def as_leaf(self, node):
@@ -471,24 +552,24 @@ class LanguageAcquirer():
         else:
             syn_prob_func = self.syntaxl.prob
             shm_prob_func = self.shmeaningl.prob
-        svo_ = syn_prob_func('NP + S\\NP', 'S')*syn_prob_func('S\\NP/NP + NP', 'S\\NP')
-        sov_or_osv = syn_prob_func('NP + S\\NP', 'S')*syn_prob_func('NP + S\\NP\\NP','S\\NP')
-        vso_or_vos = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('S/NP/NP + NP','S/NP')
+        svo_ = syn_prob_func('NP + S|NP', 'S')*syn_prob_func('S|NP|NP + NP', 'S|NP')
+        sov_or_osv = syn_prob_func('NP + S|NP', 'S')*syn_prob_func('NP + S|NP|NP','S|NP')
+        vso_or_vos = syn_prob_func('S|NP + NP', 'S')*syn_prob_func('S|NP|NP + NP','S|NP')
         # it will never have seen this split because disallowed during training
         # so only option is to include prior
-        ovs_ = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('NP + S/NP\\NP', 'S/NP')
+        ovs_ = syn_prob_func('S|NP + NP', 'S')*syn_prob_func('NP + S|NP|NP', 'S|NP')
         if ARGS.condition_on_syncats:
             unnormed_probs = pd.Series({
-            'sov': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S\\NP\\NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S\\NP\\NP')),
-            'svo': svo_*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S\\NP/NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S\\NP/NP')),
-            'vso': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S/NP/NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S/NP/NP')),
-            'vos': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S/NP/NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S/NP/NP')),
-            'osv': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S\\NP\\NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S\\NP\\NP')),
-            'ovs': ovs_*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S/NP\\NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S/NP\\NP'))
+            'sov': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
+            'svo': svo_*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
+            'vso': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S|NP|NP')),
+            'vos': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
+            'osv': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S|NP|NP')),
+            'ovs': ovs_*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP'))
             }) + 1e-8
         else:
-            comb_obj_first = shm_prob_func('lambda $0.lambda $1.vconst $1 $0', 'S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)', 'S|NP|NP')
-            comb_subj_first = shm_prob_func('lambda $0.lambda $1.vconst $0 $1', 'S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)', 'S|NP|NP')
+            comb_obj_first = shm_prob_func('lambda $0.lambda $1.vconst $0 $1', 'S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)', 'S|NP|NP')
+            comb_subj_first = shm_prob_func('lambda $0.lambda $1.vconst $1 $0', 'S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)', 'S|NP|NP')
             unnormed_probs = pd.Series({
             'sov': sov_or_osv*comb_obj_first,
             'svo': svo_*comb_obj_first,
@@ -759,7 +840,7 @@ class LanguageAcquirer():
         #root_prob = root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=False)
         root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=True)
         def _simple_draw_graph(x, depth):
-            texttree = '\t'*depth
+            texttree = '  '*depth
             texttree += f'LF: {x.lf_str}\tSync: {x.syncs}\tWords: {" ".join(x.words)}\tRelprob: {x.rel_prob:.4f}'
             left_child, right_child, _ = x.best_split
             non_leaf = left_child!='leaf'
@@ -791,6 +872,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--db-word-parse", type=str, default='')
     ARGS.add_argument("--dblfs", type=str)
     ARGS.add_argument("--dbr", type=str)
+    ARGS.add_argument("--dbw", type=str)
     ARGS.add_argument("--jdbr", type=str)
     ARGS.add_argument("--jdblfs", type=str)
     ARGS.add_argument("--dbsent", type=str, default='')
@@ -801,6 +883,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--expname", type=str,default='tmp')
     ARGS.add_argument("--expname-for-plot-titles", type=str)
     ARGS.add_argument("--jreload-from", type=str)
+    ARGS.add_argument("--ignore-words", type=str, nargs='+')
     ARGS.add_argument("--lr", type=float, default=1.0)
     ARGS.add_argument("--max-lf-len", type=int, default=6)
     ARGS.add_argument("--max-sent-len", type=int, default=6)
@@ -857,11 +940,13 @@ if __name__ == "__main__":
     if ARGS.shuffle: np.random.shuffle(d['data'])
     NDPS = len(d['data']) if ARGS.n_dpoints == -1 else ARGS.n_dpoints
     all_data = [x for x in d['data'] if len(x['lf'].split()) - x['lf'].count('BARE') <= ARGS.max_lf_len and len(x['words'])<=ARGS.max_sent_len]
+    if ARGS.ignore_words:
+        all_data = [x for x in all_data if not any(w in x['words'] for w in ARGS.ignore_words)]
     data_to_use = all_data[ARGS.start_from:ARGS.start_from+NDPS]
     if just_lf is not None:
         train_data = [x for x in data_to_use if x['lf']==just_lf]
         test_data = []
-        if len(data_to_use)==0:
+        if len(train_data)==0:
             sys.exit('no data points match this lf, check for typo')
     else:
         train_data = [] if ARGS.jreload_from is not None else data_to_use[:int(len(data_to_use)*(1-ARGS.test_frac))]
@@ -870,6 +955,8 @@ if __name__ == "__main__":
     la = LanguageAcquirer(ARGS.lr, vt)
     if ARGS.reload_from is not None:
         la.load_from(f'experiments/{ARGS.reload_from}')
+
+    ltb_idxs = [100, 300, 1000]
     start_time = time()
     all_word_order_probs = []
     all_word_order_probs_no_prior = []
@@ -897,15 +984,19 @@ if __name__ == "__main__":
             lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
             if not ARGS.suppress_prints:
                 print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
-            apply_buffers = i>=ARGS.n_distractors
+            buffers = i>=ARGS.n_distractors
             n_words_seen = sum(w in la.vocab for w in words)
             frac_words_seen = n_words_seen/len(words)
             lf = dpoint['lf']
             has_copula = 'hasproperty' in lf or 'equals' in lf
+            ltbs = i>= ltb_idxs[0]
             if not (has_copula and ARGS.exclude_copulae):
-               problem_list += la.train_one_step(lf_strs_incl_distractors,words,apply_buffers)
+               problem_list += la.train_one_step(lf_strs_incl_distractors, words, buffers, ltbs)
             else:
                 print('excluding')
+            if i in ltb_idxs[1:]:
+                for b in la.learners.values():
+                    b.refresh()
             la.eval()
             new_probs_with_prior = la.probs_of_word_orders(False)
             new_probs_without_prior = la.probs_of_word_orders(True)
@@ -1037,21 +1128,25 @@ if __name__ == "__main__":
     cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
     #for dp in cant_points:
         #la.test_with_gt(dp['lf'], dp['words'])
-    #la.parse('you are miss ing it'.split())
-    #la.parse('do you like it'.split())
-    #la.parse('you see him'.split())
-    #la.parse('you lost a pencil'.split())
-    #la.parse('did he see it'.split())
-    #la.parse('the pencil dropped the name'.split())
-    #la.parse('did the pencil see the name'.split())
-    #la.parse('that \'s right'.split())
-    #la.parse('you can n\'t see'.split())
-    #la.parse('you can n\'t eat'.split())
+    la.parse('you \'re doing it'.split())
+    la.parse('you \'re missing it'.split())
+    breakpoint()
+    la.parse('do you like it'.split())
+    la.parse('you see him'.split())
+    la.parse('you lost a pencil'.split())
+    la.parse('did he see it'.split())
+    la.parse('the pencil dropped the name'.split())
+    la.parse('did the pencil see the name'.split())
+    la.parse('that \'s right'.split())
+    la.parse('you can n\'t see'.split())
+    la.parse('you can n\'t eat'.split())
     la.parse('did you name it'.split())
     la.parse('can you find it'.split())
     la.parse('will you talk'.split())
-    la.parse('are you run ing'.split())
-    la.parse('I \'m think ing'.split())
+    la.parse('are you running'.split())
+    la.parse('I \'m thinking'.split())
+    la.parse('he \'s missing it'.split())
+    la.parse('it \'s eating you'.split())
     considered_sem_cats = []
     for dpoint in test_data[:ARGS.n_test]:
         considered_sem_cats += la.parse(dpoint['words'])
