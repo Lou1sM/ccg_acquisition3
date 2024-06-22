@@ -44,10 +44,10 @@ def comb_either_way_around(y, x):
     outcat, _ = get_combination(*y.split(' + '))
     if outcat is None: #only time this should happen is during inference with crossed cmp
         return False
-    if not is_direct_congruent(outcat,x):
-        other_way_around, _ = get_combination(y.split(' + ')[1], y.split(' + ')[0])
-        if not is_direct_congruent(other_way_around, x):
-            return False
+#    if not is_direct_congruent(outcat,x):
+#        other_way_around, _ = get_combination(y.split(' + ')[1], y.split(' + ')[0])
+#        if not is_direct_congruent(other_way_around, x):
+#            return False
     return True
 
 class DirichletProcess():
@@ -204,8 +204,8 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
         #if y == 'leaf':
             #self._observe(y,maybe_de_type_raise(x),weight)
         #else:
-        x = non_directional(x)
-        y = non_directional(y)
+        #x = non_directional(x)
+        #y = non_directional(y)
         if comb_either_way_around(y, x):
             self._observe(y, x, weight)
 
@@ -419,6 +419,7 @@ class LanguageAcquirer():
         else:
             lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss, verbose_as=ARGS.verbose_as)
             self.full_lfs_cache[lf_str] = lf
+        lf.infer_splits()
         return lf
 
     def make_parse_node(self,lf_str,words):
@@ -427,7 +428,13 @@ class LanguageAcquirer():
         if ' '.join([lf_str]+words) in self.parse_node_cache:
             parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
         else:
-            parse_root = ParseNode(lf,words,'ROOT')
+            if len(lf.sem_cats) > 1:
+                if lf.node_type != 'lmbda':
+                    lf.sem_cats = [s for s in lf.sem_cats if '|' not in s]
+            if len(lf.sem_cats) > 1:
+                breakpoint()
+            lfsc = list(lf.sem_cats)[0]
+            parse_root = ParseNode(lf,words,'ROOT', sync=lfsc)
             for sc in parse_root.sem_cats:
                 self.root_sem_cat_memory.observe(sc,1)
             self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
@@ -471,36 +478,37 @@ class LanguageAcquirer():
                 else:
                     prob_cache[n] = p
             root_prob += new_root_prob
-        #new_syntaxl_buffer = []
-        #new_shmeaningl_buffer = []
-        #new_meaningl_buffer = []
-        #new_wordl_buffer = []
         buffers = {x:[] for x in self.learners.keys()}
         for node, _ in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 update_weight = node.prob / root_prob # for conditional
                 if node.is_fwd:
-                    buffers['syntax'] += [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
+                    #buffers['syntax'] += [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
+                    buffers['syntax'].append((f'{node.sync} + {node.sibling.sync}',node.parent.sync, update_weight))
                 else:
-                    buffers['syntax'] += [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
+                    #buffers['syntax'] += [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
+                    buffers['syntax'].append((f'{node.sibling.sync} + {node.sync}',node.parent.sync, update_weight))
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
-            for sync in node.syncs:
-                self.leaf_syncat_memory.observe(sync, leaf_prob)
+            #for sync in node.syncs:
+                #self.leaf_syncat_memory.observe(sync, leaf_prob)
+            self.leaf_syncat_memory.observe(node.sync, leaf_prob)
             if not leaf_prob > 0:
                 print(node)
             lf = node.lf.subtree_string(alpha_normalized=True,recompute=True)
-            word_str, lf, shell_lf, sem_cats, syncs = node.info_if_leaf()
+            word_str, lf, shell_lf, sem_cats, sync = node.info_if_leaf()
             for sc in sem_cats:
                 self.sem_cat_memory.observe(sc, node.prob)
             for sync in sem_cats:
                 self.sync_memory.observe(sync, node.prob)
             self.leaf_shell_lf_memory.observe(shell_lf, leaf_prob)
             self.leaf_lf_memory.observe(lf, leaf_prob)
-            buffers['syntax'] += [('leaf',sync,leaf_prob) for sync in syncs]
+            #buffers['syntax'] += [('leaf',sync,leaf_prob) for sync in syncs]
+            buffers['syntax'].append(('leaf',sync,leaf_prob))
             if any(x[1]=='(N|N)' for x in buffers['syntax']):
                 breakpoint()
             if ARGS.condition_on_syncats:
-                buffers['shmeaning'] += [(shell_lf,sync,leaf_prob) for sync in syncs]
+                #buffers['shmeaning'] += [(shell_lf,sync,leaf_prob) for sync in syncs]
+                buffers['shmeaning'].append((shell_lf,sync,leaf_prob))
             else:
                 buffers['shmeaning'] += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
             buffers['meaning'].append((lf,shell_lf,leaf_prob))
@@ -516,22 +524,6 @@ class LanguageAcquirer():
                 assert len(learner.buffers) == ARGS.n_distractors
             else:
                 assert len(learner.buffers) <= ARGS.n_distractors
-        #self.syntaxl.buffers.append(new_syntaxl_buffer)
-        #self.syntaxl.long_buffer += new_syntaxl_buffer
-        #self.shmeaningl.buffers.append(new_shmeaningl_buffer)
-        #self.shmeaningl.long_buffer += new_shmeaningl_buffer
-        #self.meaningl.buffers.append(new_meaningl_buffer)
-        #self.meaningl.long_buffer += new_meaningl_buffer
-        #self.wordl.buffers.append(new_wordl_buffer)
-        #self.wordl.long_buffer += new_wordl_buffer
-        #if apply_buffers:
-        #    self.syntaxl.flush_top_buffer()
-        #    self.shmeaningl.flush_top_buffer()
-        #    self.meaningl.flush_top_buffer()
-        #    self.wordl.flush_top_buffer()
-        #    assert all(len(x.buffers) == ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
-        #else:
-        #    assert all(len(x.buffers) <= ARGS.n_distractors for x in (self.syntaxl,self.shmeaningl,self.meaningl,self.wordl))
         return new_problem_list
 
     def as_leaf(self, node):
@@ -841,7 +833,7 @@ class LanguageAcquirer():
         root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=True)
         def _simple_draw_graph(x, depth):
             texttree = '  '*depth
-            texttree += f'LF: {x.lf_str}\tSync: {x.syncs}\tWords: {" ".join(x.words)}\tRelprob: {x.rel_prob:.4f}'
+            texttree += f'LF: {x.lf_str}\tSync: {x.sync}\tWords: {" ".join(x.words)}\tRelprob: {x.rel_prob:.4f}'
             left_child, right_child, _ = x.best_split
             non_leaf = left_child!='leaf'
             assert non_leaf == (right_child!='leaf')

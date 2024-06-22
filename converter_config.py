@@ -211,10 +211,12 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (det:art|a (adv|too pro:per|you) (n|pirate (adv|too pro:per|you)))': 'Q (adv|too (cop|be-past pro:per|you (det:art|a n|pirate)))',
     'Q (not (adv|pretty pro:dem|that))': 'Q (not (adj|pretty pro:dem|that))', # pos of 'pretty'
     'Q (pro:int|WHAT det:dem|those)': 'Q (v|equals pro:dem|this pro:int|WHAT)', # pos of 'pretty'
-    'lambda $0.part|play-presp (det:art|the n|piano) $0': 'lambda $0.prog(v|play (det:art|the n|piano) $0)', # make prog
+    'lambda $0.part|play-presp (det:art|the n|piano) $0': 'lambda $0.prog (v|play (det:art|the n|piano) $0)', # make prog
     "not (n:prop|daddy's' (hasproperty pro:dem|that adj|suitcase) pro:dem|that)": "not (equals (n:prop|daddy's' n|suitcase) pro:dem|that)", # make prog
     'Q (cop|pres (prog (v|take pro:int|WHAT pro:per|you)))': 'Q (cop|pres (prog (v|take (det:art|the n|WHAT) pro:per|you)))',
-    'lambda $0.Q (part|play-presp n|game-pl-BARE $0)': 'cop|pres-3s (prog (v|play n|game-pl-BARE $0))',
+    'lambda $0.Q (cop|pres-3s (v|rain-prog $0))': 'Q (cop|pres-3s (v|rain-prog pro:per|it))', # remove lmbda
+    'v|want pro:int|WHAT pro:per|you': 'v|want (det:num|one n|WHAT) pro:per|you', # remove lmbda
+    'cop|be-3s pro:per|it': 'v|exist pro:per|it', # remove lmbda
     # Hagar
     'v|ciyēr pro:per|ʔat n|ʕigūl-BARE': 'v|ciyēr you n|ʕigūl-BARE', # split anything into two words like it is in the sent (which may well be mistranscribed)
     }

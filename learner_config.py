@@ -77,7 +77,8 @@ pos_marking_dict = {
                     'pro:dem':set(['NP']), # ?
                     'pro:exist':set(['NP']),
                     'pro:indef':set(['NP']),
-                    'pro:int':set(['NP', 'Swhq|(S|NP)']),
+                    #'pro:int':set(['NP', 'Swhq|(S|NP)']),
+                    'pro:int':set(['NP']),
                     'pro:obj':set(['NP']),
                     'pro:per':set(['NP']),
                     'pro:poss':set(['NP']),

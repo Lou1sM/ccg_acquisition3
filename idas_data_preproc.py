@@ -2,7 +2,7 @@ import json
 from pprint import pprint as pp
 import numpy as np
 import re
-from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf, new_var_num, alpha_normalize
+from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf, new_var_num, alpha_normalize, all_lambda_body_splits, de_q, add_q, add_not
 from converter_config import manual_ida_fixes, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes, neg_conts
 from learner_config import pos_marking_dict
 
@@ -205,26 +205,31 @@ def lf_preproc(lf, sent):
         dlf = f'Q ({dlf})'
     dlf = re.sub(r'BARE \$\d{1,2} \((det:num\|[{he_chars}\w-]+) \((n\|[\w{he_chars}-]+) \$\d{1,2}\)\)', r'\1 \2', dlf)
 
-    #if 'det:art|the n|tape))' in dlf:
-    if (had_q:=dlf.startswith('Q (')):
-        inner = dlf[3:-1]
+    dlf = reformat_cop(dlf, sent)
+    if dlf is None:
+        return
+    if 'the what' in sent:
+        dlf = dlf.replace('pro:int|WHAT', '(det:art|the n|WHAT)')
+    if 'a what' in sent:
+        dlf = dlf.replace('pro:int|WHAT', '(det:art|a n|WHAT)')
+    return dlf
+
+def reformat_cop(lf, sent):
+    if (had_q:=lf.startswith('Q (')):
+        inner = lf[3:-1]
     else:
-        inner = dlf
+        inner = lf
     if (had_not:=inner.startswith('not (')):
         inner = inner[5:-1]
     maybe_cop_aux = re.match(r'(aux|cop)\|(\~?)be(-past|-pres|-3s|-1s|) \(part\|', inner)
     if maybe_cop_aux is not None:
         cop_aux = maybe_cop_aux.group()
-    #if dlf.startswith('aux|~be (part|'):
-        #rest = inner[len('aux|~be (part|'):]
         rest = inner[len(cop_aux):]
         verb, _, rest = rest.partition('-')
         if not ( rest.startswith('presp')):
             print(lf, sent)
             return
         rest = rest.removeprefix('presp ')
-        #prog_marking, _, rest = rest.partition(' ')
-        #tense = 'pres' if cop_aux == 'aux|~be (part|' else 'past'
         tense = 'past' if 'past' in cop_aux else 'pres'
         if 'I' in sent and ('\'m' in sent or 'am' in sent or 'was' in sent):
             person = '1s'
@@ -234,34 +239,32 @@ def lf_preproc(lf, sent):
             person = '3s'
         if 'were' in sent or 'was' in sent:
             if not ( tense=='past'):
-                print(f'marked cop tense wrong for {dlf} {sent}')
+                print(f'marked cop tense wrong for {inner} {sent}')
             tense = 'past'
         elif any(w in sent for w in ['is', 'are', '\'s', '\'re', '\'m', 'am']):
             if not ( tense=='pres'):
                 breakpoint()
         else:
             breakpoint()
-        dlf = f'cop|{tense}-{person} (prog (v|{verb} {rest})'
-        if had_not:
-            dlf = f'not ({dlf})'
-        if had_q:
-            dlf = f'Q ({dlf})'
-    if 'aux' in dlf and 'aux|have' not in dlf:
-        print(dlf)
-    if dlf.count('cop')==2:
+        lf = f'cop|{tense}-{person} (v|{verb}-prog {rest}' # note rest endswith ')'
+    elif bool(maybe_part_match := re.match(r'part\|([a-z]+)-presp (.*) you$', inner)):
+        verb = maybe_part_match.group(1)
+        obj = maybe_part_match.group(2)
+        lf = f'lambda $0.prog (v|{verb} {obj} $0)'
+    else:
+        return lf
+    if had_not:
+        lf = add_not(lf)
+    if had_q:
+        lf = add_q(lf)
+    if 'aux' in lf and 'aux|have' not in lf:
+        print(lf)
+    if 'lambda' in all_lambda_body_splits(lf)[1]:
         breakpoint()
-    assert is_wellformed_lf(dlf)
-    if 'the what' in sent:
-        dlf = dlf.replace('pro:int|WHAT', '(det:art|the n|WHAT)')
-    if 'a what' in sent:
-        dlf = dlf.replace('pro:int|WHAT', '(det:art|a n|WHAT)')
-    if dlf in manual_ida_fixes.keys():
-        old_dlf = dlf
-        dlf = manual_ida_fixes[dlf]
-        if ARGS.print_fixes:
-            print(f'Fixing: {old_dlf} --> {dlf}')
-    dlf = dlf.replace('cow+boy', 'cowboy')
-    return dlf
+    if lf.count('cop')==2:
+        breakpoint()
+    assert is_wellformed_lf(lf)
+    return lf
 
 def sent_preproc(lf, sent):
     #sent = sent[6:].rstrip('?.!\n ')
@@ -317,24 +320,26 @@ def decide_if_question(lf, sent, udtags):
     wh_words = ('what', 'who', 'how', 'where', 'when', 'which')
     if udtags[0] == 'CONJ' and sent[0] not in conjs:
         breakpoint()
+    lf = de_q(lf)
     for conj in conjs:
         if sent[0] == conj:
             sent = sent[1:]
             if lf.startswith(conj):
                 assert lf.starswith(f'{conj} (') and lf.endswith(')')
                 lf = lf[len(conj)+2:-1]
-    if 'you' not in lf.split() and udtags[0] in ('AUX', 'VERB'):
-        if not ( lf.startswith('Q ')):
-            #print('should have Q in lf, adding one:', sent, lf)
-            lf = f'Q ({lf})'
-    #elif any(w in wh_words for w in sent):
-    #elif sent[0] in wh_words:
-        #if not ( lf.startswith('Q ')):
-            #print('probably should have Q in lf:', sent, lf)
-    elif lf.startswith('Q '):
-        #print('marked as Q without leading verb, removing:', sent, lf)
-        lf = lf[3:-1]
+    assert not bool(re.search(r'(?<!pro:per\|)you(?![a-z])', lf))
+    if udtags[0] in ('AUX') or sent[0] in wh_words:
+        lf = add_q(lf)
     return lf, sent
+
+def apply_manual_fixes(lf):
+    if lf in manual_ida_fixes.keys():
+        old_lf = lf
+        lf = manual_ida_fixes[lf]
+        if ARGS.print_fixes:
+            print(f'Fixing: {old_lf} --> {lf}')
+    lf = lf.replace('cow+boy', 'cowboy')
+    return lf
 
 if __name__ == '__main__':
     import argparse
@@ -347,17 +352,8 @@ if __name__ == '__main__':
     ARGS.add_argument('--tokenize-ing', action='store_true')
     ARGS = ARGS.parse_args()
 
-    #with open(f'data/{ARGS.dset}_comma_format.txt') as f:
-        #dset_lines = f.readlines()
-
     with open(f'data/{ARGS.dset}-combined-info.json') as f:
         dset = json.load(f)
-    #sents = [dset_lines[i] for i in range(0,len(dset_lines),4)]
-    #assert all([s.startswith('Sent: ') for s in sents])
-    #lfs = [dset_lines[i] for i in range(1,len(dset_lines),4)]
-    #assert all([lf.startswith('Sem: ') for lf in lfs])
-    #assert all([dset_lines[i]=='example_end\n' for i in range(2,len(dset_lines),4)])
-    #assert all([dset_lines[i]=='\n' for i in range(3,len(dset_lines),4)])
 
     dset_data = []
     n_excluded = 0
@@ -367,15 +363,15 @@ if __name__ == '__main__':
     with open('../CHILDES_UD2LF_2/LF_files/full_adam/adam.all_lf.txt') as f:
         ida_lf = f.read().strip().split('\n\n')
 
-    #for l,s in zip(lfs,sents):
     for dpoint in dset:
         sent, lf, udtags = dpoint['idasent'], dpoint['idalf'], dpoint['udtags']
         if any(x in dpoint['idalf'] for x in exclude_lfs):
             n_excluded+=1
             continue
-        #if s[6:-3] in exclude_sents:
         if sent[:-2] in exclude_sents:
             n_excluded+=1
+            continue
+        if 'lambda' in all_lambda_body_splits(lf)[1]: # we're saying these are malformed
             continue
         ps = sent_preproc(lf, sent)
         if len(ps) > 0 and ps[0] == 'ʔavāl':
@@ -394,7 +390,6 @@ if __name__ == '__main__':
         if not all(f'lambda {v}.' in pl for v in set(re.findall(r'\$\d{1,2}', pl))):
             continue
         assert not any(x in pl for x in exclude_lfs)
-        pl, ps = decide_if_question(pl, ps, udtags)
         # need to wait until after Q insertion to do this
         bare_you_reg = r'(?<!pro:per\|)you(?![a-z])'
         if re.search(bare_you_reg, pl):
@@ -403,6 +398,8 @@ if __name__ == '__main__':
             pl = f'lambda ${nvn}.' + re.sub(bare_you_reg, f'${nvn}', pl)
             pl = alpha_normalize(pl)
             #print(pl)
+        pl, ps = decide_if_question(pl, ps, udtags)
+        pl = apply_manual_fixes(pl)
         if ARGS.print_conversions:
             print(' '.join(ps))
         if pl == 'Q ()':

@@ -9,26 +9,46 @@ def de_q(lf):
         body = maybe_debrac(body[2:])
     return lambda_binder + body
 
+def add_q(lf):
+    lambdas, body = all_lambda_body_splits(lf)
+    lf = f'{lambdas}Q ({body})'
+    return lf
+
+def add_not(lf):
+    lambdas, body = all_lambda_body_splits(lf)
+    lf = f'{lambdas}not ({body})'
+    return lf
+
 def lf_acc(lf_pred, lf_gt):
     return de_q(lf_pred) == de_q(lf_gt)
 
 def base_cats_from_str(unstripped_str):
     ss = strip_string(unstripped_str)
-    ss = ss.replace(' you','')
+    assert ' you' not in ss
+    assert ss != 'Q'
+    assert ss != 'prog'
+    #ss = ss.replace(' you','')
+    had_initial_q = ss.startswith('Q ')
+    if had_initial_q:
+        ss = ss.lstrip('Q ')
+        if not is_bracketed(ss):
+            breakpoint()
+        ss = ss[1:-1].strip()
     if ss == 'not':
         is_semantic_leaf = True
         #sem_cats = set(['X'])
         sem_cats = set(['S|NP|(S|NP)'])
         had_initial_q = False
-    elif ss == 'prog':
-        is_semantic_leaf = True
-        sem_cats = set(['S|NP|(S|NP)'])
-        had_initial_q = False
-    elif ss == 'Q':
-        is_semantic_leaf = True
-        sem_cats = set(['X'])
-        had_initial_q = True
+    #elif ss == 'prog':
+    #    is_semantic_leaf = True
+    #    sem_cats = set(['S|NP|(S|NP)'])
+    #    had_initial_q = False
+    #elif ss == 'Q':
+    #    is_semantic_leaf = True
+    #    sem_cats = set(['X'])
+    #    had_initial_q = True
     elif re.match(r'Q v\|do-(past|3s|2s|1s)_\d',ss):
+        breakpoint()
         is_semantic_leaf = True
         sem_cats = set(['X'])
         had_initial_q = True
@@ -319,8 +339,8 @@ def is_congruent(sc1,sc2):
     return 'X' in sc1 or 'X' in sc2 or n_nps(sc1) == n_nps(sc2)
 
 def is_direct_congruent(sc1,sc2):
-    sc1 = re.sub(r'[\\/]','|',sc1)
-    sc2 = re.sub(r'[\\/]','|',sc2)
+    sc1 = re.sub(r'[\\/]','|',sc1).replace('Sq', 'S').replace('Swhq', 'S')
+    sc2 = re.sub(r'[\\/]','|',sc2).replace('Sq', 'S').replace('Swhq', 'S')
     return sc1 == sc2
 
 def n_nps(sem_cat):
@@ -457,13 +477,13 @@ def get_combination(left_cat,right_cat):
     """Inputs can be either syncats or semcats"""
     if is_atomic(left_cat) and is_atomic(right_cat):
         return None, None
-    elif re.search(fr'[/|]\({re.escape(right_cat)}\)$',non_directional(left_cat)):
+    elif re.search(fr'[/|\\]\({re.escape(right_cat)}\)$',left_cat):
         combined, rule = left_cat[:-len(right_cat)-3],'fwd_app'
-    elif re.search(fr'[/|]{re.escape(right_cat)}$',non_directional(left_cat)) and is_atomic(right_cat):
+    elif re.search(fr'[/|\\]{re.escape(right_cat)}$',left_cat) and is_atomic(right_cat):
         combined, rule = left_cat[:-len(right_cat)-1],'fwd_app'
-    elif re.search(fr'[\\|]\({re.escape(left_cat)}\)$',non_directional(right_cat)):
+    elif re.search(fr'[\\|]\({re.escape(left_cat)}\)$',right_cat):
         combined, rule = right_cat[:-len(left_cat)-3],'bck_app'
-    elif re.search(fr'[\\|]{re.escape(left_cat)}$',non_directional(right_cat)) and is_atomic(left_cat):
+    elif re.search(fr'[\\|]{re.escape(left_cat)}$',right_cat) and is_atomic(left_cat):
         combined, rule = right_cat[:-len(left_cat)-1],'bck_app'
     elif is_atomic(left_cat) or is_atomic(right_cat): # can't do composition then
         return None, None
