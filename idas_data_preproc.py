@@ -79,8 +79,8 @@ def _decommafy_inner(parse):
     if bool(mdm := maybe_detnoun_match(parse)):
         det, var, noun = mdm.groups()
         noun_pos, noun_word = noun.split('|')
-        if noun_pos != 'n':
-            print(parse)
+        #if noun_pos != 'n':
+            #print('sth that isnt a noun in noun-like position:', parse)
         if det == 'BARE':
             return f'n|{noun_word}-BARE'
         else:
@@ -201,8 +201,8 @@ def lf_preproc(lf, sent):
     dlf = decommafy(lf, debrac=True)
     if ARGS.print_conversions:
         print(f'{lf} --> {dlf}', end='\t')
-    if dpoint['idasent'].lstrip('Adam ').startswith('is that') and not dlf.startswith('Q '):
-        dlf = f'Q ({dlf})'
+    #if dpoint['idasent'].lstrip('Adam ').startswith('is that') and not dlf.startswith('Q '):
+        #dlf = f'Q ({dlf})'
     dlf = re.sub(r'BARE \$\d{1,2} \((det:num\|[{he_chars}\w-]+) \((n\|[\w{he_chars}-]+) \$\d{1,2}\)\)', r'\1 \2', dlf)
 
     dlf = reformat_cop(dlf, sent)
@@ -212,6 +212,13 @@ def lf_preproc(lf, sent):
         dlf = dlf.replace('pro:int|WHAT', '(det:art|the n|WHAT)')
     if 'a what' in sent:
         dlf = dlf.replace('pro:int|WHAT', '(det:art|a n|WHAT)')
+    #if sent.startswith('here \'s') or sent.startswith('here \'s') or sent.startswith('here \'s') or:
+    if bool(maybe_existential_match:=re.match(r'(t?here) (is|\'s|were|are|\'re)', sent)):
+        ex_np = maybe_existential_match.group(1)
+        dlf = dlf.replace('cop|be-pres', 'v|equals').replace('cop|~be', 'v|equals')
+        if not dlf.endswith(f' pro:exist|{ex_np}'):
+            dlf = dlf + f' pro:exist|{ex_np}'
+        print(dlf, sent)
     return dlf
 
 def reformat_cop(lf, sent):
@@ -227,7 +234,6 @@ def reformat_cop(lf, sent):
         rest = inner[len(cop_aux):]
         verb, _, rest = rest.partition('-')
         if not ( rest.startswith('presp')):
-            print(lf, sent)
             return
         rest = rest.removeprefix('presp ')
         tense = 'past' if 'past' in cop_aux else 'pres'
@@ -238,8 +244,8 @@ def reformat_cop(lf, sent):
         else:
             person = '3s'
         if 'were' in sent or 'was' in sent:
-            if not ( tense=='past'):
-                print(f'marked cop tense wrong for {inner} {sent}')
+            #if not ( tense=='past'):
+                #print(f'marked cop tense wrong for {inner} {sent}')
             tense = 'past'
         elif any(w in sent for w in ['is', 'are', '\'s', '\'re', '\'m', 'am']):
             if not ( tense=='pres'):
@@ -250,7 +256,7 @@ def reformat_cop(lf, sent):
     elif bool(maybe_part_match := re.match(r'part\|([a-z]+)-presp (.*) you$', inner)):
         verb = maybe_part_match.group(1)
         obj = maybe_part_match.group(2)
-        lf = f'lambda $0.prog (v|{verb} {obj} $0)'
+        lf = f'lambda $0.v|{verb}-prog {obj} $0'
     else:
         return lf
     if had_not:
@@ -267,7 +273,6 @@ def reformat_cop(lf, sent):
     return lf
 
 def sent_preproc(lf, sent):
-    #sent = sent[6:].rstrip('?.!\n ')
     sent = sent.rstrip('?.! ')
     assert not sent.endswith(' ')
     if sent.startswith('because ') and 'because' not in lf: # often not in lf
@@ -311,6 +316,9 @@ def sent_preproc(lf, sent):
     if sent == '':
         breakpoint()
     sent = [w for w in sent if not w[0].isupper() or w.lower() in lf]
+    for vocative in ('Adam', 'honey', 'dear'):
+        if vocative in sent and vocative.lower() not in lf:
+            sent = [w for w in sent if w!=vocative]
     if ' '.join(sent) in manual_sent_fixes:
         sent = manual_sent_fixes[' '.join(sent)].split()
     return sent
@@ -385,8 +393,6 @@ if __name__ == '__main__':
         if pl is None or pl.endswith(': ') or '_' in pl or pl=='':
             n_excluded+=1
             continue
-        if pl=="not (n:prop|adam's $0 (n|mouth $0))":
-            breakpoint()
         if not all(f'lambda {v}.' in pl for v in set(re.findall(r'\$\d{1,2}', pl))):
             continue
         assert not any(x in pl for x in exclude_lfs)

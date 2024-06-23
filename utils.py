@@ -47,11 +47,6 @@ def base_cats_from_str(unstripped_str):
     #    is_semantic_leaf = True
     #    sem_cats = set(['X'])
     #    had_initial_q = True
-    elif re.match(r'Q v\|do-(past|3s|2s|1s)_\d',ss):
-        breakpoint()
-        is_semantic_leaf = True
-        sem_cats = set(['X'])
-        had_initial_q = True
     else:
         had_initial_q = ss.startswith('Q ')
         if had_initial_q:
@@ -66,7 +61,8 @@ def base_cats_from_str(unstripped_str):
         elif ss == 'hasproperty':
             is_semantic_leaf = True
             sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
-        elif ss in ('cop|pres', 'cop|past'):
+        #elif ss in ('cop|pres', 'cop|past'):
+        elif re.match(r'cop\|(pres|past)-[123]s', ss):
             is_semantic_leaf = True
             sem_cats = set(['S|(S|NP)|NP','S|NP|(S|NP)'])
         elif '|' in ss:
@@ -84,7 +80,7 @@ def base_cats_from_str(unstripped_str):
             if ss.startswith('v|'):
                 if n_lambda_binders(unstripped_str) == 3:
                     sem_cats = {'S|NP|NP|NP'}
-                    if ss != 'v|give':
+                    if ss not in ('v|give, v|bring'):
                         print(ss, 'getting 3 args')
                 elif n_lambda_binders(unstripped_str) == 2:
                     sem_cats = {'S|NP|NP'}

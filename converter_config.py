@@ -43,6 +43,7 @@ full_lfs_to_exclude = [
         'lambda $2_{e}.lambda $0_{r}.mod|do-3s_3(v|have_6(n:prop|cromer_5_mr_4,BARE($1,$2(qn|many_2($1))),$0),$0)',# unsure how to model but probs wrong
         'lambda $1_{e}.lambda $0_{r}.v|have_2(v|get-past_4(pro:sub|they_3,$1,$0),$0)',# unsure how to model but probs wrong
         'lambda $0_{r}.not(pro:dem|this_1(pro:per|it_3,n|way_2(pro:per|it_3,$0)),$0)',# unsure how to model but defo wrong
+        'not(BARE($0,co|thanks_2($0)))', # wrong and non-semantic anyway
         # Hagar
         'v|ciyēr n|ʔīmaʔ (BARE $1 (n|ʕigūl $1)) adj|niflāʔ' # not well-formed
         'v|racā pro:per|huʔ n|xavitā-BARE' # doesnt match sent
@@ -149,6 +150,14 @@ exclude_sents = [
     'two and three what', # lf wrong, not sure what it should be
     'not if you \'re', # lf doesn't match
     'that what honey', # lf doesn't match
+    'that \'s not what you said', # lf doesn't match
+    "there 's a truck that looks like that", # lf doesn't match
+    "you must be need one", # weird and lf defo wrong
+    "should be", # weird and lf defo wrong
+    "what does it look now", # weird and lf defo wrong
+    "you come and look", # weird and lf defo wrong
+    "pilot and what", # weird and lf defo wrong
+    "you come and look", # weird and lf defo wrong
     # Hagar
     'huʔ racā xavitā loʔ melafefōn' # lf doesn't match
     #'ʔābaʔ ʔat rocā' # lf doesn't match--one that Mark says should be wh-movement
@@ -211,12 +220,27 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (det:art|a (adv|too pro:per|you) (n|pirate (adv|too pro:per|you)))': 'Q (adv|too (cop|be-past pro:per|you (det:art|a n|pirate)))',
     'Q (not (adv|pretty pro:dem|that))': 'Q (not (adj|pretty pro:dem|that))', # pos of 'pretty'
     'Q (pro:int|WHAT det:dem|those)': 'Q (v|equals pro:dem|this pro:int|WHAT)', # pos of 'pretty'
-    'lambda $0.part|play-presp (det:art|the n|piano) $0': 'lambda $0.prog (v|play (det:art|the n|piano) $0)', # make prog
-    "not (n:prop|daddy's' (hasproperty pro:dem|that adj|suitcase) pro:dem|that)": "not (equals (n:prop|daddy's' n|suitcase) pro:dem|that)", # make prog
-    'Q (cop|pres (prog (v|take pro:int|WHAT pro:per|you)))': 'Q (cop|pres (prog (v|take (det:art|the n|WHAT) pro:per|you)))',
+    #'lambda $0.part|play-presp (det:art|the n|piano) $0': 'lambda $0.v|play-prog (det:art|the n|piano) $0', # make prog
+    "not (n:prop|daddy's' (hasproperty pro:dem|that adj|suitcase) pro:dem|that)": "not (equals (n:prop|daddy's' n|suitcase) pro:dem|that)", # fix hasproperty
+    'Q (cop|pres (v|take-prog pro:int|WHAT pro:per|you))': 'Q (cop|pres (v|take-prog (det:art|the n|WHAT) pro:per|you))', # make 'what' noun
     'lambda $0.Q (cop|pres-3s (v|rain-prog $0))': 'Q (cop|pres-3s (v|rain-prog pro:per|it))', # remove lmbda
     'v|want pro:int|WHAT pro:per|you': 'v|want (det:num|one n|WHAT) pro:per|you', # remove lmbda
-    'cop|be-3s pro:per|it': 'v|exist pro:per|it', # remove lmbda
+    'cop|be-3s pro:per|it': 'v|be pro:per|it', # v|be
+    'cop|be-pres pro:sub|they': 'v|be pro:sub|they', # v|be
+    'cop|be-pres (qn|any n|propel-dv)': 'v|be (qn|any n|propel-dv)', # v|be
+    'lambda $0.cop|become (det:art|a n|spider) $0': 'lambda $0.v|become (det:art|a n|spider) $0', # v|become
+    'Q (mod|do (adj|mean pro:int|WHAT pro:per|you))': 'Q (mod|do (v|mean pro:int|WHAT pro:per|you))', # v|mean
+    'not (mod|do-past pro:sub|i)': 'not (v|do pro:sub|i)', # v|do
+    #'cop|~be (det:poss|your n|pencil)': 'v|exist (det:poss|your n|pencil)', # v|exists
+    'cop|be-pres pro:per|you': 'v|be pro:per|you', # v|be
+    'lambda $0.n|push n|tire-BARE $0': 'lambda $0.v|push n|tire-BARE $0', # v|push
+    'cop|be-3s (det:art|a n|WHAT)': 'lambda $0.v|equals (det:art|a n|WHAT) $0',
+    'prep|about pro:dem|this n:prop|utah': 'v|about pro:dem|this n:prop|utah',
+    'cop|look-past pro:sub|i': 'v|look-past pro:sub|i', # v|look
+    'cop|look-3s n|same-BARE pro:per|it': 'v|look (det:art|the n|same) pro:per|it', # v|look
+    'cop|be-pres pro:sub|we': 'v|be pro:sub|we', # v|be
+    'cop|be-past pro:per|you': 'v|be pro:per|you', # v|be
+    #'cop|~be (qn|another n|story)': 'v|exist (qn|another n|story)', # v|exist
     # Hagar
     'v|ciyēr pro:per|ʔat n|ʕigūl-BARE': 'v|ciyēr you n|ʕigūl-BARE', # split anything into two words like it is in the sent (which may well be mistranscribed)
     }

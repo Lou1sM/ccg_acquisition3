@@ -27,7 +27,7 @@ chiltag_to_node_types = {
                     #'poss':set([None]),
                     'prep': 'prep',
                     'pro:dem': 'entity',
-                    #'pro:exist':set(['NP']),
+                    'pro:exist': 'entity',
                     'pro:indef': 'entity',
                     'pro:int': 'WH',
                     'pro:obj': 'entity',
@@ -73,7 +73,7 @@ pos_marking_dict = {
                     'poss':set(['X']),
                     'post':set(['S|S']), # ?
                     #'prep':set(['S|NP|NP', 'S|S|NP','NP|NP|NP','S|NP']),
-                    'prep':set(['X']),
+                    'prep':set(['S|NP|(S|NP)|NP']),
                     'pro:dem':set(['NP']), # ?
                     'pro:exist':set(['NP']),
                     'pro:indef':set(['NP']),

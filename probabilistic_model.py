@@ -80,6 +80,7 @@ class BaseDirichletProcessLearner(ABC):
         self.memory = {}
         self.base_distribution_cache = {}
         self.marg_prob_cache = {}
+        self.prob_cache = {}
         self.buffers = []
         self.long_term_buffer = []
         self.is_training = True
@@ -104,7 +105,8 @@ class BaseDirichletProcessLearner(ABC):
         if x not in self.memory:
             return base_prob
         mx = self.memory[x].get(y,0)
-        return (mx+self.alpha*base_prob)/(self.memory[x]['COUNT']+self.alpha)
+        prob = (mx+self.alpha*base_prob)/(self.memory[x]['COUNT']+self.alpha)
+        return prob
 
     def marg_prob(self, x, ignore_cache=False):
         if x in self.marg_prob_cache and not ignore_cache:
@@ -119,8 +121,12 @@ class BaseDirichletProcessLearner(ABC):
         prob = numerator / denominator
         return prob
 
-    def prob(self,*args,**kwargs):
-        return self._prob(*args,**kwargs)
+    def prob(self, y, x):
+        if (y,x) in self.prob_cache:
+            return self.prob_cache[(y,x)]
+        prob = self._prob(y,x)
+        self.prob_cache[(y,x)] = prob
+        return prob
 
     def _observe(self,y,x,weight):
         if x not in self.memory:
@@ -156,6 +162,7 @@ class BaseDirichletProcessLearner(ABC):
             y, x, weight = buffer.pop()
             self.observe(y, x, weight)
         assert len(buffer) == 0
+        self.prob_cache = {}
 
     def inverse_distribution(self,y): # conditional on y
         seen_before = any([y in d for d in self.memory.values()])
@@ -201,11 +208,6 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
         return (0.5555)*0.9**(n_slashes+1) # Omri 2017 had 0.2
 
     def observe(self,y,x,weight):
-        #if y == 'leaf':
-            #self._observe(y,maybe_de_type_raise(x),weight)
-        #else:
-        #x = non_directional(x)
-        #y = non_directional(y)
         if comb_either_way_around(y, x):
             self._observe(y, x, weight)
 
@@ -217,44 +219,37 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
         return (numerator + self.alpha*base_prob) / (denominator + self.alpha)
 
     def prob(self,y,x, can_be_weird_svo=False):
-        if not comb_either_way_around(y, x):
-            return 0
+        if (y,x) in self.prob_cache:
+            return self.prob_cache[(y,x)]
         assert x != 'NP + S/NP\\NP' or not self.is_training
-        x, y = non_directional(x), non_directional(y)
-        base_prob = self.base_distribution(y)
-        if x not in self.memory:
-            if y == 'leaf':
-                #return base_prob/(self.memory.get('COUNT',0) + 1) #could be +base_prob instead of 1
-                return base_prob
-            return base_prob
-        mx = self.memory[x].get(y,0)
-        return (mx+self.alpha*base_prob)/(self.memory[x]['COUNT']+self.alpha)
+        #x, y = non_directional(x), non_directional(y)
+        if not comb_either_way_around(y, x):
+            prob = 0
+        else:
+            prob = self._prob(y,x)
+        self.prob_cache[(y,x)] = prob
+        if prob != self._prob(y,x):
+            breakpoint()
+        return prob
 
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        #n_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
-        #n_constants = float('const' in x)+float('quant' in x)
-        #norm_factor = (np.e+1)/(np.e**2 - np.e - 1)
-        #return norm_factor * np.e**(-2*n_vars - n_constants)
         parts = re.split(r'[ \(\)\.]', x)
         parts = [p for p in parts if p!='' and '$' not in p]
         return 4**-len(parts)
 
     def prob(self,y,x):
+        if (y,x) in self.prob_cache:
+            return self.prob_cache[(y,x)]
         if not lf_cat_congruent(y,x):
-            return 0
-        base_prob = self.base_distribution(y)
-        if x not in self.memory:
-            return base_prob
-        mx = self.memory[x].get(y,0)
-        return (mx+self.alpha*base_prob)/(self.memory[x]['COUNT']+self.alpha)
+            prob = 0
+        else:
+            prob = self._prob(y,x)
+        self.prob_cache[(y,x)] = prob
+        return prob
 
 class MeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        #n_vars = len(set(re.findall(r'(?<!lambda )\$\d',x)))
-        #n_constants = len(set([z for z in re.findall(r'[a-z]*',x) if 'lambda' not in z and len(z)>0]))
-        #norm_factor = (np.e+1)/(np.e**2 - np.e - 1)
-        #return norm_factor * np.e**(-2*n_vars - n_constants)
         parts = re.split(r'[ \(\)\.]', x)
         parts = [p for p in parts if p!='' and '$' not in p]
         return 4**-len(parts)
@@ -419,7 +414,9 @@ class LanguageAcquirer():
         else:
             lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss, verbose_as=ARGS.verbose_as)
             self.full_lfs_cache[lf_str] = lf
+        st = time()
         lf.infer_splits()
+        print(f'LF split time: {time()-st:.4f}')
         return lf
 
     def make_parse_node(self,lf_str,words):
@@ -448,8 +445,10 @@ class LanguageAcquirer():
             try:
                 root = self.make_parse_node(lfs,words) # words is a list
                 new_prob_cache = {}
+                st=time()
                 new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                            self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
+                print(f'below-probs time: {time()-st:.4f}')
                 if ARGS.print_train_interps:
                     self.test_with_gt(lfs, words)
                 if lfs == ARGS.dbr or (ARGS.dbw is not None and ARGS.dbw in ' '.join(words)):
@@ -469,7 +468,9 @@ class LanguageAcquirer():
                 print('no splits :(')
             if new_root_prob==0:
                 print('zero root prob for', lfs, words)
+            st=time()
             root.propagate_above_probs(1)
+            print(f'above-probs time: {time()-st:.4f}')
             if words == ARGS.dbsent.split():
                 breakpoint()
             for n,p in new_prob_cache.items():
@@ -479,41 +480,29 @@ class LanguageAcquirer():
                     prob_cache[n] = p
             root_prob += new_root_prob
         buffers = {x:[] for x in self.learners.keys()}
+        st=time()
         for node, _ in prob_cache.items():
             if node.parent is not None and not node.is_g:
                 update_weight = node.prob / root_prob # for conditional
                 if node.is_fwd:
-                    #buffers['syntax'] += [(f'{sync} + {ssync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
                     buffers['syntax'].append((f'{node.sync} + {node.sibling.sync}',node.parent.sync, update_weight))
                 else:
-                    #buffers['syntax'] += [(f'{ssync} + {sync}', psync, update_weight) for sync in node.syncs for ssync in node.sibling.syncs for psync in node.parent.syncs]
                     buffers['syntax'].append((f'{node.sibling.sync} + {node.sync}',node.parent.sync, update_weight))
             leaf_prob = node.above_prob*node.stored_prob_as_leaf/root_prob
-            #for sync in node.syncs:
-                #self.leaf_syncat_memory.observe(sync, leaf_prob)
             self.leaf_syncat_memory.observe(node.sync, leaf_prob)
             if not leaf_prob > 0:
                 print(node)
             lf = node.lf.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cats, sync = node.info_if_leaf()
-            for sc in sem_cats:
-                self.sem_cat_memory.observe(sc, node.prob)
-            for sync in sem_cats:
-                self.sync_memory.observe(sync, node.prob)
-            self.leaf_shell_lf_memory.observe(shell_lf, leaf_prob)
-            self.leaf_lf_memory.observe(lf, leaf_prob)
-            #buffers['syntax'] += [('leaf',sync,leaf_prob) for sync in syncs]
             buffers['syntax'].append(('leaf',sync,leaf_prob))
-            if any(x[1]=='(N|N)' for x in buffers['syntax']):
-                breakpoint()
             if ARGS.condition_on_syncats:
-                #buffers['shmeaning'] += [(shell_lf,sync,leaf_prob) for sync in syncs]
                 buffers['shmeaning'].append((shell_lf,sync,leaf_prob))
             else:
                 buffers['shmeaning'] += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
             buffers['meaning'].append((lf,shell_lf,leaf_prob))
             buffers['word'].append((word_str,lf,leaf_prob))
 
+        print(f'apply probs time: {time()-st:.4f}')
         for lname, learner in self.learners.items():
             buffer = buffers[lname]
             learner.buffers.append(buffer)
