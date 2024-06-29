@@ -51,7 +51,7 @@ pos_marking_dict = {
                     'co':set(['X']),
                     'conj':set(['S|S|S']),
                     'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
-                    'cop':set(['S|NP|(S|NP)', 'S|(S|NP)|NP','S|NP|(N|N)', 'S|(N|N)|NP']),
+                    'cop':set(['S|NP|VP', 'Sq|VP|NP','S|NP|(N|N)', 'Sq|(N|N)|NP']),
                     'det':set(['NP|N']),
                     'det:art':set(['NP|N']),
                     'det:dem':set(['NP|N']),
@@ -59,14 +59,14 @@ pos_marking_dict = {
                     'det:num':set(['NP|N']),
                     'det:poss':set(['NP|N']),
                     'meta':set(['X']),
-                    'mod':set(['S|NP|(S|NP)','S|(S|NP)|NP']),
+                    'mod':set(['S|NP|VP','Sq|VP|NP']),
                     'mod:aux':set(['X']),
                     'n':set(['N']),
                     'n:gerund':set(['NP']),
                     'n:let':set(['NP']),
                     'n:prop':set(['NP']),
                     'n:pt':set(['N']), # seems to be for nouns with plural morph.]), like scissors
-                    'neg':set(['(S|NP)|(S|NP)','(S|NP)|(S|NP)']),
+                    'neg':set(['(S|NP)|(S|NP)', 'VP|VP', '(Sq|NP)|(Sq|NP)']),
                     #'neg':set(['S|S','(S|NP)|(S|NP)','(S|NP|NP)|(S|NP|NP)']), # ?
                     'on':set(['X']),
                     'part':set(['X']),
@@ -78,7 +78,7 @@ pos_marking_dict = {
                     'pro:exist':set(['NP']),
                     'pro:indef':set(['NP']),
                     #'pro:int':set(['NP', 'Swhq|(S|NP)']),
-                    'pro:int':set(['NP']),
+                    'pro:int':set(['Swhq|(Sq|NP)', 'NP']),
                     'pro:obj':set(['NP']),
                     'pro:per':set(['NP']),
                     'pro:poss':set(['NP']),
@@ -87,7 +87,7 @@ pos_marking_dict = {
                     'pro:sub':set(['NP']),
                     'qn':set(['NP|N', 'NP|NP']),
                     'sing':set(['X']),
-                    'v':set(['S|NP','S|NP|NP','S|NP', 'S|NP|NP']),
+                    'v':set(['S|NP','S|NP|NP','VP', 'VP|NP']),
                     #'v:obj':set([None]),
                     'wplay':set(['X']),
                     }
@@ -99,7 +99,6 @@ pos_marking_dict = {
 base_lexicon = {k:set(['NP']) for k in ('you','i','me','he','she','it','WHAT','WHO')}
 base_lexicon['equals'] = set(['S|NP|NP'])
 base_lexicon['hasproperty'] = set(['S|NP|(N|N)'])
-base_lexicon['mod|will_2'] = set(['S|NP', 'S|NP|NP'])
 base_lexicon['not'] = set(['X'])
 
 agt_lexicon =[

@@ -2,8 +2,8 @@ import json
 from pprint import pprint as pp
 import numpy as np
 import re
-from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf, new_var_num, alpha_normalize, all_lambda_body_splits, de_q, add_q, add_not
-from converter_config import manual_ida_fixes, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes, neg_conts
+from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf, new_var_num, alpha_normalize, all_lambda_body_splits, de_q, add_q, add_not, add_whq
+from converter_config import manual_ida_fixes, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes, neg_conts, direct_take_lf_from_sents
 from learner_config import pos_marking_dict
 
 
@@ -64,6 +64,8 @@ def decommafy(parse, debrac=False):
     splits = split_respecting_brackets(inner_lf)
     if len(splits)==3:
         inner_lf = f'{splits[0]} {splits[2]} {splits[1]}'
+    if len(splits)==4 and inner_lf.startswith('v|'):
+        inner_lf = f'{splits[0]} {splits[2]} {splits[3]} {splits[1]}'
     lf = prefix + inner_lf + suffix
     if debrac:
         lf = maybe_debrac(lf)
@@ -121,7 +123,7 @@ def _decommafy_inner(parse):
             breakpoint()
         return lf
 
-def fix_posses(lf):
+def fix_posses(lf, sent):
     old_lf = lf
     lf = lf.replace('post|', 'adv|')
     if ARGS.dset == 'hagar':
@@ -130,6 +132,9 @@ def fix_posses(lf):
     lf = lf.replace('co|like', 'v|like')
     lf = lf.replace('conj|like', 'v|like')
     lf = lf.replace('co|look', 'v|look')
+    if 'alright' in sent:
+        lf = lf.replace('co|alright', 'adj|alright')
+    lf = lf.replace('v|ready', 'adj|ready')
     lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔābaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔābaʔ', lf )
     lf = re.sub(r'BARE\(\$\d{1,2},n\|ʔīmaʔ\(\$\d{1,2}\)\)', 'n:prop|ʔīmaʔ', lf )
     lf = lf.replace('n|ʔābaʔ', 'n:prop|ʔābaʔ' )
@@ -163,7 +168,7 @@ def lf_preproc(lf, sent):
             print(f'Fixing: {old_lf} --> {lf}')
 
     assert not ('n:prop|ʔābaʔ' in lf or 'n:prop|ʔīmaʔ' in lf) or not ('det|ha' in lf or 'det|~ha' in lf)
-    lf = fix_posses(lf)
+    lf = fix_posses(lf, sent)
     if 'lambda $0' in lf.rpartition('.')[0]:
         lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
@@ -198,7 +203,15 @@ def lf_preproc(lf, sent):
     if re.search(r'pro:rel\|that\(\$\d,(n|pro:indef)', lf):
         lf = lf.replace('pro:rel|that','det:dem|that')
     assert lf not in ['Q', 'and', '(you)', '(WHO)', 'aux|~be((WHAT))']
+
+    if 'tired' in sent:
+        lf = re.sub(r'(v|part)\|tire(\-(pastp?))?', 'adj|tired', lf)
+        print(sent, lf)
+        #lf.replace('v|tire-past', 'adj|tired').replace('part|tire-pastp', 'adj|tired')
     dlf = decommafy(lf, debrac=True)
+    if 'was' in sent or 'were' in sent or '\'re' in sent:
+        dlf = dlf.replace('hasproperty', 'hasproperty-past')
+        dlf = dlf.replace('equals', 'equals-past')
     if ARGS.print_conversions:
         print(f'{lf} --> {dlf}', end='\t')
     #if dpoint['idasent'].lstrip('Adam ').startswith('is that') and not dlf.startswith('Q '):
@@ -212,6 +225,8 @@ def lf_preproc(lf, sent):
         dlf = dlf.replace('pro:int|WHAT', '(det:art|the n|WHAT)')
     if 'a what' in sent:
         dlf = dlf.replace('pro:int|WHAT', '(det:art|a n|WHAT)')
+    if 'your what' in sent:
+        dlf = dlf.replace('pro:int|WHAT', '(det:poss|your n|WHAT)')
     #if sent.startswith('here \'s') or sent.startswith('here \'s') or sent.startswith('here \'s') or:
     if bool(maybe_existential_match:=re.match(r'(t?here) (is|\'s|were|are|\'re)', sent)):
         ex_np = maybe_existential_match.group(1)
@@ -219,6 +234,14 @@ def lf_preproc(lf, sent):
         if not dlf.endswith(f' pro:exist|{ex_np}'):
             dlf = dlf + f' pro:exist|{ex_np}'
         print(dlf, sent)
+    dlf = postfix_whatiss(dlf)
+    if 'would' in sent:
+        dlf = dlf.replace('mod|will-cond', 'mod|would')
+        dlf = dlf.replace('mod|will', 'mod|would')
+    dlf = dlf.replace('mod|~will', 'mod|will')
+    if 'mod|~genmod' in dlf and 'would' not in sent and '\'d' not in sent:
+        breakpoint()
+    dlf = dlf.replace('mod|~genmod', 'mod|would')
     return dlf
 
 def reformat_cop(lf, sent):
@@ -306,10 +329,15 @@ def sent_preproc(lf, sent):
     if sent in sent_fixes:
         sent = sent_fixes[sent]
     #sent = sent.replace('n \'t', ' n\'t')
+    sent = sent.replace('oh','')
+    sent = sent.replace('well','')
+    if 'so' not in lf:
+        sent = sent.replace('so','')
     sent = sent.replace(' \'t', '\'t')
     #if (had_neg:=any(w in sent for w in neg_conts)): print(sent, end=' ')
     sent = ' '.join(neg_conts.get(w,w) for w in sent.split(' '))
     #if had_neg: print('-->', sent)
+    sent = sent.removeprefix('alright ')
     sent = [w for w in sent.split() if f'co|{w}' not in lf and not(w=='we' and w not in lf)]
     if len(sent)>0 and sent[0] == 'ʔavāl' and 'ʔavāl' not in lf:
         sent = sent[1:]
@@ -336,11 +364,16 @@ def decide_if_question(lf, sent, udtags):
                 assert lf.starswith(f'{conj} (') and lf.endswith(')')
                 lf = lf[len(conj)+2:-1]
     assert not bool(re.search(r'(?<!pro:per\|)you(?![a-z])', lf))
-    if udtags[0] in ('AUX') or sent[0] in wh_words:
+    if udtags[0] in ('AUX') or sent[0] in ('is' 'are', 'was', 'were'):
+        lf = add_q(lf)
+    elif sent[0] in wh_words and not (udtags[-1] in ('AUX') or sent[-1] in ('is' '\'s', 'are', '\'re', 'was', 'were')):
         lf = add_q(lf)
     return lf, sent
 
-def apply_manual_fixes(lf):
+def apply_manual_fixes(lf, sent):
+    if ' '.join(sent) in direct_take_lf_from_sents:
+        print(direct_take_lf_from_sents[' '.join(sent)])
+        return direct_take_lf_from_sents[' '.join(sent)]
     if lf in manual_ida_fixes.keys():
         old_lf = lf
         lf = manual_ida_fixes[lf]
@@ -349,12 +382,31 @@ def apply_manual_fixes(lf):
     lf = lf.replace('cow+boy', 'cowboy')
     return lf
 
+def postfix_whatiss(lf):
+    maybe_match = re.match(r'Q \(pro:int\|WH([A-Z]+) ([a-zA-Z:\|-]+)\)', lf)
+    if maybe_match is not None:
+        fixed_lf = f'Q (v|equals pro:int|WH{maybe_match.group(1)} {maybe_match.group(2)})'
+        #print(lf, '-->', fixed_lf)
+        return fixed_lf
+    maybe_match = re.match(r'Q \(pro:int\|WH([A-Z]+) (\([a-zA-Z:\|\- ]+\))\)', lf)
+    if maybe_match is not None:
+        fixed_lf = f'Q (v|equals pro:int|WH{maybe_match.group(1)} {maybe_match.group(2)})'
+        #print(lf, '-->', fixed_lf)
+        return fixed_lf
+    else:
+        return lf
+
+def merge_not_and_modcops(lf):
+    negmod_match = re.match(r'not \(mod|.*?\)', lf)
+    if 'not' in lf:
+        breakpoint()
+
 if __name__ == '__main__':
     import argparse
     ARGS = argparse.ArgumentParser()
     ARGS.add_argument('-d', '--dset', type=str, choices=['adam', 'hagar'], default='adam')
     ARGS.add_argument('--db', type=str)
-    ARGS.add_argument('--db-sent', type=str)
+    ARGS.add_argument('--dbsent', type=str)
     ARGS.add_argument('-p', '--print-conversions', action='store_true')
     ARGS.add_argument('-f', '--print-fixes', action='store_true')
     ARGS.add_argument('--tokenize-ing', action='store_true')
@@ -373,18 +425,21 @@ if __name__ == '__main__':
 
     for dpoint in dset:
         sent, lf, udtags = dpoint['idasent'], dpoint['idalf'], dpoint['udtags']
-        if any(x in dpoint['idalf'] for x in exclude_lfs):
+        if sent[:-2] in exclude_sents:
             n_excluded+=1
             continue
-        if sent[:-2] in exclude_sents:
+        if any(x in dpoint['idalf'] for x in exclude_lfs):
             n_excluded+=1
             continue
         if 'lambda' in all_lambda_body_splits(lf)[1]: # we're saying these are malformed
             continue
         ps = sent_preproc(lf, sent)
+        if ' '.join(ps) in exclude_sents: # so exclude sents removes matches before or after preproc
+            n_excluded+=1
+            continue
         if len(ps) > 0 and ps[0] == 'ʔavāl':
             breakpoint()
-        if ARGS.db_sent is not None and ps == ARGS.db_sent.split():
+        if ARGS.dbsent is not None and ps == ARGS.dbsent.split():
             breakpoint()
         if ps == []:
             n_excluded+=1
@@ -405,13 +460,16 @@ if __name__ == '__main__':
             pl = alpha_normalize(pl)
             #print(pl)
         pl, ps = decide_if_question(pl, ps, udtags)
-        pl = apply_manual_fixes(pl)
+        pl = apply_manual_fixes(pl, ps)
         if ARGS.print_conversions:
             print(' '.join(ps))
         if pl == 'Q ()':
             breakpoint()
         if 'lambda' in pl:
             assert pl.startswith('lambda')
+        if len(pl.split())==1 and len(ps) != 1:
+            print(pl, ps)
+            continue
         dset_data.append({'lf':pl, 'words':ps})
     x=[' '.join(y['words']) for y in dset_data]
     y=dict(zip(*np.unique(x, return_counts=True)))

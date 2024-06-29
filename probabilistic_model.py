@@ -21,6 +21,9 @@ import json
 from learner_config import all_gt_lexicons
 
 
+reslashes = re.compile(r'[\\/\|]')
+reshellsplitpoints = re.compile(r'[ \(\)\.]')
+
 def type_raise(cat,direction,out_cat='S'):
     if direction == 'fwd':
         return f'{out_cat}/({out_cat}\\{cat})'
@@ -204,7 +207,7 @@ class BaseDirichletProcessLearner(ABC):
 
 class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        n_slashes = len(re.findall(r'[\\/\|]',x))
+        n_slashes = len(reslashes.findall(x))
         return (0.5555)*0.9**(n_slashes+1) # Omri 2017 had 0.2
 
     def observe(self,y,x,weight):
@@ -234,7 +237,7 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
 
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        parts = re.split(r'[ \(\)\.]', x)
+        parts = reshellsplitpoints.split( x)
         parts = [p for p in parts if p!='' and '$' not in p]
         return 4**-len(parts)
 
@@ -250,7 +253,7 @@ class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
 
 class MeaningDirichletProcessLearner(BaseDirichletProcessLearner):
     def base_distribution_(self,x):
-        parts = re.split(r'[ \(\)\.]', x)
+        parts = reshellsplitpoints.split(x)
         parts = [p for p in parts if p!='' and '$' not in p]
         return 4**-len(parts)
 
@@ -407,20 +410,32 @@ class LanguageAcquirer():
         self.marginal_syn_counts.to_pickle(join(fpath,'marginal_syn_counts.pkl'))
         self.syn_word_probs.to_pickle(join(fpath,'syn_word_probs.pkl'))
 
-    def get_lf(self,lf_str):
+    def get_lf(self, lf_str, words):
         if lf_str in self.full_lfs_cache:
             lf = self.full_lfs_cache[lf_str]
             #lf.set_cats_as_root(lf_str) # in case was in cache as embedded S, so got X
         else:
-            lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss, verbose_as=ARGS.verbose_as)
+            if words[0] in ('what', 'who', 'how', 'where', 'when', 'which'):
+                specified_cats = {'Swhq'} if 'Q' in lf_str else {'Swh'}
+            elif lf_str.startswith('Q'):
+                specified_cats = {'Sq'}
+            elif 'lambda' in lf_str:
+                specified_cats = {'VP'}
+            elif len(lf_str.split())==2 and lf_str.startswith('prep'):
+                specified_cats = {'S|NP|(S|NP)'}
+            elif len(lf_str.split())==2 and lf_str.split()[1].startswith('n|'):
+                specified_cats = {'NP'}
+            else:
+                specified_cats = {'S'}
+            lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss, verbose_as=ARGS.verbose_as, specified_cats=specified_cats)
             self.full_lfs_cache[lf_str] = lf
         st = time()
         lf.infer_splits()
         print(f'LF split time: {time()-st:.4f}')
         return lf
 
-    def make_parse_node(self,lf_str,words):
-        lf = self.get_lf(lf_str)
+    def make_parse_node(self, lf_str, words):
+        lf = self.get_lf(lf_str, words)
 
         if ' '.join([lf_str]+words) in self.parse_node_cache:
             parse_root = self.parse_node_cache[' '.join([lf_str]+words)]
@@ -451,12 +466,15 @@ class LanguageAcquirer():
                 print(f'below-probs time: {time()-st:.4f}')
                 if ARGS.print_train_interps:
                     self.test_with_gt(lfs, words)
+                if ARGS.print_gtparsestrs:
+                    gtparsestr, is_good, is_root_good = root.gt_parse()
+                    print(gtparsestr)
                 if lfs == ARGS.dbr or (ARGS.dbw is not None and ARGS.dbw in ' '.join(words)):
                     #self.syntaxl.prob('S|NP/(S|NP) + S|NP/(S|NP)', 'S\\NP/(S|NP)')
                     if not ARGS.print_train_interps:
                         self.test_with_gt(lfs, words)
                     gtparsestr, is_good, is_root_good = root.gt_parse()
-                    assert is_good
+                    #assert is_good
                     print(gtparsestr)
                     breakpoint()
             except CCGLearnerError as e:
@@ -846,6 +864,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--condition-on-syncats", action="store_true")
     ARGS.add_argument("--db-after", action="store_true")
     ARGS.add_argument("--print-train-interps", action="store_true")
+    ARGS.add_argument("--print-gtparsestrs", action="store_true")
     ARGS.add_argument("--verbose-as", action="store_true")
     ARGS.add_argument("--db-at", type=int, default=-1)
     ARGS.add_argument("--db-parse", action="store_true")
@@ -884,6 +903,7 @@ if __name__ == "__main__":
     ARGS.add_argument("--suppress-prints", action="store_true")
     ARGS.add_argument("--test-frac", type=float, default=0.1)
     ARGS.add_argument("--test-gts", action="store_true")
+    ARGS.add_argument("--db-before", action="store_true")
     ARGS.add_argument("-d", "--dset", type=str, default='adam')
     ARGS.add_argument("-t","--is-test", action="store_true")
     ARGS.add_argument("-tt","--is-short-test", action="store_true")
@@ -936,6 +956,9 @@ if __name__ == "__main__":
     la = LanguageAcquirer(ARGS.lr, vt)
     if ARGS.reload_from is not None:
         la.load_from(f'experiments/{ARGS.reload_from}')
+
+    if ARGS.db_before:
+        breakpoint()
 
     ltb_idxs = [100, 300, 1000]
     start_time = time()

@@ -14,6 +14,11 @@ def add_q(lf):
     lf = f'{lambdas}Q ({body})'
     return lf
 
+def add_whq(lf):
+    lambdas, body = all_lambda_body_splits(lf)
+    lf = f'{lambdas}WHQ (Q ({body}))'
+    return lf
+
 def add_not(lf):
     lambdas, body = all_lambda_body_splits(lf)
     lf = f'{lambdas}not ({body})'
@@ -27,7 +32,6 @@ def base_cats_from_str(unstripped_str):
     assert ' you' not in ss
     assert ss != 'Q'
     assert ss != 'prog'
-    #ss = ss.replace(' you','')
     had_initial_q = ss.startswith('Q ')
     if had_initial_q:
         ss = ss.lstrip('Q ')
@@ -36,35 +40,27 @@ def base_cats_from_str(unstripped_str):
         ss = ss[1:-1].strip()
     if ss == 'not':
         is_semantic_leaf = True
-        #sem_cats = set(['X'])
-        sem_cats = set(['S|NP|(S|NP)'])
-        had_initial_q = False
-    #elif ss == 'prog':
-    #    is_semantic_leaf = True
-    #    sem_cats = set(['S|NP|(S|NP)'])
-    #    had_initial_q = False
-    #elif ss == 'Q':
-    #    is_semantic_leaf = True
-    #    sem_cats = set(['X'])
-    #    had_initial_q = True
+        sem_cats = set(['S|NP|(S|NP)', 'VP|VP'])
+        #if had_initial_q:
+        #    sem_cats = set(['S|NP|(S|NP)', 'VP|VP', 'Sq|Sq'])
+        #else:
+        #    sem_cats = set(['S|NP|(S|NP)', 'VP|VP', 'S|S'])
+        #if (nl:=n_lambda_binders(unstripped_str)) == 2:
+        #    sem_cats = set(['S|NP|(S|NP)', 'VP|VP'])
+        #elif nl <= 1:
+        #    sem_cats = set(['S|S', 'Sq|Sq'])
+        #else:
+        #    breakpoint()
     else:
-        had_initial_q = ss.startswith('Q ')
-        if had_initial_q:
-            ss = ss.lstrip('Q ')
-            if not is_bracketed(ss):
-                breakpoint()
-            ss = ss[1:-1].strip()
-        #ss = maybe_debrac(ss[4:]) if (notstart:=ss.startswith('not ')) else ss
         is_semantic_leaf = ' ' not in ss.lstrip('BARE ')
         if not is_semantic_leaf:
             sem_cats = set(['X'])
         elif ss == 'hasproperty':
             is_semantic_leaf = True
             sem_cats = set(['S|(N|N)|NP','S|NP|(N|N)'])
-        #elif ss in ('cop|pres', 'cop|past'):
         elif re.match(r'cop\|(pres|past)-[123]s', ss):
             is_semantic_leaf = True
-            sem_cats = set(['S|(S|NP)|NP','S|NP|(S|NP)'])
+            sem_cats = set(['S|VP|NP','S|NP|VP'])
         elif '|' in ss:
             pos_marking = ss.split('|')[0]
             if pos_marking == 'n' and ss.endswith('pl-BARE'):
@@ -78,23 +74,33 @@ def base_cats_from_str(unstripped_str):
             else:
                 sem_cats = pos_marking_dict.get(pos_marking,set(['X']))
             if ss.startswith('v|'):
-                if n_lambda_binders(unstripped_str) == 3:
-                    sem_cats = {'S|NP|NP|NP'}
-                    if ss not in ('v|give, v|bring'):
+                if (nl:=n_lambda_binders(unstripped_str)) == 3:
+                    sem_cats = {'S|NP|NP|NP','VP|NP|NP'}
+                    if ss.removesuffix('-prog') not in ('v|give', 'v|bring', 'v|let'):
                         print(ss, 'getting 3 args')
-                elif n_lambda_binders(unstripped_str) == 2:
-                    sem_cats = {'S|NP|NP'}
-                elif n_lambda_binders(unstripped_str) <= 1:
-                    sem_cats = {'S|NP'}
+                elif nl == 2:
+                    sem_cats = {'S|NP|NP', 'VP|NP'}
+                elif nl == 1:
+                    sem_cats = {'S|NP', 'VP'}
+                elif nl == 0:
+                    sem_cats = {'VP'}
                 else:
                     breakpoint()
+            elif pos_marking == 'pro:int':
+                if n_lambda_binders(unstripped_str) == 1:
+                    sem_cats = {'Swhq|(Sq|NP)'}
+                else:
+                    if not ( ss!='pro:int|WHAT' or n_lambda_binders(unstripped_str) == 0):
+                        print(f'wh-string appearing with spuriously many lambdas: {ss}')
+                    sem_cats = {'NP'}
+
         else:
             word_level_form = ss.split('_')[0] if '_' in ss else ss
             if word_level_form.startswith('Q '):
                 word_level_form = word_level_form[2:]
             sem_cats = base_lexicon.get(word_level_form,set(['X']))
-        if had_initial_q:
-            sem_cats = set('Sq'+sc[1:] if sc.startswith('S|') else sc for sc in sem_cats)
+    if had_initial_q:
+        sem_cats = set('Sq'+sc[1:] if sc.startswith('S|') else sc for sc in sem_cats)
     return sem_cats, is_semantic_leaf
 
 def new_var_num(lf_str):
@@ -570,12 +576,12 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
         return new_f, new_g
 
 def lf_cat_congruent(lf_str, sem_cat):
-    assert 'VP' not in sem_cat
+    #assert 'VP' not in sem_cat
     assert ' you' not in lf_str
     #if sem_cat in ('S|N', 'NP|NP'):
     if sem_cat in ('S|N',):
         return False
-    if sem_cat == 'NP|NP' and not strip_string(lf_str).startswith('qn|'):
+    if sem_cat == 'NP|NP' and not strip_string(lf_str).startswith('qn|') and strip_string(lf_str)!='quant': # former condition for LF and latter for shell LF
         return False
 
     sem_cat = re.sub(r'^VP','S|NP',sem_cat) # if VP on left then no bracks because right-assoc
@@ -592,11 +598,17 @@ def lf_cat_congruent(lf_str, sem_cat):
 def parent_cmp_from_f_and_g(f_cat, g_cat, sem_only):
     if f_cat=='X' or g_cat=='X':
         return 'X'
-    fout,fslash,fin = cat_components(f_cat,sep=['/','\\','|'])
-    gout,gslash,gin = cat_components(g_cat,sep=['/','\\','|'])
-    if sem_only or (fslash == '/' and gslash == '/'):
-        domatch = (maybe_debrac(fin) == maybe_debrac(gout))
-        return fout + fslash + maybe_brac(gin) if domatch else None
+    fout,fslash,fin = cat_components(f_cat, sep=['/','\\','|'])
+    gout,gslash,gin = cat_components(g_cat, sep=['/','\\','|'])
+    #if sem_only or (fslash == '/' and gslash == '/'):
+    if (maybe_debrac(fin) == maybe_debrac(gout)):
+        return fout + gslash + maybe_brac(gin)
+    if is_atomic(gout): # no hope for B2
+        return None
+    gout2, gslash2, gin2 = cat_components(gout, sep=['/','\\','|'])
+    if (maybe_debrac(fin) == maybe_debrac(gout2)):
+        return fout + gslash2 + maybe_brac(gin2) + gslash + maybe_brac(gin)
+
 
 def reverse_slash(slash):
     assert slash in ['\\','/']

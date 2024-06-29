@@ -3,11 +3,14 @@ neg_conts = {
                 'won\'t': 'wo n\'t',
                 'can\'t': 'can n\'t',
                 'don\'t': 'do n\'t',
+                'didn\'t': 'did n\'t',
+                'doesn\'t': 'does n\'t',
                 'shouldn\'t': 'should n\'t',
                 'couldn\'t': 'could n\'t',
                 'wouldn\'t': 'would n\'t',
                 'musn\'t': 'mus n\'t',
                 'isn\'t': 'is n\'t',
+                'wasn\'t': 'was n\'t',
                 'aren\'t': 'are n\'t',
                 'weren\'t': 'were n\'t',
                 'amn\'t': 'am n\'t',
@@ -137,8 +140,8 @@ exclude_sents = [
     "they 're not the kind that you eat", # lf doesn't match
     "you have some thing to show me", # lf doesn't match
     "the kind the policeman carry", # lf doesn't match
-    "because that 's what he wants", # lf doesn't match
-    "because you might fall and hurt yourself", # lf doesn't match
+    "that 's what he wants", # lf doesn't match
+    "you might fall and hurt yourself", # lf doesn't match
     "he had one of those", # lf doesn't match
     "where one what", # lf doesn't match and malformed sent
     "what 's your song about", # lf wrong, treats event-var as wh-var
@@ -158,11 +161,73 @@ exclude_sents = [
     "you come and look", # weird and lf defo wrong
     "pilot and what", # weird and lf defo wrong
     "you come and look", # weird and lf defo wrong
+    "do you remember what this is", # lf doesn't match
+    "if I were you", # lf doesn't match
+    "I should hope not", # not sure how to model but probs wrong
+    "what kind is it", # not sure how to model but probs wrong
+    "no wonder what", # not sure how to model but probs wrong
+    "where 's the Mommy", # not sure how to model but probs wrong
+    "doggie and the car", # not sure how to model but probs wrong
+    "put it what", # not sure how to model but wrong
+    "did you finish drawing", # not sure how to model but probs wrong
+    "what is that you have now", # LF doesn't match
+    "that 's something that hasn't developed", # LF doesn't match
+    "you drawing a kitty", # LF doesn't match
+    "which way it were", # LF doesn't match
+    "oh look what you found", # LF doesn't match
+    "if he 's not", # LF doesn't match
+    "who is this sitting up here", # LF doesn't match
+    "I 'll come and do it", # LF doesn't match
+    "if you 're", # LF doesn't match
     # Hagar
     'huʔ racā xavitā loʔ melafefōn' # lf doesn't match
     #'ʔābaʔ ʔat rocā' # lf doesn't match--one that Mark says should be wh-movement
     'ʔābaʔ ʔat rocā' # lf doesn't match--one that Mark says should be wh-movement
     ]
+
+direct_take_lf_from_sents = {
+    'could be a doctor': 'lambda $0.mod|could (v|equals (det:art|a n|doctor) $0)',
+    'you need some what': 'v|need (qn|some n|WHAT) pro:per|you',
+    'are those your checkers': 'Q (v|equals (det:poss|your n|checker-pl) pro:dem|those)',
+    'they \'re Daddy \'s': 'v|equals n:prop|daddy\'s pro:sub|they',
+    'those are David \'s': 'v|equals n:prop|david\'s pro:dem|those',
+    'those are David \'s': 'v|equals n:prop|david\'s pro:dem|those',
+    'that is Ursula\'s': 'v|equals n:prog|ursula\'s pro:dem|that',
+    'ask her what that is': 'lambda $0.v|ask (v|equals pro:int|WHAT pro:dem|that) pro:obj|her $0',
+    'ask Ursula what that is': 'lambda $0.v|ask (v|equals pro:int|WHAT pro:dem|that) n:prop|ursula $0',
+    'I \'m not hurt': 'not (hasproperty adj|hurt pro:sub|i)',
+    'that \'s not rope': 'not (v|equals n|rope-BARE pro:dem|that)',
+    'must be a bug': 'lambda $0.mod|must (v|equals (det:art|a n|bug) $0)',
+    'it \'s not ready': 'not (hasproperty adj|ready pro:per|it)',
+    'that \'s dressing': 'v|equals n|dressing-BARE pro:dem|that',
+    'it must be Robin \'s': 'mod|must (v|equals n:prop|robin\'s pro:per|it)',
+    'you \'re getting it': 'cop|pres (v|get-prog pro:per|you pro:per|it)',
+    'what are you reading': 'Q (cop|pres (v|read-prog pro:per|you pro:int|WHAT))',
+    'are you reading a book': 'cop|pres (v|read-prog pro:per|you (det:art|a n|book))',
+    'doing tricks': 'lambda $0.v|do-prog n|trick-pl-BARE $0',
+    'what happens': 'Q (v|happens pro:int|WHAT)',
+    'did you see one': 'Q (mod|do-past (v|see pro:indef|one pro:per|you))',
+    'is she finished': 'Q (hasproperty adj|finished pro:sub|she)',
+    'what do you call that': 'Q (mod|do (v|call pro:int|WHAT pro:dem|that pro:per|you))',
+    'I \'d like some vegetables': 'mod|~genmod (v|like (qn|some n|vegetable-pl) pro:sub|i)',
+    'she said two': 'v|say-past pro:indef|two pro:per|she',
+    'it is not snow': 'not (v|equals n|snow-BARE pro:per|it)',
+    'spear is spear': 'v|equals n|spear-BARE n|spear-BARE',
+    'were you lost': 'Q (hasproperty-past adj|lost pro:per|you)',
+    'it \'s not round': 'not (hasproperty adj|round pro:per|it)',
+    'is n\'t that a surprise': 'Q (not (v|equals (det:art|a n|surprise) pro:dem|that))',
+    'what are you drawing': 'Q (cop|pres (v|draw-prog pro:int|WHAT pro:per|you))',
+    'that must be what': 'mod|must (v|equals pro:int|WHAT pro:dem|that)',
+    'could that be his tail': 'Q (mod|could (v|equals (det:poss|his n|tail) det:dem|that))',
+    'that might break': 'mod|might (v|break pro:dem|that)',
+    'is n\'t that a rhinoceros': 'Q (not (v|equals (det:art|a n|rhinoceros) pro:dem|that))',
+    'is it dry': 'Q (hasproperty adj|dry pro:per|it)',
+    "they 're not dry": 'not (hasproperty adj|dry pro:sub|they)',
+    "what did we call it": 'Q (mod|do-past (v|call pro:per|it pro:int|WHAT pro:sub|we))',
+    "call Robin doctor": 'lambda $0.n|call n:prop|robin n|doctor-BARE $0',
+    "is he alright": 'Q (hasproperty adj|alright pro:sub|he)',
+    "let go": 'lambda $0.v|let-go $0',
+    }
 
 sent_fixes = {
     'an a what': 'and a what',
@@ -187,10 +252,6 @@ premanual_ida_fixes = {
     'lambda $0_{r}.mod|can_2(aux|get_3(pro:per|you_1,pro:per|it_4,$0),$0)':'lambda $0_{r}.mod|can_2(v|get_3(pro:per|you_1,pro:per|it_4,$0),$0)', # pos of 'get' to v
     'lambda $0_{r}.aux|~be_2(n:gerund|get-presp_3(pro:per|you_1,pro:per|it_4,$0),$0)':'lambda $0_{r}.aux|~be_2(v|get-part(pro:per|you_1,pro:per|it_4,$0),$0)', # pos of 'get' to v
     'lambda $0_{r}.aux|have-3s_1(n:prop|adam_2,BARE($1,det:num|two_3(n|pencil-pl_4($1))),$0)':'lambda $0_{r}.v|have-3s_1(n:prop|adam_2,BARE($1,det:num|two_3(n|pencil-pl_4($1))),$0)', # pos of 'have' to v
-    #'lambda $0_{r}.det:art|the_3(pro:per|you_2,n|drive-dv_4(pro:per|you_2,$0))':'lambda $0_{r}.Q(det:art|the_3(pro:per|you_2,n|drive-dv_4(pro:per|you_2,$0)))', # add Q
-    #'lambda $0_{r}.n|pillow-pl_3(pro:dem|those_2,$0)': 'lambda $0_{r}.Q(n|pillow-pl_3(pro:dem|those_2,$0))', # add Q
-    #'lambda $0_{r}.cop|be-pres_1(part|fix-presp_3(pro:per|you_2,det:art|the_4($1,n|dog_5($1)),$0),$0)': 'lambda $0_{r}.Q(cop|be-pres_1(part|fix-presp_3(pro:per|you_2,det:art|the_4($1,n|dog_5($1)),$0),$0))',# add Q
-    #'lambda $0_{r}.cop|be-pres_1(part|pull-presp_3(pro:per|you_2,det:poss|your_4($1,n|dog_5($1)),$0),$0)': 'lambda $0_{r}.Q(cop|be-pres_1(part|pull-presp_3(pro:per|you_2,det:poss|your_4($1,n|dog_5($1)),$0),$0))', # add Q
 
     # Hagar
     'lambda $0_{r}.Q(v|carīḳ(pro:per|ʔat,BARE($1,on|pīpi($1)),$0))': 'lambda $0_{r}.Q(v|carīḳ(pro:per|ʔat,BARE($1,n|pīpi($1)),$0))', # pos of pipi
@@ -240,6 +301,20 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'cop|look-3s n|same-BARE pro:per|it': 'v|look (det:art|the n|same) pro:per|it', # v|look
     'cop|be-pres pro:sub|we': 'v|be pro:sub|we', # v|be
     'cop|be-past pro:per|you': 'v|be pro:per|you', # v|be
+    'mod|do-past pro:sub|i': 'v|do pro:sub|i', # v|do
+    'mod|do-past pro:per|you': 'v|do pro:per|you', # v|do
+    'v|gas pro:dem|this': 'v|equals n|gas-BARE pro:dem|this', # v|equals
+    'Q (mod|do-3s (n|spell pro:int|WHAT pro:dem|that))': 'Q (mod|do-3s (v|spell pro:int|WHAT pro:dem|that))', # v|spell
+    'not (mod|do (adj|mean n|ball-BARE pro:per|you))': 'not (mod|do (v|mean n|ball-BARE pro:per|you))', # v|mean
+    'Q (mod|do-past (prep|like pro:per|it pro:per|you))': 'Q (mod|do-past (v|like pro:per|it pro:per|you))', # v|like
+    'Q (pro:int|WHAT pro:per|it)': 'Q (v|equals pro:int|WHAT pro:per|it)', # always missing equals fsr
+    'not (mod|will (v|frighten pro:per|you pro:sub|she))': 'not (mod|will (v|frighten pro:per|you pro:sub|she))', # always missing equals fsr
+    "n|boy's' (hasproperty pro:dem|that adj|hat) pro:dem|that": "v|equals (det:art|a (adj|boy's' n|hat)) pro:dem|that", # always missing equals fsr
+    'not (v|cool pro:per|it)': 'not (hasproperty adj|cool pro:per|it)',
+    'Q (mod|~genmod (v|say pro:int|WHAT pro:sub|i))': 'Q (mod|do-past (v|say pro:int|WHAT pro:sub|i))',
+    'Q (n|bit (det:poss|your n|pants) pro:int|WHO)': 'Q (v|bite-past (det:poss|your n|pants) pro:int|WHO)',
+    'hasproperty pro:dem|this adj|ice+cream': 'v|equals n|ice-BARE pro:dem|this',
+    'lambda $0_{r}.Q(co|alright_3(pro:sub|he_2,$0))': 'v|equals n|ice-BARE pro:dem|this',
     #'cop|~be (qn|another n|story)': 'v|exist (qn|another n|story)', # v|exist
     # Hagar
     'v|ciyēr pro:per|ʔat n|ʕigūl-BARE': 'v|ciyēr you n|ʕigūl-BARE', # split anything into two words like it is in the sent (which may well be mistranscribed)
