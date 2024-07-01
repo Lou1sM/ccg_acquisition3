@@ -40,7 +40,7 @@ def base_cats_from_str(unstripped_str):
         ss = ss[1:-1].strip()
     if ss == 'not':
         is_semantic_leaf = True
-        sem_cats = set(['S|NP|(S|NP)', 'VP|VP'])
+        sem_cats = set(['S|NP|(S|NP)', 'VP|VP', 'Sq|VP|NP|(Sq|VP|NP)'])
         #if had_initial_q:
         #    sem_cats = set(['S|NP|(S|NP)', 'VP|VP', 'Sq|Sq'])
         #else:
@@ -217,8 +217,11 @@ def get_cmp_of_lfs(f_str,g_str):
 def possible_syncs(sem_cat):
     if is_atomic(sem_cat):
         return [sem_cat]
-    out_cat,slash,in_cat = cat_components(maybe_debrac(sem_cat),'|')
-    return [rest_out+sd+maybe_brac(rest_in) for sd in ('\\','/') for rest_in in possible_syncs(in_cat) for rest_out in possible_syncs(out_cat)]
+    out_cat,slash,in_cat = cat_components(maybe_debrac(sem_cat))
+    if slash == '|':
+        return [rest_out+sd+maybe_brac(rest_in) for sd in ('\\','/') for rest_in in possible_syncs(in_cat) for rest_out in possible_syncs(out_cat)]
+    else:
+        return [sem_cat]
 
 def apply_sem_cats(fsc, gsc):
     hits = re.findall(fr'[\\/\|]\(?{re.escape(gsc)}\)?$',fsc.replace('\\','\\\\'))
@@ -492,14 +495,12 @@ def get_combination(left_cat,right_cat):
     else:
         left_out, left_slash, left_in = cat_components(left_cat)
         right_out, right_slash, right_in = cat_components(right_cat)
-        if left_slash != right_slash and '|' not in [left_slash ,right_slash]: # skip crossed composition
-            return None, None
-        elif maybe_debrac(left_in) == maybe_debrac(right_out):
+        #if left_slash != right_slash and '|' not in [left_slash ,right_slash]: # skip crossed composition
+            #return None, None
+        if maybe_debrac(left_in) == maybe_debrac(right_out):
             combined, rule = ''.join((left_out, left_slash, right_in)), 'fwd_cmp'
         elif maybe_debrac(left_out) == maybe_debrac(right_in):
             combined, rule = ''.join((right_out, right_slash, left_in)), 'bck_cmp'
-        #elif non_directional(left_in) == right_in or non_directional(right_in) == left_in:
-            #combined, rule = ''.join((right_out, right_slash, left_in)), 'bck_cmp' what was I doing with this?
         else:
             return None,None
     if combined in ['S|N','S|N|NP']:
@@ -555,23 +556,17 @@ def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
         gout,gslash,gin = cat_components(g_cat)
     except ValueError:
         breakpoint()
-    #assert maybe_debrac(pin) == maybe_debrac(gin)
-    #if is_atomic(gout): # only consider if g is type-raised and in that case has slash
-        #return None, None
-    #elif gslash == '\\' or pslash == '\\': # disallow bck cmp for now
-        #return None, None
-    #elif sem_only:
     if gslash not in ['|', pslash]:
         return None, None
     if pin != gin:
         return None, None
     if sem_only:
         assert pslash == '|' and gslash == '|'
-        return maybe_brac(pout) + '|' + maybe_brac(gout), g_cat # hard-coding fwd slash
+        return maybe_brac(pout) + '|' + maybe_brac(gout), g_cat
     else:
         #goutout,gout_slash,goutin = cat_components(gout,allow_atomic=True)
         #composed_cat = goutout + '\\' + goutin # has to be mirror of the main slash
-        new_f = pout + pslash + maybe_brac(gout)
+        new_f = pout + '|' + maybe_brac(gout) # underdetermined direction cuz could be crossed-cmp
         new_g = gout + pslash + gin
         return new_f, new_g
 

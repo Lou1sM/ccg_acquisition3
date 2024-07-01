@@ -66,7 +66,7 @@ pos_marking_dict = {
                     'n:let':set(['NP']),
                     'n:prop':set(['NP']),
                     'n:pt':set(['N']), # seems to be for nouns with plural morph.]), like scissors
-                    'neg':set(['(S|NP)|(S|NP)', 'VP|VP', '(Sq|NP)|(Sq|NP)']),
+                    #'neg':set(['(S|NP)|(S|NP)', 'VP|VP', '(Sq|NP)|(Sq|NP), Sq|VP|NP|(Sq|VP|NP)']),
                     #'neg':set(['S|S','(S|NP)|(S|NP)','(S|NP|NP)|(S|NP|NP)']), # ?
                     'on':set(['X']),
                     'part':set(['X']),

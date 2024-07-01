@@ -225,7 +225,6 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
         if (y,x) in self.prob_cache:
             return self.prob_cache[(y,x)]
         assert x != 'NP + S/NP\\NP' or not self.is_training
-        #x, y = non_directional(x), non_directional(y)
         if not comb_either_way_around(y, x):
             prob = 0
         else:
@@ -419,7 +418,7 @@ class LanguageAcquirer():
                 specified_cats = {'Sq'}
             elif 'lambda' in lf_str:
                 specified_cats = {'VP'}
-            elif len(lf_str.split())==2 and lf_str.startswith('prep'):
+            elif len(split_respecting_brackets(lf_str))==2 and lf_str.startswith('prep'):
                 specified_cats = {'S|NP|(S|NP)'}
             elif len(lf_str.split())==2 and lf_str.split()[1].startswith('n|'):
                 specified_cats = {'NP'}
@@ -529,6 +528,10 @@ class LanguageAcquirer():
                 assert len(learner.buffers) == ARGS.n_distractors
             else:
                 assert len(learner.buffers) <= ARGS.n_distractors
+        good = self.syntaxl.prob('Swhq/(Sq/NP) + Sq/NP', 'Swhq')
+        bad = self.syntaxl.prob('Swhq/(Sq\\NP) + Sq\\NP', 'Swhq')
+        if good<bad:
+            breakpoint()
         return new_problem_list
 
     def as_leaf(self, node):

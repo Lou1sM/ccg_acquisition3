@@ -669,56 +669,56 @@ class ParseNode():
             self.is_leaf = True
 
     def add_splits(self, f, g, left_words, right_words, direction, split_type):
-        if len(g.sem_cats) == 0:
-            breakpoint()
+        all_f_syncs = []
         all_g_syncs = [x for s in g.sem_cats for x in possible_syncs(s)]
         fshell = f.subtree_string(as_shell=True, alpha_normalized=True)
         gshell = g.subtree_string(as_shell=True, alpha_normalized=True)
+        #for fsc in f.sem_cats:
+        #    fin, fslash, fout = cat_components(fsc)
+        #    assert fslash=='|'
+        #    dir_fslash = '/' if direction=='fwd' else '\\'
+        #    new_f_sync = fin + dir_fslash + fout
+        #    if not combines_subj_first(fshell) or bool(refwdfwdtranscat.match(new_f_sync)):
+        #        all_f_syncs.append(new_f_sync)
         if combines_subj_first(gshell):
             all_g_syncs = [x for x in all_g_syncs if refwdfwdtranscat.match(x) or rebckbcktranscat.match(x)]
+        #if self.lf_str == 'lambda $0.lambda $1.not (v|equals $0 $1)' and self.sync=='S\\NP/NP' and direction=='bck':
+            #breakpoint()
+        if f.subtree_string(alpha_normalized=True) == 'lambda $0.Q (cop|pres-2s ($0 pro:per|you))' and g.subtree_string(alpha_normalized=True) == 'lambda $0.lambda $1.v|do-prog $0 $1' and direction=='fwd' and right_words==['doing']:
+            breakpoint()
         for gsc in all_g_syncs:
-            #if bool(re.match(r'S/[A-Za-z\(\|\)]+\\NP$', gsc)):
-                #continue
-            if '|' in gsc:
-                breakpoint()
+            if split_type == 'app':
+                possible_f_syncs = [f'{self.sync}/{maybe_brac(gsc)}' if direction=='fwd' else f'{self.sync}\\{maybe_brac(gsc)}']
+            else:
+                assert split_type == 'cmp'
+                f_semi_sync, g_sync = f_cmp_from_parent_and_g(self.sync, gsc, sem_only=False)
+                if g_sync is None:
+                    continue
+                possible_f_syncs = []
+                for pfs in possible_syncs(f_semi_sync):
+                    fin, fslash, fout = cat_components(pfs)
+                    if (fslash=='/' and direction=='fwd') or (fslash=='\\' and direction=='bck'):
+                        possible_f_syncs.append(pfs)
             if direction=='fwd':
-                g_child = ParseNode(g,right_words,parent=self,node_type='right_fwd_app', sync=gsc)
-                if split_type == 'app':
-                    f_sync = f'{self.sync}/{maybe_brac(gsc)}'
-                else:
-                    assert split_type == 'cmp'
-                    f_sync, g_sync = f_cmp_from_parent_and_g(self.sync, gsc, sem_only=False)
-                    if f_sync == 'S/(N\\N)\\NP':
+                for fsc in possible_f_syncs:
+                    if fsc == 'S\\NP/(S/NP)' and gsc == 'S\\NP\\NP':
                         breakpoint()
-                    if g_sync is None:
+                    if combines_subj_first(fshell) and not bool(refwdfwdtranscat.match(fsc)):
                         continue
-                    if not is_congruent(g_sync, gsc):
-                        breakpoint()
-                if combines_subj_first(fshell) and not bool(refwdfwdtranscat.match(f_sync)):
-                        continue
-                f_child = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',sync=f_sync)
-                self.append_split(f_child, g_child, 'fwd_app')
+                    g_child = ParseNode(g,right_words,parent=self,node_type='right_fwd_app', sync=gsc)
+                    f_child = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',sync=fsc)
+                    self.append_split(f_child, g_child, 'fwd_app')
             else:
                 assert direction=='bck'
-                g_child = ParseNode(g,left_words,parent=self,node_type='left_bck_app', sync=gsc)
-                if split_type == 'app':
-                    f_sync = f'{self.sync}\\{maybe_brac(gsc)}'
-                else:
-                    assert split_type == 'cmp'
-                    f_sync, g_sync = f_cmp_from_parent_and_g(self.sync, gsc, sem_only=False)
-                    if f_sync == 'S/(N\\N)\\NP':
-                        breakpoint()
-                    if g_sync is None:
+                for fsc in possible_f_syncs:
+                    if combines_subj_first(fshell) and not bool(rebckbcktranscat.match(fsc)):
                         continue
-                    if not is_congruent(g_sync, gsc):
-                        breakpoint()
-                if combines_subj_first(fshell) and not bool(rebckbcktranscat.match(f_sync)):
-                        continue
-                f_child = ParseNode(f,right_words,parent=self,node_type='right_bck_app',sync=f_sync)
-                self.append_split(g_child, f_child, 'bck_app')
-            if f.lf_str == 'lambda $1.lambda $0.not (mod|will (v|frighten $0 $1))':
-                if f_sync not in ('S/NP/NP', 'S\\NP\\NP'):
-                    breakpoint()
+                    g_child = ParseNode(g,left_words,parent=self,node_type='left_bck_app', sync=gsc)
+                    f_child = ParseNode(f,right_words,parent=self,node_type='right_bck_app',sync=fsc)
+                    self.append_split(g_child, f_child, 'bck_app')
+            #if f.lf_str == 'lambda $1.lambda $0.not (mod|will (v|frighten $0 $1))':
+                #if f_sync not in ('S/NP/NP', 'S\\NP\\NP'):
+                    #breakpoint()
 
     def append_split(self,left,right,combinator):
         left.siblingify(right)
@@ -760,7 +760,7 @@ class ParseNode():
     def __eq__(self,other):
         if not isinstance(other,ParseNode):
             return False
-        return self.lf_str == other.lf_str and self.words == other.words
+        return self.lf_str == other.lf_str and self.words == other.words and self.sync==other.sync
 
     def __hash__(self):
         return hash(self.lf_str + ' '.join(self.words))
@@ -775,6 +775,8 @@ class ParseNode():
         all_probs = [('leaf','leaf',self.prob_as_leaf(syntaxl,shell_meaningl,meaningl,wordl))]
         for ps in self.splits:
             split_prob = syntaxl.prob(f'{ps["left"].sync} + {ps["right"].sync}',self.sync)
+            if split_prob == 0:
+                breakpoint()
             left_below_prob = ps['left'].propagate_below_probs(syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map)
             right_below_prob = ps['right'].propagate_below_probs(syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map)
             all_probs.append((ps['left'], ps['right'], left_below_prob*right_below_prob*split_prob))
@@ -938,7 +940,6 @@ def can_compose_traised(fcat, gcat):
         return 'cmp'
     return 'no'
 
-
 def equal_maybe_typeraised(c1, c2):
     if c1=='X' or c2=='X':
         return True
@@ -951,4 +952,4 @@ def equal_maybe_typeraised(c1, c2):
     return False
 
 def combines_subj_first(shell_lf):
-    return shell_lf.startswith('lambda $0.lambda $1') and 'vconst $1 $0' in shell_lf
+    return shell_lf.startswith('lambda $0.lambda $1') and ('vconst $1 $0' in shell_lf or 'hasproperty $1 $0' in shell_lf)
