@@ -231,8 +231,6 @@ class CCGDirichletProcessLearner(BaseDirichletProcessLearner):
         else:
             prob = self._prob(y,x)
         self.prob_cache[(y,x)] = prob
-        if prob != self._prob(y,x):
-            breakpoint()
         return prob
 
 class ShellMeaningDirichletProcessLearner(BaseDirichletProcessLearner):
@@ -709,6 +707,7 @@ class LanguageAcquirer():
                 pn['sync'] = pn['sem_cat']
                 pn['prob'] = pn['prob']*self.root_sem_cat_memory.prob(pn['sync'])
 
+        probs_table[N-1, 0] = self.prune_beam(probs_table[N-1,0])
         if len(probs_table[N-1,0]) == 0:
             return 'No parse found'
 
@@ -859,55 +858,56 @@ def remove_vowels(w):
     return w
 
 if __name__ == "__main__":
-    ARGS = argparse.ArgumentParser()
-    ARGS.add_argument("--cat-to-sample-from", type=str, default='S')
-    ARGS.add_argument("--condition-on-syncats", action="store_true")
-    ARGS.add_argument("--db-after", action="store_true")
-    ARGS.add_argument("--print-train-interps", action="store_true")
-    ARGS.add_argument("--print-gtparsestrs", action="store_true")
-    ARGS.add_argument("--verbose-as", action="store_true")
-    ARGS.add_argument("--db-at", type=int, default=-1)
-    ARGS.add_argument("--db-parse", action="store_true")
-    ARGS.add_argument("--db-prob-changes-above", type=float, default=1.)
-    ARGS.add_argument("--db-word-parse", type=str, default='')
-    ARGS.add_argument("--dblfs", type=str)
-    ARGS.add_argument("--dbr", type=str)
-    ARGS.add_argument("--dbw", type=str)
-    ARGS.add_argument("--jdbr", type=str)
-    ARGS.add_argument("--jdblfs", type=str)
-    ARGS.add_argument("--dbsent", type=str, default='')
-    ARGS.add_argument("--dbsss", type=str)
-    ARGS.add_argument("--eval-alpha", type=float, default=1.0)
-    ARGS.add_argument("--exclude-copulae", action="store_true")
-    ARGS.add_argument("--exclude-points", type=int, nargs='+', default=[])
-    ARGS.add_argument("--expname", type=str,default='tmp')
-    ARGS.add_argument("--expname-for-plot-titles", type=str)
-    ARGS.add_argument("--jreload-from", type=str)
-    ARGS.add_argument("--ignore-words", type=str, nargs='+')
-    ARGS.add_argument("--lr", type=float, default=1.0)
-    ARGS.add_argument("--max-lf-len", type=int, default=6)
-    ARGS.add_argument("--max-sent-len", type=int, default=6)
-    ARGS.add_argument("--n-distractors", type=int, default=0)
-    ARGS.add_argument("--n-dpoints", type=int, default=-1)
-    ARGS.add_argument("--n-epochs", type=int, default=1)
-    ARGS.add_argument("--n-generate", type=int, default=0)
-    ARGS.add_argument("--n-test", type=int,default=5)
-    ARGS.add_argument("--overwrite", action="store_true")
-    ARGS.add_argument("--reload-from", type=str)
-    ARGS.add_argument("--remove-vowels", action="store_true")
-    ARGS.add_argument("--show-graphs", action="store_true")
-    ARGS.add_argument("--show-plots", action="store_true")
-    ARGS.add_argument("--show-splits", action="store_true")
-    ARGS.add_argument("--shuffle", action="store_true")
-    ARGS.add_argument("--start-from", type=int, default=0)
-    ARGS.add_argument("--suppress-prints", action="store_true")
-    ARGS.add_argument("--test-frac", type=float, default=0.1)
-    ARGS.add_argument("--test-gts", action="store_true")
-    ARGS.add_argument("--db-before", action="store_true")
-    ARGS.add_argument("-d", "--dset", type=str, default='adam')
-    ARGS.add_argument("-t","--is-test", action="store_true")
-    ARGS.add_argument("-tt","--is-short-test", action="store_true")
-    ARGS = ARGS.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cat-to-sample-from", type=str, default='s')
+    parser.add_argument("--condition-on-syncats", action="store_true")
+    parser.add_argument("--db-after", action="store_true")
+    parser.add_argument("--db-at", type=int, default=-1)
+    parser.add_argument("--db-before", action="store_true")
+    parser.add_argument("--db-parse", action="store_true")
+    parser.add_argument("--db-prob-changes-above", type=float, default=1.)
+    parser.add_argument("--db-word-parse", type=str, default='')
+    parser.add_argument("--dblfs", type=str)
+    parser.add_argument("--dbr", type=str)
+    parser.add_argument("--dbsent", type=str, default='')
+    parser.add_argument("--dbsss", type=str)
+    parser.add_argument("--dbw", type=str)
+    parser.add_argument("--eval-alpha", type=float, default=1.0)
+    parser.add_argument("--exclude-copulae", action="store_true")
+    parser.add_argument("--exclude-points", type=int, nargs='+', default=[])
+    parser.add_argument("--expname", type=str,default='tmp')
+    parser.add_argument("--expname-for-plot-titles", type=str)
+    parser.add_argument("--ignore-words", type=str, nargs='+')
+    parser.add_argument("--jdblfs", type=str)
+    parser.add_argument("--jdbr", type=str)
+    parser.add_argument("--jreload-from", type=str)
+    parser.add_argument("--lr", type=float, default=1.0)
+    parser.add_argument("--max-lf-len", type=int, default=6)
+    parser.add_argument("--max-sent-len", type=int, default=6)
+    parser.add_argument("--n-distractors", type=int, default=0)
+    parser.add_argument("--n-dpoints", type=int, default=-1)
+    parser.add_argument("--n-epochs", type=int, default=1)
+    parser.add_argument("--n-generate", type=int, default=0)
+    parser.add_argument("--n-test", type=int,default=5)
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--print-gtparsestrs", action="store_true")
+    parser.add_argument("--print-train-interps", action="store_true")
+    parser.add_argument("--reload-from", type=str)
+    parser.add_argument("--remove-vowels", action="store_true")
+    parser.add_argument("--show-graphs", action="store_true")
+    parser.add_argument("--show-plots", action="store_true")
+    parser.add_argument("--show-splits", action="store_true")
+    parser.add_argument("--shuffle", action="store_true")
+    parser.add_argument("--start-from", type=int, default=0)
+    parser.add_argument("--suppress-prints", action="store_true")
+    parser.add_argument("--test-frac", type=float, default=0.1)
+    parser.add_argument("--test-gts", action="store_true")
+    parser.add_argument("--verbose-as", action="store_true")
+    parser.add_argument("--vocab-thresh", type=float, default=0.1)
+    parser.add_argument("-d", "--dset", type=str, default='adam')
+    parser.add_argument("-t","--is-test", action="store_true")
+    parser.add_argument("-tt","--is-short-test", action="store_true")
+    ARGS = parser.parse_args()
 
     ARGS.is_test = ARGS.is_test or ARGS.is_short_test
     if ARGS.dset.lower() not in ARGS.expname.lower():
@@ -1127,7 +1127,7 @@ if __name__ == "__main__":
             file_print('Final word order probs:',f)
             for k,v in all_word_order_probs[-1].items():
                 file_print(f'{k}: {v:.6f}',f)
-    la.vocab_thresh = 0.1
+    la.vocab_thresh = ARGS.vocab_thresh
     #la.parse('you can n\'t eat'.split())
     cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
     #for dp in cant_points:
