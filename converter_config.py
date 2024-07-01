@@ -314,7 +314,8 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'Q (mod|~genmod (v|say pro:int|WHAT pro:sub|i))': 'Q (mod|do-past (v|say pro:int|WHAT pro:sub|i))',
     'Q (n|bit (det:poss|your n|pants) pro:int|WHO)': 'Q (v|bite-past (det:poss|your n|pants) pro:int|WHO)',
     'hasproperty pro:dem|this adj|ice+cream': 'v|equals n|ice-BARE pro:dem|this',
-    'lambda $0_{r}.Q(co|alright_3(pro:sub|he_2,$0))': 'v|equals n|ice-BARE pro:dem|this',
+    'Q (mod|do-past (n|miss pro:indef|one pro:per|you))': 'Q (mod|do-past (v|miss pro:indef|one pro:per|you))',
+    'v|have-3s det:poss|his n:prop|paul': 'v|have-3s pro:poss|his n:prop|paul',
     #'cop|~be (qn|another n|story)': 'v|exist (qn|another n|story)', # v|exist
     # Hagar
     'v|ciyēr pro:per|ʔat n|ʕigūl-BARE': 'v|ciyēr you n|ʕigūl-BARE', # split anything into two words like it is in the sent (which may well be mistranscribed)

@@ -111,7 +111,7 @@ def _decommafy_inner(parse):
             elif is_adj(pred):
                 dpred = decommafy(pred)
                 dpred_pos, dpred_word = dpred.split('|')
-                return f'hasproperty adj|{dpred_word} {decommafy(arg_splits[0])}'
+                return f'hasproperty {decommafy(arg_splits[0])} adj|{dpred_word}' # will be inverted
         recursed_list = [decommafy(x) for x in arg_splits]
         if pred in ['and', '']: # can be '' because do-support
             debracced_rl = [maybe_debrac(recursed_list[0])] + recursed_list[1:]
@@ -242,6 +242,8 @@ def lf_preproc(lf, sent):
     if 'mod|~genmod' in dlf and 'would' not in sent and '\'d' not in sent:
         breakpoint()
     dlf = dlf.replace('mod|~genmod', 'mod|would')
+    if dlf.startswith('hasproperty pro:dem|this'):
+        breakpoint()
     return dlf
 
 def reformat_cop(lf, sent):
