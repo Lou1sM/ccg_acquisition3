@@ -673,19 +673,10 @@ class ParseNode():
         all_g_syncs = [x for s in g.sem_cats for x in possible_syncs(s)]
         fshell = f.subtree_string(as_shell=True, alpha_normalized=True)
         gshell = g.subtree_string(as_shell=True, alpha_normalized=True)
-        #for fsc in f.sem_cats:
-        #    fin, fslash, fout = cat_components(fsc)
-        #    assert fslash=='|'
-        #    dir_fslash = '/' if direction=='fwd' else '\\'
-        #    new_f_sync = fin + dir_fslash + fout
-        #    if not combines_subj_first(fshell) or bool(refwdfwdtranscat.match(new_f_sync)):
-        #        all_f_syncs.append(new_f_sync)
         if combines_subj_first(gshell):
             all_g_syncs = [x for x in all_g_syncs if refwdfwdtranscat.match(x) or rebckbcktranscat.match(x)]
-        #if self.lf_str == 'lambda $0.lambda $1.not (v|equals $0 $1)' and self.sync=='S\\NP/NP' and direction=='bck':
+        #if f.subtree_string(alpha_normalized=True) == 'lambda $0.Q (cop|pres-2s ($0 pro:per|you))' and g.subtree_string(alpha_normalized=True) == 'lambda $0.lambda $1.v|do-prog $0 $1' and direction=='fwd' and right_words==['doing']:
             #breakpoint()
-        if f.subtree_string(alpha_normalized=True) == 'lambda $0.Q (cop|pres-2s ($0 pro:per|you))' and g.subtree_string(alpha_normalized=True) == 'lambda $0.lambda $1.v|do-prog $0 $1' and direction=='fwd' and right_words==['doing']:
-            breakpoint()
         for gsc in all_g_syncs:
             if split_type == 'app':
                 possible_f_syncs = [f'{self.sync}/{maybe_brac(gsc)}' if direction=='fwd' else f'{self.sync}\\{maybe_brac(gsc)}']
@@ -716,9 +707,6 @@ class ParseNode():
                     g_child = ParseNode(g,left_words,parent=self,node_type='left_bck_app', sync=gsc)
                     f_child = ParseNode(f,right_words,parent=self,node_type='right_bck_app',sync=fsc)
                     self.append_split(g_child, f_child, 'bck_app')
-            #if f.lf_str == 'lambda $1.lambda $0.not (mod|will (v|frighten $0 $1))':
-                #if f_sync not in ('S/NP/NP', 'S\\NP\\NP'):
-                    #breakpoint()
 
     def append_split(self,left,right,combinator):
         left.siblingify(right)
@@ -817,6 +805,8 @@ class ParseNode():
                     breakpoint()
                     raise SemCatError('Some syncat is not consistent with any semcat')
         #syntax_prob = max(syntaxl.prob('leaf',ssync) for ssync in syncs)
+        #if self.words == 'does that spell'.split() and self.lf_str == 'lambda $0.Q (mod|do-3s (v|spell $0 pro:dem|that))':
+            #breakpoint()
         syntax_prob = syntaxl.prob('leaf',sync)
         shmeaning_prob = max(shell_meaningl.prob(shell_lf, sc) for sc in sem_cats)
         meaning_prob = meaningl.prob(lf, shell_lf)

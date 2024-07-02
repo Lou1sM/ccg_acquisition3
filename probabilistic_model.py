@@ -10,7 +10,7 @@ from copy import copy
 from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, is_direct_congruent, combine_lfs, logical_type_raise, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str, non_directional
+from utils import file_print, get_combination, combine_lfs, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str, non_directional, cat_components, is_type_raised, is_atomic, maybe_debrac
 from errors import CCGLearnerError
 from time import time
 import argparse
@@ -530,8 +530,8 @@ class LanguageAcquirer():
                 assert len(learner.buffers) <= ARGS.n_distractors
         good = self.syntaxl.prob('Swhq/(Sq/NP) + Sq/NP', 'Swhq')
         bad = self.syntaxl.prob('Swhq/(Sq\\NP) + Sq\\NP', 'Swhq')
-        if good<bad:
-            breakpoint()
+        #if good<bad:
+        print(f'good: {good:.5f} bad: {bad:.5f}')
         return new_problem_list
 
     def as_leaf(self, node):
@@ -638,9 +638,12 @@ class LanguageAcquirer():
         beam = self.prune_beam(beam)
         beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat)/self.shmeaningl.marg_prob(b['shell_lf'])*self.syntaxl.marg_prob(sem_cat))
             for sem_cat in self.sem_cat_vocab for b in beam if sem_cat!='X']
-        beam = [b for b in beam if 'X' in base_cats_from_str(b['lf'])[0] or b['sem_cat'] in base_cats_from_str(b['lf'])[0]]
+        #beam = [b for b in beam if 'X' in base_cats_from_str(b['lf'])[0] or b['sem_cat'] in base_cats_from_str(b['lf'])[0]]
+        beam = [b for b in beam if lf_basecat_congruent(b['lf'], b['sem_cat'])]
         beam = self.prune_beam(beam)
-        beam = [dict(b,prob=b['prob']*self.syntaxl.prob('leaf',b['sem_cat'])) for b in beam]
+        beam = [dict(b, sync=ps) for b in beam for ps in possible_syncs(b['sem_cat'])]
+        beam = self.prune_beam(beam)
+        beam = [dict(b,prob=b['prob']*self.syntaxl.prob('leaf',b['sync'])) for b in beam]
         beam = self.prune_beam(beam)
         if any(x['lf'] == 'Q (mod|do-past pro:per|you) n|name' for x in beam):
             breakpoint()
@@ -664,8 +667,9 @@ class LanguageAcquirer():
                 for left_idx, left_option in enumerate(left_chunk_probs):
                     for right_idx, right_option in enumerate(right_chunk_probs):
                         assert left_option['words'] + ' ' + right_option['words'] == word_span
-                        l_cat, r_cat = left_option['sem_cat'], right_option['sem_cat']
-                        combined,rule = get_combination(l_cat,r_cat)
+                        l_cat, r_cat = left_option['sync'], right_option['sync']
+                        #combined,rule = get_combination(l_cat, r_cat, enforce_q_match=False)
+                        combined,rule = get_combination(l_cat, r_cat)
                         if combined is None:
                             continue
                         direction,comb_type = rule.split('_')
@@ -685,20 +689,28 @@ class LanguageAcquirer():
                             continue
                         if not lf_cat_congruent(lf, combined):
                             continue
-                        for csync in possible_syncs(combined):
-                            lsync, rsync = infer_slash(left_option['sem_cat'],right_option['sem_cat'],csync,rule)
+                        for csync in possible_syncs(combined, allow_vps=False):
+                            #lsync, rsync = infer_slash(left_option['sem_cat'],right_option['sem_cat'],csync,rule)
+                            lsync, rsync = left_option['sync'], right_option['sync']
                             split = lsync + ' + ' + rsync
                             mem_correction_semcat = self.syntaxl.marg_prob(csync)/self.syntaxl.marg_prob(left_option['sem_cat'])/self.syntaxl.marg_prob(right_option['sem_cat'])
                             prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,csync)*mem_correction_semcat
                             bckpntr = (k,j,left_idx), (i-k,j+k,right_idx)
                             #backpointer contains the coords in probs_table (except x is +1), and the idx in the
                             #beam, of the two locations that the current one could be split into
-                            #if left_chunk_probs.index(left_option)==right_chunk_probs.index(right_option)==self.beam_size-1:
+                            #if left_chunk_probs.index(left_option)==right_chunk_probs.index(right_option)==self.beam_size-1 and word_span=='what did you do':
+                                #breakpoint()
+                            #if left_option['words'] == 'did you' and right_option['words'] == 'do' and left_option['lf'] == 'lambda $0.Q (mod|do-past ($0 pro:per|you))' and right_option['lf']=='lambda $0.lambda $1.v|do $0 $1':# and right_option['sem_cat']=='VP|NP':
                                 #breakpoint()
                             pn = {'sem_cat':combined,'lf':lf,'backpointer':bckpntr,'rule':rule,'prob':prob,'words':word_span,'sync':csync}
                             possible_nexts.append(pn)
+            to_add = []
+            for lf, sync in set((x['lf'], x['sync']) for x in possible_nexts):
+                matching_examples = [x for x in possible_nexts if x['lf']==lf and x['sync']==sync]
+                best_example = max(matching_examples, key=lambda x:x['prob'])
+                to_add.append(best_example)
 
-            to_add = self.prune_beam(possible_nexts)
+            to_add = self.prune_beam(to_add)
             probs_table[i-1,j] = to_add
 
         for a in range(2,N+1):
@@ -726,7 +738,8 @@ class LanguageAcquirer():
                     (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = backpointer
                     left_split = probs_table[left_len-1,left_pos][left_idx]
                     right_split = probs_table[right_len-1,right_pos][right_idx]
-                    lsync, rsync = infer_slash(left_split['sem_cat'],right_split['sem_cat'],item['sync'],item['rule'])
+                    #lsync, rsync = infer_slash(left_split['sem_cat'],right_split['sem_cat'],item['sync'],item['rule'])
+                    lsync, rsync = left_split['sync'], right_split['sync']
                     left_split = dict(left_split,idx=item['idx'][:-1] + '01',sync=lsync, parent=item)
                     right_split = dict(right_split,idx=item['idx'][:-1] + '21', sync=rsync, parent=item)
                     assert 'sync' in left_split.keys() and 'sync' in right_split.keys()
@@ -860,6 +873,25 @@ def remove_vowels(w):
         w = w.replace(v, '')
     return w
 
+def lf_basecat_congruent(lf, semcat):
+    basecats, _ = base_cats_from_str(lf)
+    if 'X' in basecats:
+        return True
+    if semcat in basecats:
+        return True
+    for bsc in basecats:
+        if is_type_raised(lf):
+            if is_atomic(semcat):
+                continue
+            outcat, _, incat = cat_components(semcat)
+            if is_atomic(incat):
+                continue
+            outincat, _, inincat = cat_components(maybe_debrac(incat))
+            if outincat==outcat and inincat==bsc:
+                return True
+    return False
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cat-to-sample-from", type=str, default='s')
@@ -906,7 +938,7 @@ if __name__ == "__main__":
     parser.add_argument("--test-frac", type=float, default=0.1)
     parser.add_argument("--test-gts", action="store_true")
     parser.add_argument("--verbose-as", action="store_true")
-    parser.add_argument("--vocab-thresh", type=float, default=0.1)
+    parser.add_argument("--vocab-thresh", type=float, default=0.0)
     parser.add_argument("-d", "--dset", type=str, default='adam')
     parser.add_argument("-t","--is-test", action="store_true")
     parser.add_argument("-tt","--is-short-test", action="store_true")
@@ -1135,9 +1167,12 @@ if __name__ == "__main__":
     cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
     #for dp in cant_points:
         #la.test_with_gt(dp['lf'], dp['words'])
-    la.parse('you \'re doing it'.split())
+    la.parse('I can n\'t eat'.split())
+    la.parse('what did you do'.split())
+    la.parse('what d you want'.split())
+    la.parse('what will I take'.split())
+    la.parse('what can he eat'.split())
     la.parse('you \'re missing it'.split())
-    breakpoint()
     la.parse('do you like it'.split())
     la.parse('you see him'.split())
     la.parse('you lost a pencil'.split())

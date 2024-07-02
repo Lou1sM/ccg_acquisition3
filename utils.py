@@ -214,14 +214,17 @@ def get_cmp_of_lfs(f_str,g_str):
     new_var_num = max([int(x[1:]) for x in var_nums])+1
     return f'lambda ${new_var_num}.({f_str}) (({g_str}) ${new_var_num})'
 
-def possible_syncs(sem_cat):
+def possible_syncs(sem_cat, allow_vps=False):
     if is_atomic(sem_cat):
         return [sem_cat]
     out_cat,slash,in_cat = cat_components(maybe_debrac(sem_cat))
     if slash == '|':
-        return [rest_out+sd+maybe_brac(rest_in) for sd in ('\\','/') for rest_in in possible_syncs(in_cat) for rest_out in possible_syncs(out_cat)]
+        fwd_bcks = [rest_out+sd+maybe_brac(rest_in) for sd in ('\\','/') for rest_in in possible_syncs(in_cat) for rest_out in possible_syncs(out_cat)]
+
     else:
-        return [sem_cat]
+        fwd_bcks = [rest_out+slash+maybe_brac(rest_in) for rest_in in possible_syncs(in_cat) for rest_out in possible_syncs(out_cat)]
+    #return fwd_bcks + ['VP'] if (allow_vps and non_directional(sem_cat) == 'S|NP') else fwd_bcks
+    return fwd_bcks
 
 def apply_sem_cats(fsc, gsc):
     hits = re.findall(fr'[\\/\|]\(?{re.escape(gsc)}\)?$',fsc.replace('\\','\\\\'))
@@ -509,6 +512,7 @@ def get_combination(left_cat,right_cat):
         return combined, rule
 
 def infer_slash(lcat,rcat,parent_cat,rule):
+    possible_lrs = []
     if rule == 'fwd_app':
         to_remove = len(rcat)+1 if is_atomic(rcat) else len(rcat)+3
         out_lcat = lcat[:-to_remove]
@@ -519,6 +523,7 @@ def infer_slash(lcat,rcat,parent_cat,rule):
             #assert is_direct_congruent(lcat[:-len(rcat)-3],parent_cat)
         inferredlcat = out_lcat + '/' + maybe_brac(rcat)
         inferredrcat = rcat
+        possible_lrs.append((inferredlcat, inferredrcat))
     elif rule == 'bck_app':
         to_remove = len(lcat)+1 if is_atomic(lcat) else len(lcat)+3
         out_rcat = rcat[:-to_remove]
@@ -530,16 +535,21 @@ def infer_slash(lcat,rcat,parent_cat,rule):
             #assert is_direct_congruent(rcat[:-len(lcat)-3],parent_cat)
         inferredrcat = out_rcat + '\\' + lcat
         inferredlcat = lcat
+        possible_lrs.append((inferredlcat, inferredrcat))
     else:
         left_out, left_slash, left_in = cat_components(lcat)
         right_out, right_slash, right_in = cat_components(rcat)
-        assert left_slash == right_slash
+        parent_out, parent_slash, parent_in = cat_components(parent_cat)
     if rule == 'fwd_cmp':
-        inferredlcat = left_out + '/' + right_in
-        inferredrcat = rcat
+        assert ( maybe_debrac(right_out) == maybe_debrac(left_in))
+        for ps in possible_syncs(maybe_debrac(left_in), allow_vps=True):
+            inferredlcat = left_out + '/' + ps
+            inferredrcat = ps + parent_slash + right_in
     elif rule == 'bck_cmp':
-        inferredrcat = right_out + '\\' + left_in
-        inferredlcat = lcat
+        assert maybe_debrac(left_out) == maybe_debrac(right_in)
+        for ps in possible_syncs(maybe_debrac(right_in), allow_vps=True):
+            inferredrcat = right_out + '\\' + ps
+            inferredlcat = ps + parent_slash + left_in
 
     elif '\\' not in inferredlcat and '/' not in inferredlcat and '\\' not in inferredrcat and '/' not in inferredrcat:
         breakpoint()
