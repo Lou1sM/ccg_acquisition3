@@ -630,7 +630,7 @@ class LanguageAcquirer():
             print(f'\'{words}\' not seen before as a leaf')
         if words == ARGS.db_word_parse:
             breakpoint()
-        beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.leaf_lf_memory.prob(lf)} for lf in self.lf_vocab if is_wellformed_lf(lf, should_be_normed=True)]
+        beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.meaningl.marg_prob(lf)} for lf in self.lf_vocab if is_wellformed_lf(lf, should_be_normed=True)]
         beam = self.prune_beam(beam)
 
         beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.meaningl.marg_prob(b['lf'])*self.shmeaningl.marg_prob(shell_lf))
@@ -986,7 +986,7 @@ if __name__ == "__main__":
             sys.exit('no data points match this lf, check for typo')
     else:
         train_data = [] if ARGS.jreload_from is not None else data_to_use[:int(len(data_to_use)*(1-ARGS.test_frac))]
-        test_data = train_data if ARGS.is_test else data_to_use[-len(train_data):]
+        test_data = train_data if ARGS.is_test else data_to_use[int(len(data_to_use)*(1-ARGS.test_frac)):]
     vt = 1 if ARGS.n_dpoints==-1 else ARGS.n_dpoints/len(all_data)
     la = LanguageAcquirer(ARGS.lr, vt)
     if ARGS.reload_from is not None:
@@ -1166,29 +1166,30 @@ if __name__ == "__main__":
     #la.parse('you can n\'t eat'.split())
     cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
     #for dp in cant_points:
-        #la.test_with_gt(dp['lf'], dp['words'])
-    la.parse('I can n\'t eat'.split())
-    la.parse('what did you do'.split())
-    la.parse('what d you want'.split())
-    la.parse('what will I take'.split())
-    la.parse('what can he eat'.split())
-    la.parse('you \'re missing it'.split())
-    la.parse('do you like it'.split())
-    la.parse('you see him'.split())
-    la.parse('you lost a pencil'.split())
-    la.parse('did he see it'.split())
-    la.parse('the pencil dropped the name'.split())
-    la.parse('did the pencil see the name'.split())
-    la.parse('that \'s right'.split())
-    la.parse('you can n\'t see'.split())
-    la.parse('you can n\'t eat'.split())
-    la.parse('did you name it'.split())
-    la.parse('can you find it'.split())
-    la.parse('will you talk'.split())
-    la.parse('are you running'.split())
-    la.parse('I \'m thinking'.split())
-    la.parse('he \'s missing it'.split())
-    la.parse('it \'s eating you'.split())
+    #    la.test_with_gt(dp['lf'], dp['words'])
+    #la.parse('I can n\'t see'.split())
+    #la.parse('he should n\'t hurt you'.split())
+    #la.parse('what did you do'.split())
+    #la.parse('what d you want'.split())
+    #la.parse('what will I take'.split())
+    #la.parse('what can he eat'.split())
+    #la.parse('you \'re missing it'.split())
+    #la.parse('do you like it'.split())
+    #la.parse('you see him'.split())
+    #la.parse('you lost a pencil'.split())
+    #la.parse('did he see it'.split())
+    #la.parse('the pencil dropped the name'.split())
+    #la.parse('did the pencil see the name'.split())
+    #la.parse('that \'s right'.split())
+    #la.parse('you can n\'t see'.split())
+    #la.parse('you can n\'t eat'.split())
+    #la.parse('did you name it'.split())
+    #la.parse('can you find it'.split())
+    #la.parse('will you talk'.split())
+    #la.parse('are you running'.split())
+    #la.parse('I \'m thinking'.split())
+    #la.parse('he \'s missing it'.split())
+    #la.parse('it \'s eating you'.split())
     considered_sem_cats = []
     for dpoint in test_data[:ARGS.n_test]:
         considered_sem_cats += la.parse(dpoint['words'])
