@@ -663,7 +663,6 @@ class LanguageAcquirer():
             for k in range(1,i):
                 left_chunk_probs = probs_table[k-1,j]
                 right_chunk_probs = probs_table[i-k-1,j+k] # total len is always i, -1s bc 0-index
-                print(j,i)
                 for left_idx, left_option in enumerate(left_chunk_probs):
                     for right_idx, right_option in enumerate(right_chunk_probs):
                         assert left_option['words'] + ' ' + right_option['words'] == word_span
@@ -679,8 +678,8 @@ class LanguageAcquirer():
                             f,g = right_option['lf'], left_option['lf']
                         else:
                             breakpoint()
-                        #if comb_type == 'cmp':
-                            #f = logical_type_raise(f)
+                        if comb_type == 'cmp' and (not 'lambda' in f or not 'lambda' in g): # won't be able to cmp then so must be a mistake
+                            continue
                         lf = combine_lfs(f,g,comb_type)
                         if not is_wellformed_lf(lf, should_be_normed=True):
                             continue
@@ -698,10 +697,6 @@ class LanguageAcquirer():
                             bckpntr = (k,j,left_idx), (i-k,j+k,right_idx)
                             #backpointer contains the coords in probs_table (except x is +1), and the idx in the
                             #beam, of the two locations that the current one could be split into
-                            #if left_chunk_probs.index(left_option)==right_chunk_probs.index(right_option)==self.beam_size-1 and word_span=='what did you do':
-                                #breakpoint()
-                            #if left_option['words'] == 'did you' and right_option['words'] == 'do' and left_option['lf'] == 'lambda $0.Q (mod|do-past ($0 pro:per|you))' and right_option['lf']=='lambda $0.lambda $1.v|do $0 $1':# and right_option['sem_cat']=='VP|NP':
-                                #breakpoint()
                             pn = {'sem_cat':combined,'lf':lf,'backpointer':bckpntr,'rule':rule,'prob':prob,'words':word_span,'sync':csync}
                             possible_nexts.append(pn)
             to_add = []
@@ -769,7 +764,8 @@ class LanguageAcquirer():
                 texttree += _simple_draw_graph(x['right_child'], depth+1) + '\n'
             return texttree
 
-        print(_simple_draw_graph(favourite_all_tree_levels[0][0], depth=0))
+        if ARGS.print_test_parses:
+            print(_simple_draw_graph(favourite_all_tree_levels[0][0], depth=0))
         self.draw_graph(favourite_all_tree_levels)
 
         if ARGS.db_parse:
@@ -926,7 +922,9 @@ if __name__ == "__main__":
     parser.add_argument("--n-test", type=int,default=5)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--print-gtparsestrs", action="store_true")
+    parser.add_argument("--print-test-parses", action="store_true")
     parser.add_argument("--print-train-interps", action="store_true")
+    parser.add_argument("--print-word-acc", action="store_true")
     parser.add_argument("--reload-from", type=str)
     parser.add_argument("--remove-vowels", action="store_true")
     parser.add_argument("--show-graphs", action="store_true")
@@ -934,7 +932,6 @@ if __name__ == "__main__":
     parser.add_argument("--show-splits", action="store_true")
     parser.add_argument("--shuffle", action="store_true")
     parser.add_argument("--start-from", type=int, default=0)
-    parser.add_argument("--suppress-prints", action="store_true")
     parser.add_argument("--test-frac", type=float, default=0.1)
     parser.add_argument("--test-gts", action="store_true")
     parser.add_argument("--verbose-as", action="store_true")
@@ -1135,7 +1132,7 @@ if __name__ == "__main__":
         both_correct = any(lf_acc(pred_lf,g.split(' || ')[0]) and pred_syn==g.split(' || ')[1] for g in gts)
         results_dict[w] = {'pred LF':pred_lf, 'pred syncat':pred_syn, 'LF correct':lf_correct, 'syncat correct':syn_correct, 'both correct': both_correct}
     results = pd.DataFrame(results_dict).T
-    if not ARGS.suppress_prints:
+    if ARGS.print_word_acc:
         print(results)
     word2lf_acc = results['LF correct'].mean()
     word2syn_acc = results['syncat correct'].mean()
@@ -1190,14 +1187,23 @@ if __name__ == "__main__":
     #la.parse('I \'m thinking'.split())
     #la.parse('he \'s missing it'.split())
     #la.parse('it \'s eating you'.split())
-    considered_sem_cats = []
-    for dpoint in test_data[:ARGS.n_test]:
-        considered_sem_cats += la.parse(dpoint['words'])
-    if ARGS.test_gts:
-        for sent,gt in gts.items():
-            la.parse(gt[0][0]['words'].split())
-            la.draw_graph(gt,is_gt=True)
+    n_correct = 0
+    n_with_seen_words = 0
+    for dpoint in test_data[15:ARGS.n_test]:
+        predicted_parse = la.parse(dpoint['words'])
+        correct_pred = predicted_parse['lf'] == dpoint['lf']
+        if all(w in la.mwe_vocab for w in dpoint['words']):
+            n_with_seen_words += 1
+            if not correct_pred:
+                print(f'\n***INCORRECT, {predicted_parse["lf"]} should be {dpoint["lf"]}***\n')
+        if correct_pred:
+            n_correct += 1
+    #if ARGS.test_gts:
+    #    for sent,gt in gts.items():
+    #        predicted_lf = la.parse(gt[0][0]['words'].split())
+    print(f'num test points with only seen words: {n_with_seen_words}')
+    print(f'harsh acc: {n_correct/ARGS.n_test:.3f}\nacc excluding new words: {n_correct/n_with_seen_words:.3f}')
+            #la.draw_graph(gt,is_gt=True)
     pdf = pd.DataFrame(plateaus)
-    pprint(set(considered_sem_cats))
     print(pdf)
     pdf.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_plateaus.csv')
