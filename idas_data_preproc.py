@@ -65,7 +65,8 @@ def decommafy(parse, debrac=False):
     if len(splits)==3:
         inner_lf = f'{splits[0]} {splits[2]} {splits[1]}'
     if len(splits)==4 and inner_lf.startswith('v|'):
-        inner_lf = f'{splits[0]} {splits[2]} {splits[3]} {splits[1]}'
+        inner_lf = f'{splits[0]} {splits[3]} {splits[2]} {splits[1]}'
+        print(inner_lf)
     lf = prefix + inner_lf + suffix
     if debrac:
         lf = maybe_debrac(lf)
@@ -398,11 +399,6 @@ def postfix_whatiss(lf):
     else:
         return lf
 
-def merge_not_and_modcops(lf):
-    negmod_match = re.match(r'not \(mod|.*?\)', lf)
-    if 'not' in lf:
-        breakpoint()
-
 if __name__ == '__main__':
     import argparse
     ARGS = argparse.ArgumentParser()
@@ -446,6 +442,8 @@ if __name__ == '__main__':
         if ps == []:
             n_excluded+=1
             continue
+        #if any (w in ps for w in ['give', 'tell', 'show']):
+            #breakpoint()
         pl = lf_preproc(lf, sent)
         if pl is None or pl.endswith(': ') or '_' in pl or pl=='':
             n_excluded+=1

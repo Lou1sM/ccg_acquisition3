@@ -209,7 +209,6 @@ direct_take_lf_from_sents = {
     'did you see one': 'Q (mod|do-past (v|see pro:indef|one pro:per|you))',
     'is she finished': 'Q (hasproperty adj|finished pro:sub|she)',
     'what do you call that': 'Q (mod|do (v|call pro:int|WHAT pro:dem|that pro:per|you))',
-    'I \'d like some vegetables': 'mod|~genmod (v|like (qn|some n|vegetable-pl) pro:sub|i)',
     'she said two': 'v|say-past pro:indef|two pro:per|she',
     'it is not snow': 'not (v|equals n|snow-BARE pro:per|it)',
     'spear is spear': 'v|equals n|spear-BARE n|spear-BARE',

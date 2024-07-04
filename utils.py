@@ -76,7 +76,7 @@ def base_cats_from_str(unstripped_str):
             if ss.startswith('v|'):
                 if (nl:=n_lambda_binders(unstripped_str)) == 3:
                     sem_cats = {'S|NP|NP|NP','VP|NP|NP'}
-                    if ss.removesuffix('-prog') not in ('v|give', 'v|bring', 'v|let'):
+                    if ss.removesuffix('-prog') not in ('v|give', 'v|bring', 'v|let', 'v|show'):
                         print(ss, 'getting 3 args')
                 elif nl == 2:
                     sem_cats = {'S|NP|NP', 'VP|NP'}
@@ -275,13 +275,9 @@ def alpha_normalize(x):
     if len(hits) == 0:
         return x
     trans_list = sorted(set(hits),key=lambda x:hits.index(x))
-    #buffer = int(max(trans_list))+1 # big enough to not clobber anything
     buffer = max([int(x) for x in trans_list]) + 1
-    #if x == 'lambda $2.Q (mod|do_2 (v|think_4 pro:per|you_3 (lambda $5_{r}.v|say-3s_6 pro:per|it_5 $2 $1)))':
-        #breakpoint()
     for v_new, v_old in enumerate(trans_list):
         assert f'${v_new+buffer}' not in x
-        #x = x.replace(fr'${v_old}',f'${v_new+buffer}')
         x = re.sub(rf'\${v_old}(?!\d)',f'${v_new+buffer}',x)
     for v_num in range(len(trans_list)):
         assert not bool(re.search(fr'${v_num}',x))
@@ -356,7 +352,7 @@ def n_nps(sem_cat):
         return 1
     elif sem_cat == 'VP':
         return -1
-    elif sem_cat in ['Sq','S','N','Swhq']:
+    elif sem_cat in ['Sq', 'S', 'N', 'Swhq', 'Swh']:
         return 0
     else:
         splits = split_respecting_brackets(sem_cat,sep=['\\','/','|'],debracket=True)
@@ -555,33 +551,7 @@ def infer_slash(lcat,rcat,parent_cat,rule):
         breakpoint()
     return inferredlcat, inferredrcat
 
-def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
-    """Determines the slash directions for both f and g when comb. with fwd_cmp."""
-    if parent_cat=='X' or g_cat=='X':
-        return 'X', 'X'
-    if is_atomic(g_cat) or is_atomic(parent_cat):
-        return None, None
-    try:
-        pout,pslash,pin = cat_components(parent_cat)
-        gout,gslash,gin = cat_components(g_cat)
-    except ValueError:
-        breakpoint()
-    if gslash not in ['|', pslash]:
-        return None, None
-    if pin != gin:
-        return None, None
-    if sem_only:
-        assert pslash == '|' and gslash == '|'
-        return maybe_brac(pout) + '|' + maybe_brac(gout), g_cat
-    else:
-        #goutout,gout_slash,goutin = cat_components(gout,allow_atomic=True)
-        #composed_cat = goutout + '\\' + goutin # has to be mirror of the main slash
-        new_f = pout + '|' + maybe_brac(gout) # underdetermined direction cuz could be crossed-cmp
-        new_g = gout + pslash + gin
-        return new_f, new_g
-
 def lf_cat_congruent(lf_str, sem_cat):
-    #assert 'VP' not in sem_cat
     assert ' you' not in lf_str
     #if sem_cat in ('S|N', 'NP|NP'):
     if sem_cat in ('S|N',):
@@ -594,10 +564,6 @@ def lf_cat_congruent(lf_str, sem_cat):
         what_n_lambdas_should_be = 0
     else:
         what_n_lambdas_should_be = len(split_respecting_brackets(sem_cat,sep=['|','\\','/']))-1
-    #return what_n_lambdas_should_be == n_lambda_binders(lf_str) + (' you' in lf_str)
-    #if what_n_lambdas_should_be != n_lambda_binders(lf_str) and what_n_lambdas_should_be == n_lambda_binders_old(lf_str):
-        #breakpoint()
-    #return n_lambda_binders(lf_str) == what_n_lambdas_should_be
     return n_lambda_binders(lf_str) <= what_n_lambdas_should_be
 
 def parent_cmp_from_f_and_g(f_cat, g_cat, sem_only):
@@ -613,7 +579,6 @@ def parent_cmp_from_f_and_g(f_cat, g_cat, sem_only):
     gout2, gslash2, gin2 = cat_components(gout, sep=['/','\\','|'])
     if (maybe_debrac(fin) == maybe_debrac(gout2)):
         return fout + gslash2 + maybe_brac(gin2) + gslash + maybe_brac(gin)
-
 
 def reverse_slash(slash):
     assert slash in ['\\','/']
@@ -658,6 +623,31 @@ def balanced_substrings(s):
             bss.append(s[open_bracs_idxs.pop():i+1])
     return bss
 
+def f_cmp_from_parent_and_g(parent_cat,g_cat,sem_only):
+    """Determines the slash directions for both f and g when comb. with fwd_cmp."""
+    if parent_cat=='X' or g_cat=='X':
+        return 'X', 'X'
+    if is_atomic(g_cat) or is_atomic(parent_cat):
+        return None, None
+    try:
+        pout,pslash,pin = cat_components(parent_cat)
+        gout,gslash,gin = cat_components(g_cat)
+    except ValueError:
+        breakpoint()
+    if gslash not in ['|', pslash]:
+        return None, None
+    if pin != gin:
+        return None, None
+    if sem_only:
+        assert pslash == '|' and gslash == '|'
+        return maybe_brac(pout) + '|' + maybe_brac(gout), g_cat
+    else:
+        #goutout,gout_slash,goutin = cat_components(gout,allow_atomic=True)
+        #composed_cat = goutout + '\\' + goutin # has to be mirror of the main slash
+        new_f = pout + '|' + maybe_brac(gout) # underdetermined direction cuz could be crossed-cmp
+        new_g = gout + pslash + gin
+        return new_f, new_g
+
 def nth_in_list(l,n,item):
     return [i for i,x in enumerate(l) if x==item][n]
 
@@ -667,4 +657,3 @@ def all_sublists(x):
 
     recursed = all_sublists(x[1:])
     return recursed + [[x[0]]+item for item in recursed]
-

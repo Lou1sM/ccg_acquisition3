@@ -1,13 +1,12 @@
 import sys
 import numpy as np
-from dl_utils.misc import check_dir
+from dl_utils.misc import check_dir, set_experiment_dir
 from gt_parse_graphs import gts
 import os
 import networkx as nx
 import matplotlib.pyplot as plt
 from pprint import pprint
 from copy import copy
-from dl_utils.misc import set_experiment_dir
 from os.path import join
 import pandas as pd
 from utils import file_print, get_combination, combine_lfs, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str, non_directional, cat_components, is_type_raised, is_atomic, maybe_debrac
@@ -79,7 +78,6 @@ class BaseDirichletProcessLearner(ABC):
     def __init__(self,alpha):
         self.alpha = alpha
         self.base_alpha = alpha
-        self.eval_alpha = ARGS.eval_alpha
         self.memory = {}
         self.base_distribution_cache = {}
         self.marg_prob_cache = {}
@@ -93,7 +91,7 @@ class BaseDirichletProcessLearner(ABC):
         self.is_training = True
 
     def eval(self):
-        self.alpha = self.eval_alpha
+        self.alpha = 1
         self.is_training = False
 
     def base_distribution_(self,x):
@@ -199,9 +197,6 @@ class BaseDirichletProcessLearner(ABC):
         assert (df.sum(axis=1)<=1+1e-7).all()
         return df
 
-    def show_commons(self, x):
-        print(sorted([(k,v) for k,v in self.memory[x].items()], key=lambda x:x[1],reverse=True)[:10])
-
     def topk(self,x,k=10):
         return sorted(self.memory[x].items(), key=lambda x:x[1], reverse=True)[:k]
 
@@ -271,14 +266,9 @@ class LanguageAcquirer():
         self.meaningl = MeaningDirichletProcessLearner(1)
         self.wordl = WordSpanDirichletProcessLearner(0.25)
         self.full_lfs_cache = {} # maps lf_strings to LogicalForm objects
-        #self.lf_parts_cache = {'splits':{},'cats':{}} # maps LogicalForm objects to lists of (left-child,right-child)
         self.caches = {'splits':{}, 'cats':{}}
         self.parse_node_cache = {} # maps utterances (str) to ParseNode objects, including splits
         self.root_sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen as roots
-        self.sem_cat_memory = DirichletProcess(1) # counts of the sem_cats it's seen anywhere
-        self.sync_memory = DirichletProcess(1)
-        self.leaf_lf_memory = DirichletProcess(1)
-        self.leaf_shell_lf_memory = DirichletProcess(1)
         self.leaf_syncat_memory = DirichletProcess(1)
         self.vocab_thresh = vocab_thresh
         self.beam_size = 10
@@ -288,10 +278,6 @@ class LanguageAcquirer():
         for b in self.buffers.values():
             b.refresh
         self.root_sem_cat_memory.memory = {}
-        self.sem_cat_memory.memory = {}
-        self.sync_memory.memory = {}
-        self.leaf_lf_memory.memory = {}
-        self.leaf_shell_lf_memory.memory = {}
         self.leaf_syncat_memory.memory = {}
 
     def train(self):
@@ -368,10 +354,6 @@ class LanguageAcquirer():
         self.wordl.set_from_dict(to_load['word'])
         self.root_sem_cat_memory.memory = to_load['root_sem_cat']
         self.leaf_syncat_memory.memory = to_load['leaf_sync']
-        self.sem_cat_memory.memory = to_load['sem_cat']
-        self.sync_memory.memory = to_load['sync']
-        self.leaf_shell_lf_memory.memory = to_load['shell_lf']
-        self.leaf_lf_memory.memory = to_load['lf']
 
         self.lf_word_counts = pd.read_pickle(join(fpath,'lf_word_counts.pkl'))
         self.shell_lf_lf_counts = pd.read_pickle(join(fpath,'shell_lf_lf_counts.pkl'))
@@ -390,10 +372,6 @@ class LanguageAcquirer():
                   'word': {'memory':self.wordl.memory,
                   'base_distribution_cache':self.wordl.base_distribution_cache},
                   'root_sem_cat': self.root_sem_cat_memory.memory,
-                  'sem_cat': self.sem_cat_memory.memory,
-                  'sync': self.sync_memory.memory,
-                  'shell_lf': self.leaf_shell_lf_memory.memory,
-                  'lf': self.leaf_lf_memory.memory,
                   'leaf_sync': self.leaf_syncat_memory.memory}
 
         distributions_fpath = join(fpath,'distributions.json')
@@ -409,7 +387,7 @@ class LanguageAcquirer():
 
     def get_lf(self, lf_str, words):
         if lf_str in self.full_lfs_cache:
-            lf = self.full_lfs_cache[lf_str]
+            lf = self.full_lfs_cache[lf_str + '||' + ' '.join(words)]
             #lf.set_cats_as_root(lf_str) # in case was in cache as embedded S, so got X
         else:
             if words[0] in ('what', 'who', 'how', 'where', 'when', 'which'):
@@ -425,7 +403,7 @@ class LanguageAcquirer():
             else:
                 specified_cats = {'S'}
             lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss, verbose_as=ARGS.verbose_as, specified_cats=specified_cats)
-            self.full_lfs_cache[lf_str] = lf
+            self.full_lfs_cache[lf_str + '||' + ' '.join(words)] = lf
         st = time()
         lf.infer_splits()
         print(f'LF split time: {time()-st:.4f}')
@@ -552,12 +530,12 @@ class LanguageAcquirer():
         else:
             syn_prob_func = self.syntaxl.prob
             shm_prob_func = self.shmeaningl.prob
-        svo_ = syn_prob_func('NP + S|NP', 'S')*syn_prob_func('S|NP|NP + NP', 'S|NP')
-        sov_or_osv = syn_prob_func('NP + S|NP', 'S')*syn_prob_func('NP + S|NP|NP','S|NP')
-        vso_or_vos = syn_prob_func('S|NP + NP', 'S')*syn_prob_func('S|NP|NP + NP','S|NP')
+        svo_ = syn_prob_func('NP + S\\NP', 'S')*syn_prob_func('S\\NP/NP + NP', 'S\\NP')
+        sov_or_osv = syn_prob_func('NP + S\\NP', 'S')*syn_prob_func('NP + S\\NP\\NP','S\\NP')
+        vso_or_vos = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('S/NP/NP + NP','S/NP')
         # it will never have seen this split because disallowed during training
         # so only option is to include prior
-        ovs_ = syn_prob_func('S|NP + NP', 'S')*syn_prob_func('NP + S|NP|NP', 'S|NP')
+        ovs_ = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('NP + S/NP\\NP', 'S/NP')
         if ARGS.condition_on_syncats:
             unnormed_probs = pd.Series({
             'sov': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
@@ -887,7 +865,6 @@ def lf_basecat_congruent(lf, semcat):
                 return True
     return False
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cat-to-sample-from", type=str, default='s')
@@ -931,7 +908,8 @@ if __name__ == "__main__":
     parser.add_argument("--show-plots", action="store_true")
     parser.add_argument("--show-splits", action="store_true")
     parser.add_argument("--shuffle", action="store_true")
-    parser.add_argument("--start-from", type=int, default=0)
+    parser.add_argument("--start-from", type=int,default=0)
+    parser.add_argument("--suppress-prints", type=int, default=0)
     parser.add_argument("--test-frac", type=float, default=0.1)
     parser.add_argument("--test-gts", action="store_true")
     parser.add_argument("--verbose-as", action="store_true")
@@ -993,6 +971,7 @@ if __name__ == "__main__":
         breakpoint()
 
     ltb_idxs = [100, 300, 1000]
+    #ltb_idxs = [100]
     start_time = time()
     all_word_order_probs = []
     all_word_order_probs_no_prior = []
@@ -1007,8 +986,6 @@ if __name__ == "__main__":
             if i in ARGS.exclude_points:
                 continue
             words = dpoint['words']
-            #if words==['ʔābaʔ', 'ʔat', 'rocā']:
-                #continue
             if ARGS.remove_vowels:
                 words = [remove_vowels(w) for w in words]
             if words[-1] == '?':
@@ -1160,33 +1137,7 @@ if __name__ == "__main__":
             for k,v in all_word_order_probs[-1].items():
                 file_print(f'{k}: {v:.6f}',f)
     la.vocab_thresh = ARGS.vocab_thresh
-    #la.parse('you can n\'t eat'.split())
     cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
-    #for dp in cant_points:
-    #    la.test_with_gt(dp['lf'], dp['words'])
-    #la.parse('I can n\'t see'.split())
-    #la.parse('he should n\'t hurt you'.split())
-    #la.parse('what did you do'.split())
-    #la.parse('what d you want'.split())
-    #la.parse('what will I take'.split())
-    #la.parse('what can he eat'.split())
-    #la.parse('you \'re missing it'.split())
-    #la.parse('do you like it'.split())
-    #la.parse('you see him'.split())
-    #la.parse('you lost a pencil'.split())
-    #la.parse('did he see it'.split())
-    #la.parse('the pencil dropped the name'.split())
-    #la.parse('did the pencil see the name'.split())
-    #la.parse('that \'s right'.split())
-    #la.parse('you can n\'t see'.split())
-    #la.parse('you can n\'t eat'.split())
-    #la.parse('did you name it'.split())
-    #la.parse('can you find it'.split())
-    #la.parse('will you talk'.split())
-    #la.parse('are you running'.split())
-    #la.parse('I \'m thinking'.split())
-    #la.parse('he \'s missing it'.split())
-    #la.parse('it \'s eating you'.split())
     n_correct = 0
     n_with_seen_words = 0
     for dpoint in test_data[15:ARGS.n_test]:
@@ -1198,12 +1149,8 @@ if __name__ == "__main__":
                 print(f'\n***INCORRECT, {predicted_parse["lf"]} should be {dpoint["lf"]}***\n')
         if correct_pred:
             n_correct += 1
-    #if ARGS.test_gts:
-    #    for sent,gt in gts.items():
-    #        predicted_lf = la.parse(gt[0][0]['words'].split())
     print(f'num test points with only seen words: {n_with_seen_words}')
     print(f'harsh acc: {n_correct/ARGS.n_test:.3f}\nacc excluding new words: {n_correct/n_with_seen_words:.3f}')
-            #la.draw_graph(gt,is_gt=True)
     pdf = pd.DataFrame(plateaus)
     print(pdf)
     pdf.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_plateaus.csv')

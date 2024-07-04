@@ -415,35 +415,6 @@ class LogicalForm:
             existing_app_splits, existin_cmp_splits, existing_sem_cats = self.caches['splits'].get(self.lf_str, ({},{},{}))
             self.caches['splits'][self.lf_str] = self.app_splits.union(existing_app_splits), self.cmp_splits.union(existin_cmp_splits), self.sem_cats.union(existing_sem_cats)
 
-    def set_f_sem_cat_from_self_and_g(self,f,possible_gs,comb_type):
-        if comb_type == 'app':
-            new_inferred_sem_cats = set([f'{ssc}|{maybe_brac(gsc)}' for ssc in self.sem_cats for gsc in g.sem_cats])
-            assert not any(x is None for x in new_inferred_sem_cats)
-        else:
-            assert comb_type == 'cmp'
-            new_inferred_sem_cats = set(f_cmp_from_parent_and_g(ssc,gsc,sem_only=True)[0] for ssc in self.sem_cats for gsc in g.sem_cats)
-            new_inferred_sem_cats = set(x for x in new_inferred_sem_cats if x is not None)
-        assert not any(x.startswith('|') for x in new_inferred_sem_cats)
-        if new_inferred_sem_cats.intersection(set(['S|N','S|NP|N'])):
-            return
-        old_fsc = f.sem_cats
-        if f.sem_cats | new_inferred_sem_cats in [{'Sq|NP','Sq|(S|NP)'},{'S|NP','S|(S|NP)'}]:
-            print(self, f, g)
-            f.sem_cats = f.sem_cats | new_inferred_sem_cats
-        else:
-            f.sem_cats = set_congruent(new_inferred_sem_cats, f.sem_cats)
-        if not f.sem_cats:
-            if len(old_fsc)>0:
-                print(f'fsem_cats were {old_fsc}, inferred are {new_inferred_sem_cats}')
-            return
-        if f.sem_cats == {'Sq|(S|(S|NP))'}:
-            breakpoint()
-        for f1,g1 in f.app_splits:
-            if g1.sem_cat_is_set and not (all(is_atomic(gsc) for gsc in g.sem_cats) and comb_type=='cmp'):
-                f.set_f_sem_cat_from_self_and_g(f1,g1,comb_type)
-        if len(f.sem_cats)==0:
-            breakpoint()
-
     def spawn_child(self,defining_string,sibling_idx):
         """Careful, this means a child in the tree of one logical form, not a possible split."""
         return LogicalForm(defining_string,idx_in_tree=self.idx_in_tree+[sibling_idx],caches=self.caches,parent=self, verbose_as=self.verbose_as)
@@ -804,9 +775,6 @@ class ParseNode():
                 if not any(is_congruent(ssync,sc) for sc in self.sem_cats):
                     breakpoint()
                     raise SemCatError('Some syncat is not consistent with any semcat')
-        #syntax_prob = max(syntaxl.prob('leaf',ssync) for ssync in syncs)
-        #if self.words == 'does that spell'.split() and self.lf_str == 'lambda $0.Q (mod|do-3s (v|spell $0 pro:dem|that))':
-            #breakpoint()
         syntax_prob = syntaxl.prob('leaf',sync)
         shmeaning_prob = max(shell_meaningl.prob(shell_lf, sc) for sc in sem_cats)
         meaning_prob = meaningl.prob(lf, shell_lf)
@@ -817,7 +785,6 @@ class ParseNode():
         self.stored_prob_as_leaf = syntax_prob*shmeaning_prob*meaning_prob*word_prob
         if self.stored_prob_as_leaf==0:
             print('Zero prob for \n', self)
-            breakpoint()
             raise ZeroProbError
         return self.stored_prob_as_leaf
 
