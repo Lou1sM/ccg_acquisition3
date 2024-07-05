@@ -2,6 +2,86 @@ import re
 from learner_config import pos_marking_dict, base_lexicon
 
 
+def split_respecting_brackets(s,sep=' ',debracket=False):
+    """Only make a split when there are no open brackets."""
+    if debracket:
+        s = maybe_debrac(s)
+    n_open_brackets = 0
+    split_points = [-1]
+    if isinstance(sep,str):
+        sep = [sep]
+    else:
+        assert isinstance(sep,list)
+
+    for i,c in enumerate(s):
+        if c in sep and n_open_brackets == 0:
+            split_points.append(i)
+        elif c == '(':
+            n_open_brackets += 1
+        elif c == ')':
+            n_open_brackets -= 1
+        if n_open_brackets < 0:
+            return []
+    split_points.append(len(s))
+    splits = [s[split_points[i]+1:split_points[i+1]] for i in range(len(split_points)-1)]
+    return splits
+
+def lambda_match(maybe_lambda_str):
+    if not maybe_lambda_str.startswith('lambda '):
+        return None # fast check without re to rule out most
+    #return re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.',maybe_lambda_str)
+    return re.match(LAMBDA_RE_STR, maybe_lambda_str)
+
+def is_bracket_balanced(s):
+    if len(re.findall(r'\(',s)) != len(re.findall(r'\)',s)):
+        return False
+    return split_respecting_brackets(s) != []
+
+class IWFF():
+    def __init__(self):
+        self.cache = {True:{}, False:{}}
+
+    def is_wellformed_lf(self, lf, should_be_normed=False):
+        if lf in self.cache[should_be_normed]:
+            return self.cache[should_be_normed][lf]
+        if lf == '': return self.cache_and_return(lf, True, should_be_normed)
+        if lf == 'Q': return self.cache_and_return(lf, True, should_be_normed)
+        if bool(re.search(r'lambda(?! \$\d)',lf)): # rule out this simple string
+            is_wf = False
+        if lf.count('.') != lf.count('lambda'):
+            is_wf = False
+        if should_be_normed:
+            if lf.startswith('Q'):
+                if not is_bracketed(lf[2:]): # Q should operate on whole sentence
+                    return self.cache_and_return(lf, False, should_be_normed)
+            else:
+                if bool(re.search(r'(?<!\.)Q', lf)): # Q should only be at beginning
+                    return self.cache_and_return(lf, False, should_be_normed)
+            lambdas, body = all_lambda_body_splits(lf)
+            if lf.count('.') != lambdas.count('.'):
+                return self.cache_and_return(lf, False, should_be_normed)
+        lf = maybe_debrac(lf)
+        if bool(re.match(r'[a-zA-Z0-9_:\|\-\'\~]+$',lf)):
+            return self.cache_and_return(lf, True, should_be_normed)
+        if bool(re.match(r'\$\d{1,2}$',lf)):
+            return self.cache_and_return(lf, True, should_be_normed)
+        if bool(possible_first_lambda := lambda_match(lf)):
+            is_wf = self.is_wellformed_lf(lf[possible_first_lambda.end():], should_be_normed)
+        else:
+            splits = split_respecting_brackets(lf)
+            if len(splits) > 1:
+                is_wf = all([self.is_wellformed_lf(s, should_be_normed) for s in splits])
+            else:
+                is_wf = False
+        return self.cache_and_return(lf, is_wf, should_be_normed)
+
+    def cache_and_return(self, lf, judgement, should_be_normed):
+        self.cache[should_be_normed][lf] = judgement
+        return judgement
+
+iwff = IWFF()
+
+
 LAMBDA_RE_STR = r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.'
 def de_q(lf):
     lambda_binder, body = all_lambda_body_splits(lf)
@@ -76,7 +156,7 @@ def base_cats_from_str(unstripped_str):
             if ss.startswith('v|'):
                 if (nl:=n_lambda_binders(unstripped_str)) == 3:
                     sem_cats = {'S|NP|NP|NP','VP|NP|NP'}
-                    if ss.removesuffix('-prog') not in ('v|give', 'v|bring', 'v|let', 'v|show'):
+                    if ss.removesuffix('-prog') not in ('v|give', 'v|bring', 'v|let', 'v|show', 'v|make', 'v|call'):
                         print(ss, 'getting 3 args')
                 elif nl == 2:
                     sem_cats = {'S|NP|NP', 'VP|NP'}
@@ -90,8 +170,8 @@ def base_cats_from_str(unstripped_str):
                 if n_lambda_binders(unstripped_str) == 1:
                     sem_cats = {'Swhq|(Sq|NP)'}
                 else:
-                    if not ( ss!='pro:int|WHAT' or n_lambda_binders(unstripped_str) == 0):
-                        print(f'wh-string appearing with spuriously many lambdas: {ss}')
+                    #if not ( ss!='pro:int|WHAT' or n_lambda_binders(unstripped_str) == 0):
+                        #print(f'wh-string appearing with spuriously many lambdas: {unstripped_str}')
                     sem_cats = {'NP'}
 
         else:
@@ -108,41 +188,6 @@ def new_var_num(lf_str):
     if len(vars_in_self) == 0:
         return 0
     return max([int(x[1:]) for x in vars_in_self])+1
-
-def lambda_match(maybe_lambda_str):
-    if not maybe_lambda_str.startswith('lambda '):
-        return None # fast check without re to rule out most
-    #return re.match(r'^lambda \$\d{1,2}(_\{(e|r|<r,t>|<<e,e>,e>)\})?\.',maybe_lambda_str)
-    return re.match(LAMBDA_RE_STR, maybe_lambda_str)
-
-def is_wellformed_lf(lf, should_be_normed=False):
-    if lf == '': return True
-    if bool(re.search(r'lambda(?! \$\d)',lf)): # rule out this simple string
-    #if bool(re.search(r'lambda(?! (WHAT1|WHO1|\$\d))', lf)):
-        return False
-    if lf.count('.') != lf.count('lambda'):
-        return False
-    if should_be_normed:
-        if lf.startswith('Q'):
-            if not is_bracketed(lf[2:]): # Q should operate on whole sentence
-                return False
-        else:
-            if bool(re.search(r'(?<!\.)Q', lf)): # Q should only be at beginning
-                return False
-        lambdas, body = all_lambda_body_splits(lf)
-        if lf.count('.') != lambdas.count('.'):
-            return False
-    lf = maybe_debrac(lf)
-    if bool(re.match(r'[a-zA-Z0-9_]+',lf)):
-        return True
-    if bool(re.match(r'\$\d{1,2}$',lf)):
-        return True
-    if bool(possible_first_lambda := lambda_match(lf)):
-        return is_wellformed_lf(lf[possible_first_lambda.end():])
-    splits = split_respecting_brackets(lf)
-    if len(splits) > 1:
-        return all([is_wellformed_lf(s) for s in splits])
-    return False
 
 def maybe_de_type_raise(cat):
     splits = split_respecting_brackets(cat, sep='|')
@@ -205,7 +250,7 @@ def logical_de_type_raise(lf_str):
         return lf_str
     return maybe_lambda + body[3:]
     rest = maybe_debrac(rest)
-    if not is_wellformed_lf(rest):
+    if not iwff.is_wellformed_lf(rest):
         breakpoint()
     return rest
 
@@ -287,7 +332,7 @@ def alpha_normalize(x):
 
 def beta_normalize(m,verbose=False):
     m = maybe_debrac(m)
-    assert is_wellformed_lf(m)
+    assert iwff.is_wellformed_lf(m)
     if m.startswith('lambda'):
         lambda_binder, body, _ = first_lambda_body_split(m)
         assert lambda_binder != ''
@@ -360,11 +405,6 @@ def n_nps(sem_cat):
             breakpoint()
         return n_nps(splits[0]) - sum([n_nps(sc) for sc in splits[1:]])
 
-def is_bracket_balanced(s):
-    if len(re.findall(r'\(',s)) != len(re.findall(r'\)',s)):
-        return False
-    return split_respecting_brackets(s) != []
-
 def outermost_first_chunk(s):
     """Similar to the first argument returned by split_respecting_brackets,
     but here we don't need a separator, just split as soon as brackets are
@@ -388,30 +428,6 @@ def outermost_first_chunk(s):
             assert is_bracket_balanced(s[i+1:])
             return s[:i+1], s[i+1:]
     breakpoint()
-
-def split_respecting_brackets(s,sep=' ',debracket=False):
-    """Only make a split when there are no open brackets."""
-    if debracket:
-        s = maybe_debrac(s)
-    n_open_brackets = 0
-    split_points = [-1]
-    if isinstance(sep,str):
-        sep = [sep]
-    else:
-        assert isinstance(sep,list)
-
-    for i,c in enumerate(s):
-        if c in sep and n_open_brackets == 0:
-            split_points.append(i)
-        elif c == '(':
-            n_open_brackets += 1
-        elif c == ')':
-            n_open_brackets -= 1
-        if n_open_brackets < 0:
-            return []
-    split_points.append(len(s))
-    splits = [s[split_points[i]+1:split_points[i+1]] for i in range(len(split_points)-1)]
-    return splits
 
 def is_bracketed(s):
     return s.startswith('(') and s.endswith(')')

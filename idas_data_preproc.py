@@ -219,6 +219,7 @@ def lf_preproc(lf, sent):
         #dlf = f'Q ({dlf})'
     dlf = re.sub(r'BARE \$\d{1,2} \((det:num\|[{he_chars}\w-]+) \((n\|[\w{he_chars}-]+) \$\d{1,2}\)\)', r'\1 \2', dlf)
 
+    dlf = dlf.replace('+','')
     dlf = reformat_cop(dlf, sent)
     if dlf is None:
         return

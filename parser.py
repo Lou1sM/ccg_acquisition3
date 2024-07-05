@@ -2,7 +2,8 @@ import numpy as np
 from nltk.stem import WordNetLemmatizer
 from nltk import pos_tag
 from functools import partial
-from utils import split_respecting_brackets, is_bracketed, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, is_wellformed_lf, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, lambda_match, is_bracket_balanced, apply_sem_cats, parent_cmp_from_f_and_g, balanced_substrings, non_directional, base_cats_from_str, add_q, de_q, possible_syncs
+from utils import split_respecting_brackets, is_bracketed, maybe_brac, is_atomic, strip_string, cat_components, is_congruent, alpha_normalize, maybe_debrac, f_cmp_from_parent_and_g, combine_lfs, logical_type_raise, new_var_num, n_lambda_binders, set_congruent, lf_cat_congruent, lambda_match, is_bracket_balanced, apply_sem_cats, parent_cmp_from_f_and_g, balanced_substrings, non_directional, base_cats_from_str, add_q, de_q, possible_syncs, IWFF
+#from is_wff import IWFF
 from errors import SemCatError, ZeroProbError, SynCatError
 import re
 import sys; sys.setrecursionlimit(500)
@@ -30,6 +31,8 @@ revarmatch = re.compile(r'\$\d{1,2}')
 rebckbcktranscat = re.compile(r'S\\[A-Za-z\(\|\)]+\\NP$')
 refwdfwdtranscat = re.compile(r'S/[A-Za-z\(\|\\\/)]+/NP$')
 
+iwff = IWFF()
+
 class LogicalForm:
     def __init__(self,defining_string,idx_in_tree=[],caches={'splits':{},'cats':{}},parent=None,dblfs=None,dbsss=None, verbose_as=False, specified_cats=None):
         """Specified cats can come either from traising or if root."""
@@ -43,7 +46,7 @@ class LogicalForm:
             assert debug_set_cats in (None, dbsss)
             debug_set_cats = dbsss
         assert isinstance(idx_in_tree,list)
-        assert is_wellformed_lf(defining_string)
+        assert iwff.is_wellformed_lf(defining_string)
         assert specified_cats != {'X'}
         had_surrounding_brackets = False
         self.sibling = None
@@ -293,7 +296,7 @@ class LogicalForm:
                     traised_f = LogicalForm(traised_fstr, caches=self.caches, specified_cats=f_cats)
                     traised_g_parts = traised_gstr.split('.')
                     if not ( len(traised_g_parts) == 3):
-                        print(f"not traising+cmp for {f.lf_str} & {g.lf_str} cuz not enough lmbdas")
+                        #print(f"not traising+cmp for {f.lf_str} & {g.lf_str} cuz not enough lmbdas")
                         continue
                     traised_gstr = '.'.join([traised_g_parts[i] for i in [1,0,2]])
                     traised_g = LogicalForm(traised_gstr, caches=self.caches)

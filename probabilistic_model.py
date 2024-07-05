@@ -1,4 +1,5 @@
 import sys
+from tqdm import tqdm
 import numpy as np
 from dl_utils.misc import check_dir, set_experiment_dir
 from gt_parse_graphs import gts
@@ -9,7 +10,8 @@ from pprint import pprint
 from copy import copy
 from os.path import join
 import pandas as pd
-from utils import file_print, get_combination, combine_lfs, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, is_wellformed_lf, base_cats_from_str, non_directional, cat_components, is_type_raised, is_atomic, maybe_debrac
+from utils import file_print, get_combination, combine_lfs, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, base_cats_from_str, non_directional, cat_components, is_type_raised, is_atomic, maybe_debrac, IWFF
+#from is_wff import IWFF
 from errors import CCGLearnerError
 from time import time
 import argparse
@@ -273,6 +275,7 @@ class LanguageAcquirer():
         self.vocab_thresh = vocab_thresh
         self.beam_size = 10
         self.learners = {'syntax': self.syntaxl, 'shmeaning': self.shmeaningl, 'meaning':self.meaningl, 'word': self.wordl}
+        self.iwff = IWFF()
 
     def refresh(self):
         for b in self.buffers.values():
@@ -404,9 +407,7 @@ class LanguageAcquirer():
                 specified_cats = {'S'}
             lf = LogicalForm(lf_str,caches=self.caches,parent='START',dblfs=ARGS.dblfs,dbsss=ARGS.dbsss, verbose_as=ARGS.verbose_as, specified_cats=specified_cats)
             self.full_lfs_cache[lf_str + '||' + ' '.join(words)] = lf
-        st = time()
         lf.infer_splits()
-        print(f'LF split time: {time()-st:.4f}')
         return lf
 
     def make_parse_node(self, lf_str, words):
@@ -438,18 +439,15 @@ class LanguageAcquirer():
                 st=time()
                 new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                            self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
-                print(f'below-probs time: {time()-st:.4f}')
                 if ARGS.print_train_interps:
                     self.test_with_gt(lfs, words)
                 if ARGS.print_gtparsestrs:
                     gtparsestr, is_good, is_root_good = root.gt_parse()
                     print(gtparsestr)
                 if lfs == ARGS.dbr or (ARGS.dbw is not None and ARGS.dbw in ' '.join(words)):
-                    #self.syntaxl.prob('S|NP/(S|NP) + S|NP/(S|NP)', 'S\\NP/(S|NP)')
                     if not ARGS.print_train_interps:
                         self.test_with_gt(lfs, words)
                     gtparsestr, is_good, is_root_good = root.gt_parse()
-                    #assert is_good
                     print(gtparsestr)
                     breakpoint()
             except CCGLearnerError as e:
@@ -457,13 +455,11 @@ class LanguageAcquirer():
                 print(lfs, e)
                 continue
             if root.splits == [] and not ARGS.suppress_prints:
-                print(words, lfs)
                 print('no splits :(')
             if new_root_prob==0:
                 print('zero root prob for', lfs, words)
             st=time()
             root.propagate_above_probs(1)
-            print(f'above-probs time: {time()-st:.4f}')
             if words == ARGS.dbsent.split():
                 breakpoint()
             for n,p in new_prob_cache.items():
@@ -495,7 +491,6 @@ class LanguageAcquirer():
             buffers['meaning'].append((lf,shell_lf,leaf_prob))
             buffers['word'].append((word_str,lf,leaf_prob))
 
-        print(f'apply probs time: {time()-st:.4f}')
         for lname, learner in self.learners.items():
             buffer = buffers[lname]
             learner.buffers.append(buffer)
@@ -508,8 +503,7 @@ class LanguageAcquirer():
                 assert len(learner.buffers) <= ARGS.n_distractors
         good = self.syntaxl.prob('Swhq/(Sq/NP) + Sq/NP', 'Swhq')
         bad = self.syntaxl.prob('Swhq/(Sq\\NP) + Sq\\NP', 'Swhq')
-        #if good<bad:
-        print(f'good: {good:.5f} bad: {bad:.5f}')
+        #print(f'good: {good:.5f} bad: {bad:.5f}')
         return new_problem_list
 
     def as_leaf(self, node):
@@ -604,11 +598,11 @@ class LanguageAcquirer():
         return list(reversed(beam))
 
     def leaf_probs_of_word_span(self,words):
-        if words not in self.mwe_vocab and ' ' not in words:
-            print(f'\'{words}\' not seen before as a leaf')
+        #if words not in self.mwe_vocab and ' ' not in words:
+            #print(f'\'{words}\' not seen before as a leaf')
         if words == ARGS.db_word_parse:
             breakpoint()
-        beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.meaningl.marg_prob(lf)} for lf in self.lf_vocab if is_wellformed_lf(lf, should_be_normed=True)]
+        beam = [{'lf':lf,'prob': self.wordl.prob(words,lf)*self.meaningl.marg_prob(lf)} for lf in self.lf_vocab if self.iwff.is_wellformed_lf(lf, should_be_normed=True)]
         beam = self.prune_beam(beam)
 
         beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.meaningl.marg_prob(b['lf'])*self.shmeaningl.marg_prob(shell_lf))
@@ -659,7 +653,7 @@ class LanguageAcquirer():
                         if comb_type == 'cmp' and (not 'lambda' in f or not 'lambda' in g): # won't be able to cmp then so must be a mistake
                             continue
                         lf = combine_lfs(f,g,comb_type)
-                        if not is_wellformed_lf(lf, should_be_normed=True):
+                        if not self.iwff.is_wellformed_lf(lf, should_be_normed=True):
                             continue
                         what_cats_should_be, _ = base_cats_from_str(lf)
                         if 'X' not in what_cats_should_be and combined not in what_cats_should_be:
@@ -909,9 +903,10 @@ if __name__ == "__main__":
     parser.add_argument("--show-splits", action="store_true")
     parser.add_argument("--shuffle", action="store_true")
     parser.add_argument("--start-from", type=int,default=0)
+    parser.add_argument("--start-test-from", type=int,default=0)
     parser.add_argument("--suppress-prints", type=int, default=0)
     parser.add_argument("--test-frac", type=float, default=0.1)
-    parser.add_argument("--test-gts", action="store_true")
+    parser.add_argument("--test-incr", action="store_true")
     parser.add_argument("--verbose-as", action="store_true")
     parser.add_argument("--vocab-thresh", type=float, default=0.0)
     parser.add_argument("-d", "--dset", type=str, default='adam')
@@ -943,7 +938,6 @@ if __name__ == "__main__":
         expname = ARGS.expname
     if ARGS.jreload_from:
         ARGS.reload_from = ARGS.jreload_from
-        #ARGS.db_after = True
 
     set_experiment_dir(f'experiments/{ARGS.expname}',overwrite=ARGS.overwrite,name_of_trials='experiments/tmp')
     with open(f'data/{ARGS.dset}.json') as f: d=json.load(f)
@@ -962,24 +956,48 @@ if __name__ == "__main__":
     else:
         train_data = [] if ARGS.jreload_from is not None else data_to_use[:int(len(data_to_use)*(1-ARGS.test_frac))]
         test_data = train_data if ARGS.is_test else data_to_use[int(len(data_to_use)*(1-ARGS.test_frac)):]
+    #test_data = [x for x in test_data if all(any(w in prev['words'] for prev in train_data) for w in x['words'])] # to use if we want a fixed test-set for all increments
     vt = 1 if ARGS.n_dpoints==-1 else ARGS.n_dpoints/len(all_data)
     la = LanguageAcquirer(ARGS.lr, vt)
     if ARGS.reload_from is not None:
         la.load_from(f'experiments/{ARGS.reload_from}')
 
+    chunk_size = max(1, len(train_data)//20)
     if ARGS.db_before:
         breakpoint()
+
+    def test():
+        la.eval()
+        n_correct = 0
+        n_with_seen_words = 0
+        la.vocab_thresh = 0
+        for i, dpoint in enumerate(pbar:=tqdm(test_data[ARGS.start_test_from:ARGS.n_test])):
+            predicted_parse = la.parse(dpoint['words'])
+            correct_pred = predicted_parse['lf'] == dpoint['lf']
+            if all(w in la.mwe_vocab for w in dpoint['words']):
+                n_with_seen_words += 1
+                #if not correct_pred:
+                   #print(f'\n**INCORRECT, {predicted_parse["lf"]} should be {dpoint["lf"]}**\n')
+            if correct_pred:
+                n_correct += 1
+            pbar.set_description(f'Acc: {n_correct/n_with_seen_words:.4f}  Harshacc: {n_correct/(i+1):.4f}')
+        la.vocab_thresh = 1
+        if n_with_seen_words == 0:
+            return 0,0
+        harsh_acc = n_correct/min(len(test_data), ARGS.n_test-ARGS.start_test_from)
+        acc_excl_nws = n_correct/n_with_seen_words
+        print(f'num test points with only seen words: {n_with_seen_words}')
+        print(f'harsh acc: {harsh_acc:.3f}\nacc excluding new words: {acc_excl_nws:.3f}')
+        la.train()
+        return acc_excl_nws, harsh_acc
 
     ltb_idxs = [100, 300, 1000]
     #ltb_idxs = [100]
     start_time = time()
     all_word_order_probs = []
-    all_word_order_probs_no_prior = []
-    all_prob_changes = []
-    problem_list = []
-    good_point_idxs = []
-    plateaus = []
     gpi = 0
+    all_accs = []
+    all_harsh_accs = []
     for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
@@ -1000,75 +1018,56 @@ if __name__ == "__main__":
             buffers = i>=ARGS.n_distractors
             n_words_seen = sum(w in la.vocab for w in words)
             frac_words_seen = n_words_seen/len(words)
-            lf = dpoint['lf']
-            has_copula = 'hasproperty' in lf or 'equals' in lf
             ltbs = i>= ltb_idxs[0]
-            if not (has_copula and ARGS.exclude_copulae):
-               problem_list += la.train_one_step(lf_strs_incl_distractors, words, buffers, ltbs)
-            else:
-                print('excluding')
+            la.train_one_step(lf_strs_incl_distractors, words, buffers, ltbs)
             if i in ltb_idxs[1:]:
                 for b in la.learners.values():
                     b.refresh()
             la.eval()
             new_probs_with_prior = la.probs_of_word_orders(False)
             new_probs_without_prior = la.probs_of_word_orders(True)
-            if i>0:
-                prob_change = ((new_probs_with_prior-all_word_order_probs[-1])**2).sum()
-                diff_probs = new_probs_with_prior-all_word_order_probs[-1]
-                forder = diff_probs.idxmax()
-                good_point = diff_probs['svo'] == diff_probs.max()
-                if not good_point and prob_change > 1e-5 and not ARGS.suppress_prints:
-                    print(new_probs_with_prior)
-                if n_words_seen==len(words) and len(split_respecting_brackets(lf))>=3 and not lf.startswith('Q ') and not 'adv|' in lf and len(split_respecting_brackets(lf))>=3 and 'you' not in lf.split() and not lf.startswith('prep|') and not 'not' in lf and not (has_copula and ARGS.dset=='hagar'):
-                    gpi+=1
-                    if prob_change==0:
-                        plateaus.append(dict(dpoint,words=' '.join(dpoint['words'])))
-                    else:
-                        print(f'good point idx {gpi}: prob {diff_probs["svo"]:.7f}, {words}, {lf}')
-                all_prob_changes.append({'prob update': prob_change, 'dpoint index': i, 'words':' '.join(words), 'lf':lf, 'good':good_point, 'favoured order':forder,'nseen':n_words_seen})
-            good_point_idxs.append(gpi)
+            if ARGS.test_incr and (i+1)%chunk_size == 0 and i+1!=len(train_data):
+                new_acc_enws, new_harsh_acc = test()
+                all_accs.append(new_acc_enws)
+                all_harsh_accs.append(new_harsh_acc)
             all_word_order_probs.append(new_probs_with_prior)
-            all_word_order_probs_no_prior.append(la.probs_of_word_orders(True))
-            if i>0 and prob_change>ARGS.db_prob_changes_above:
-                breakpoint()
             la.train()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
         print(f'Time per dpoint: {time_per_dpoint:.6f}')
         final_parses = {}
         n_correct_parses = 0
 
-    with open(f'experiments/{ARGS.expname}/failed_dpoints.txt','w') as f:
-        for pf,e in problem_list:
-            f.write(' '.join(pf['words']) + pf['lf'] + str(e))
-    with open(f'experiments/{ARGS.expname}/prob_updates.txt','w') as f:
-        for x in sorted(all_prob_changes, key=lambda x:x['prob update'], reverse=True):
-            f.write('\t'.join(f'{k}: {" ".join(v) if isinstance(v,list) else round(v,5) if isinstance(v,float) else v}' for k,v in x.items() if k!='good') + '\n')
-    with open(f'experiments/{ARGS.expname}/bad_prob_updates.txt','w') as f:
-        for x in sorted(all_prob_changes, key=lambda x:x['prob update'], reverse=True):
-            if not x['good']:
-                f.write('\t'.join(f'{k}: {" ".join(v) if isinstance(v,list) else v}' for k,v in x.items() if k not in ['good', 'forder']) + '\n')
+    final_acc_enws, final_harsh_acc = test()
+    if ARGS.test_incr:
+        all_accs.append(final_acc_enws)
+        all_harsh_accs.append(final_harsh_acc)
+        xplot = np.arange(0, len(train_data), chunk_size)
+        np.append(xplot, len(train_data))
+        plt.plot(xplot, all_accs, color='b', label='no unseen words')
+        plt.plot(xplot, all_harsh_accs, color='r', label='all utterances')
+        plt.legend(loc='upper left')
+        plt.title('Accuracy on Final 10% of Utterances')
+        fpath = f'experiments/{ARGS.expname}/test_lf_accs.png'
+        plt.savefig(fpath)
+        os.system(f'/usr/bin/xdg-open {fpath}')
+    #plt.show()
     inverse_probs_start_time = time()
     if len(train_data) > 0:
         la.compute_inverse_probs()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
     if ARGS.jreload_from is not None:
         df_prior = pd.read_csv(f'experiments/{ARGS.jreload_from}/{ARGS.jreload_from}_word_order_probs.csv', index_col=0)
-        df_no_prior = pd.read_csv(f'experiments/{ARGS.jreload_from}/{ARGS.jreload_from}_word_order_probs_no_prior.csv', index_col=0)
     else:
         la.save_to(f'experiments/{ARGS.expname}')
         print(df_prior:=pd.DataFrame(all_word_order_probs))
-        df_no_prior=pd.DataFrame(all_word_order_probs_no_prior)
         df_prior.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_word_order_probs.csv')
-        df_no_prior.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_word_order_probs_no_prior.csv')
     cs = ['r','g','b','y','orange','brown']
 
-    def plot_df(df, info='', against_good_point_idxs=False):
+    def plot_df(df, info=''):
         if info != '':
             info = f' {info}'
-        xticks = good_point_idxs if against_good_point_idxs else np.arange(len(df))
         for i,c in enumerate(df.columns):
-            plt.plot(xticks, df[c], label=c, color=cs[i])
+            plt.plot(np.arange(len(df)), df[c], label=c, color=cs[i])
         plt.legend(loc='upper right')
         plt.xlabel('Num Training Points')
         plt.ylabel('Relative Probability')
@@ -1088,16 +1087,6 @@ if __name__ == "__main__":
         dn_info = f'{dn_info} {ARGS.expname[:-1]}'.replace('_',' ')
     if ARGS.jreload_from is None:
         plot_df(df_prior, dn_info)
-        plot_df(df_prior, dn_info + ' vs. good points', True)
-        plot_df(df_no_prior, f'{ARGS.expname} No Prior')
-    print(la.syntaxl.memory.get('S\\NP',None))
-    if len(train_data)>=2:
-        df = pd.DataFrame(all_prob_changes)
-        df = df.sort_values('prob update', ascending=False)
-        bad = df.loc[~df['good']].drop('good', axis=1)
-        df = df.drop('good', axis=1)
-        df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_prob_updates.csv')
-        bad.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_bad_prob_updates.csv')
 
     gt_lexicon = all_gt_lexicons[ARGS.dset]
     results_dict = {}
@@ -1136,21 +1125,3 @@ if __name__ == "__main__":
             file_print('Final word order probs:',f)
             for k,v in all_word_order_probs[-1].items():
                 file_print(f'{k}: {v:.6f}',f)
-    la.vocab_thresh = ARGS.vocab_thresh
-    cant_points = [x for x in test_data if 'can n\'t' in ' '.join(x['words']) and 'what' not in ' '.join(x['words'])]
-    n_correct = 0
-    n_with_seen_words = 0
-    for dpoint in test_data[15:ARGS.n_test]:
-        predicted_parse = la.parse(dpoint['words'])
-        correct_pred = predicted_parse['lf'] == dpoint['lf']
-        if all(w in la.mwe_vocab for w in dpoint['words']):
-            n_with_seen_words += 1
-            if not correct_pred:
-                print(f'\n***INCORRECT, {predicted_parse["lf"]} should be {dpoint["lf"]}***\n')
-        if correct_pred:
-            n_correct += 1
-    print(f'num test points with only seen words: {n_with_seen_words}')
-    print(f'harsh acc: {n_correct/ARGS.n_test:.3f}\nacc excluding new words: {n_correct/n_with_seen_words:.3f}')
-    pdf = pd.DataFrame(plateaus)
-    print(pdf)
-    pdf.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_plateaus.csv')
