@@ -76,6 +76,11 @@ class DirichletProcess():
     def topk(self, k=10):
         return sorted([(k,self.prob(k)) for k in self.memory.keys() if k not in ('X','COUNT')],key=lambda x:x[1],reverse=True)[:k]
 
+    def sample(self):
+        options,unnormed_probs = zip(*[z for z in self.memory.items() if z[0]!='COUNT'])
+        probs = np.array(unnormed_probs)/sum(unnormed_probs)
+        return np.random.choice(options,p=probs)
+
 class BaseDirichletProcessLearner(ABC):
     def __init__(self,alpha):
         self.alpha = alpha
@@ -263,7 +268,7 @@ class WordSpanDirichletProcessLearner(BaseDirichletProcessLearner):
 class LanguageAcquirer():
     def __init__(self, lr, vocab_thresh):
         self.lr = lr
-        self.syntaxl = CCGDirichletProcessLearner(10)
+        self.syntaxl = CCGDirichletProcessLearner(100)
         self.shmeaningl = ShellMeaningDirichletProcessLearner(1)
         self.meaningl = MeaningDirichletProcessLearner(1)
         self.wordl = WordSpanDirichletProcessLearner(0.25)
@@ -429,16 +434,15 @@ class LanguageAcquirer():
         return parse_root
 
     def train_one_step(self, lf_strs, words, apply_buffers, put_in_ltbs):
-        prob_cache = {}
+        all_descs = []
         root_prob = 0
         new_problem_list = []
         for lfs in lf_strs:
             try:
                 root = self.make_parse_node(lfs,words) # words is a list
-                new_prob_cache = {}
                 st=time()
                 new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
-                           self.meaningl,self.wordl,new_prob_cache,split_prob=1,is_map=False)
+                           self.meaningl,self.wordl,split_prob=1,is_map=False)
                 if ARGS.print_train_interps:
                     self.test_with_gt(lfs, words)
                 if ARGS.print_gtparsestrs:
@@ -462,17 +466,17 @@ class LanguageAcquirer():
             root.propagate_above_probs(1)
             if words == ARGS.dbsent.split():
                 breakpoint()
-            for n,p in new_prob_cache.items():
-                if n in prob_cache.keys():
-                    prob_cache[n] += p
-                else:
-                    prob_cache[n] = p
             root_prob += new_root_prob
+            all_descs += root.descs
         buffers = {x:[] for x in self.learners.keys()}
         st=time()
-        for node, _ in prob_cache.items():
+        #spc = sorted(prob_cache.items(), key=lambda x:x[1])
+        #print(sum(prob_cache.values()))
+        for node in all_descs:
             if node.parent is not None and not node.is_g:
                 update_weight = node.prob / root_prob # for conditional
+                #print(node)
+                #print('update weight:', update_weight)
                 if node.is_fwd:
                     buffers['syntax'].append((f'{node.sync} + {node.sibling.sync}',node.parent.sync, update_weight))
                 else:
@@ -503,7 +507,8 @@ class LanguageAcquirer():
                 assert len(learner.buffers) <= ARGS.n_distractors
         good = self.syntaxl.prob('Swhq/(Sq/NP) + Sq/NP', 'Swhq')
         bad = self.syntaxl.prob('Swhq/(Sq\\NP) + Sq\\NP', 'Swhq')
-        #print(f'good: {good:.5f} bad: {bad:.5f}')
+        print(f'good: {good:.5f} bad: {bad:.5f}')
+        #print(self.syntaxl.memory.get('S', None))
         return new_problem_list
 
     def as_leaf(self, node):
@@ -553,7 +558,9 @@ class LanguageAcquirer():
 
         return unnormed_probs/unnormed_probs.sum()
 
-    def generate_words(self,sync):
+    def generate_words(self, sync=None, depth=0):
+        if sync is None:
+            sync = self.root_sem_cat_memory.sample()
         while True:
             split = self.syntaxl.conditional_sample(sync)
             if split == 'leaf':
@@ -564,16 +571,21 @@ class LanguageAcquirer():
         if split=='leaf':
             shell_lf = self.shmeaningl.conditional_sample(sem_cat)
             lf = self.meaningl.conditional_sample(shell_lf)
-            return self.wordl.conditional_sample(lf)
+            words = self.wordl.conditional_sample(lf)
+            print(' '*depth + f'lf: {lf}  sync: {sync} words: {words}')
+            return words
         else:
+            print(' '*depth + f'sync: {sync}')
             f,g = split.split(' + ')
-            return f'{self.generate_words(f)} {self.generate_words(g)}'
+            return f'{self.generate_words(f, depth+1)} {self.generate_words(g, depth+1)}'
 
     def compute_inverse_probs(self): # prob of meaning given word assuming flat prior over meanings
         self.lf_word_counts =  pd.DataFrame({lf:{w:self.wordl.memory[lf].get(w,0) for w in self.vocab} for lf in self.lf_vocab})
         self.marginal_word_probs = self.lf_word_counts.sum(axis=1)
         self.shell_lf_lf_counts = pd.DataFrame({lfs:{lf:self.meaningl.memory[lfs].get(lf,0) for lf in self.lf_vocab} for lfs in self.shell_lf_vocab})
-        self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync.replace('\\','|').replace('/','|')].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in self.sem_cat_vocab})
+        x_for_lfs = self.full_sync_vocab if ARGS.condition_on_syncats else self.sem_cat_vocab
+        #self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync.replace('\\','|').replace('/','|')].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in x_for_lfs})
+        self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in x_for_lfs})
         self.sem_word_counts = self.lf_word_counts.dot(self.shell_lf_lf_counts).dot(self.sem_shell_lf_counts)
         # transforming syncats to semcats when taking p(shell_lf|sync),
         # implicitly assumes that p(sc|sync) is 1 if compatible and 0# otherwise,
@@ -691,7 +703,7 @@ class LanguageAcquirer():
 
         probs_table[N-1, 0] = self.prune_beam(probs_table[N-1,0])
         if len(probs_table[N-1,0]) == 0:
-            return 'No parse found'
+            return {'lf': 'NOT FOUND', 'sync': 'NOT FOUND'}
 
         def show_parse(num):
             tree_level = [dict(probs_table[N-1,0][num],idx='1',hor_pos=0, parent='ROOT')]
@@ -819,8 +831,7 @@ class LanguageAcquirer():
 
     def test_with_gt(self, lf, words):
         root = la.make_parse_node(lf, words)
-        #root_prob = root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=False)
-        root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,{},split_prob=1,is_map=True)
+        root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,split_prob=1,is_map=True)
         def _simple_draw_graph(x, depth):
             texttree = '  '*depth
             texttree += f'LF: {x.lf_str}\tSync: {x.sync}\tWords: {" ".join(x.words)}\tRelprob: {x.rel_prob:.4f}'
@@ -966,12 +977,12 @@ if __name__ == "__main__":
     if ARGS.db_before:
         breakpoint()
 
-    def test():
+    def test(testset):
         la.eval()
         n_correct = 0
         n_with_seen_words = 0
         la.vocab_thresh = 0
-        for i, dpoint in enumerate(pbar:=tqdm(test_data[ARGS.start_test_from:ARGS.n_test])):
+        for i, dpoint in enumerate(pbar:=tqdm(testset)):
             predicted_parse = la.parse(dpoint['words'])
             correct_pred = predicted_parse['lf'] == dpoint['lf']
             if all(w in la.mwe_vocab for w in dpoint['words']):
@@ -980,7 +991,7 @@ if __name__ == "__main__":
                    #print(f'\n**INCORRECT, {predicted_parse["lf"]} should be {dpoint["lf"]}**\n')
             if correct_pred:
                 n_correct += 1
-            pbar.set_description(f'Acc: {n_correct/n_with_seen_words:.4f}  Harshacc: {n_correct/(i+1):.4f}')
+            pbar.set_description(f'Acc: {n_correct/(n_with_seen_words+1e-8):.4f}  Harshacc: {n_correct/(i+1):.4f}')
         la.vocab_thresh = 1
         if n_with_seen_words == 0:
             return 0,0
@@ -998,6 +1009,9 @@ if __name__ == "__main__":
     gpi = 0
     all_accs = []
     all_harsh_accs = []
+    all_next_accs = []
+    all_next_harsh_accs = []
+    final_chunk = test_data[ARGS.start_test_from:ARGS.n_test]
     for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
@@ -1027,9 +1041,12 @@ if __name__ == "__main__":
             new_probs_with_prior = la.probs_of_word_orders(False)
             new_probs_without_prior = la.probs_of_word_orders(True)
             if ARGS.test_incr and (i+1)%chunk_size == 0 and i+1!=len(train_data):
-                new_acc_enws, new_harsh_acc = test()
-                all_accs.append(new_acc_enws)
+                new_acc, new_harsh_acc = test(final_chunk)
+                all_accs.append(new_acc)
                 all_harsh_accs.append(new_harsh_acc)
+                new_next_acc, new_next_harsh_acc = test(train_data[i:i+len(final_chunk)])
+                all_next_accs.append(new_next_acc)
+                all_next_harsh_accs.append(new_next_harsh_acc)
             all_word_order_probs.append(new_probs_with_prior)
             la.train()
         time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
@@ -1037,7 +1054,7 @@ if __name__ == "__main__":
         final_parses = {}
         n_correct_parses = 0
 
-    final_acc_enws, final_harsh_acc = test()
+    final_acc_enws, final_harsh_acc = test(final_chunk)
     if ARGS.test_incr:
         all_accs.append(final_acc_enws)
         all_harsh_accs.append(final_harsh_acc)
@@ -1045,6 +1062,8 @@ if __name__ == "__main__":
         np.append(xplot, len(train_data))
         plt.plot(xplot, all_accs, color='b', label='no unseen words')
         plt.plot(xplot, all_harsh_accs, color='r', label='all utterances')
+        plt.plot(xplot, all_next_accs, color='g', label='no unseen words next chunk')
+        plt.plot(xplot, all_next_harsh_accs, color='y', label='all utterances next chunk')
         plt.legend(loc='upper left')
         plt.title('Accuracy on Final 10% of Utterances')
         fpath = f'experiments/{ARGS.expname}/test_lf_accs.png'
@@ -1103,6 +1122,7 @@ if __name__ == "__main__":
     word2lf_acc = results['LF correct'].mean()
     word2syn_acc = results['syncat correct'].mean()
     word2both_acc = results['both correct'].mean()
+    la.generate_words('S')
     if ARGS.db_after:
         breakpoint()
     results.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_full_preds_and_scores.csv')

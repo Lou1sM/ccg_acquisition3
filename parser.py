@@ -722,7 +722,15 @@ class ParseNode():
     def __eq__(self,other):
         if not isinstance(other,ParseNode):
             return False
-        return self.lf_str == other.lf_str and self.words == other.words and self.sync==other.sync
+        #if not hasattr(self, 'sibling') or not hasattr(other, 'sibling'):
+            #print(self)
+            #return False
+        #eq = self.lf_str == other.lf_str and self.words == other.words and self.sync==other.sync and self.sibling.sync==other.sibling.sync and self.sibling.words==other.sibling.words
+        eq = self.lf_str == other.lf_str and self.words == other.words and self.sync==other.sync
+        #if eq and self.sibling.lf_str!=other.sibling.lf_str:
+            #breakpoint()
+        breakpoint()
+        return eq
 
     def __hash__(self):
         return hash(self.lf_str + ' '.join(self.words))
@@ -731,7 +739,7 @@ class ParseNode():
         self.sibling = other
         other.sibling = self
 
-    def propagate_below_probs(self,syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map):
+    def propagate_below_probs(self, syntaxl, shell_meaningl, meaningl, wordl, split_prob, is_map):
         """Recursively called on children, and use results for this node, so probs are propagated up the tree."""
         self.split_prob = split_prob # probability of parent being split this way to produce this
         all_probs = [('leaf','leaf',self.prob_as_leaf(syntaxl,shell_meaningl,meaningl,wordl))]
@@ -739,14 +747,13 @@ class ParseNode():
             split_prob = syntaxl.prob(f'{ps["left"].sync} + {ps["right"].sync}',self.sync)
             if split_prob == 0:
                 breakpoint()
-            left_below_prob = ps['left'].propagate_below_probs(syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map)
-            right_below_prob = ps['right'].propagate_below_probs(syntaxl,shell_meaningl,meaningl,wordl,prob_cache,split_prob,is_map)
+            left_below_prob = ps['left'].propagate_below_probs(syntaxl, shell_meaningl, meaningl, wordl, split_prob, is_map)
+            right_below_prob = ps['right'].propagate_below_probs(syntaxl, shell_meaningl, meaningl, wordl, split_prob, is_map)
             all_probs.append((ps['left'], ps['right'], left_below_prob*right_below_prob*split_prob))
 
         self.best_split = max(all_probs, key=lambda x:x[2])
         self.below_prob = max([x[2] for x in all_probs]) if is_map else sum([x[2] for x in all_probs])
         self.rel_prob = self.below_prob/sum([x[2] for x in all_probs])
-        prob_cache[self] = self.below_prob
         return self.below_prob
 
     def propagate_above_probs(self,passed_above_prob): #reuse split_prob from propagate_below_probs
@@ -891,6 +898,14 @@ class ParseNode():
             is_good = False
         is_root_good = len(self.words)==1 and is_good
         return texttree, is_good, is_root_good
+
+    @property
+    def descs(self):
+        d = [self]
+        for split in self.splits:
+            d += split['left'].descs
+            d += split['right'].descs
+        return d
 
 def can_compose_traised(fcat, gcat):
     f_cat_splits = split_respecting_brackets(fcat, sep='|')
