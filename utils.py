@@ -121,16 +121,6 @@ def base_cats_from_str(unstripped_str):
     if ss == 'not':
         is_semantic_leaf = True
         sem_cats = set(['S|NP|(S|NP)', 'VP|VP', 'Sq|VP|NP|(Sq|VP|NP)'])
-        #if had_initial_q:
-        #    sem_cats = set(['S|NP|(S|NP)', 'VP|VP', 'Sq|Sq'])
-        #else:
-        #    sem_cats = set(['S|NP|(S|NP)', 'VP|VP', 'S|S'])
-        #if (nl:=n_lambda_binders(unstripped_str)) == 2:
-        #    sem_cats = set(['S|NP|(S|NP)', 'VP|VP'])
-        #elif nl <= 1:
-        #    sem_cats = set(['S|S', 'Sq|Sq'])
-        #else:
-        #    breakpoint()
     else:
         is_semantic_leaf = ' ' not in ss.lstrip('BARE ')
         if not is_semantic_leaf:
@@ -156,7 +146,7 @@ def base_cats_from_str(unstripped_str):
             if ss.startswith('v|'):
                 if (nl:=n_lambda_binders(unstripped_str)) == 3:
                     sem_cats = {'S|NP|NP|NP','VP|NP|NP'}
-                    if ss.removesuffix('-prog') not in ('v|give', 'v|bring', 'v|let', 'v|show', 'v|make', 'v|call'):
+                    if ss.removesuffix('-prog') not in ('v|give', 'v|bring', 'v|let', 'v|show', 'v|make', 'v|call', 'v|ask', 'v|tell'):
                         print(ss, 'getting 3 args')
                 elif nl == 2:
                     sem_cats = {'S|NP|NP', 'VP|NP'}

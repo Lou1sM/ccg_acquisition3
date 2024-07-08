@@ -567,9 +567,12 @@ class LanguageAcquirer():
                 break
             if all([s in self.syntaxl.memory for s in split.split(' + ') ]):
                 break
-        sem_cat = re.sub(r'[\\/]','|',sync)
         if split=='leaf':
-            shell_lf = self.shmeaningl.conditional_sample(sem_cat)
+            if ARGS.condition_on_syncats:
+                shell_lf = self.shmeaningl.conditional_sample(sync)
+            else:
+                sem_cat = re.sub(r'[\\/]','|',sync)
+                shell_lf = self.shmeaningl.conditional_sample(sem_cat)
             lf = self.meaningl.conditional_sample(shell_lf)
             words = self.wordl.conditional_sample(lf)
             print(' '*depth + f'lf: {lf}  sync: {sync} words: {words}')
@@ -901,7 +904,7 @@ if __name__ == "__main__":
     parser.add_argument("--n-dpoints", type=int, default=-1)
     parser.add_argument("--n-epochs", type=int, default=1)
     parser.add_argument("--n-generate", type=int, default=0)
-    parser.add_argument("--n-test", type=int,default=5)
+    parser.add_argument("--n-test", type=int,default=-1)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--print-gtparsestrs", action="store_true")
     parser.add_argument("--print-test-parses", action="store_true")
@@ -995,7 +998,7 @@ if __name__ == "__main__":
         la.vocab_thresh = 1
         if n_with_seen_words == 0:
             return 0,0
-        harsh_acc = n_correct/min(len(test_data), ARGS.n_test-ARGS.start_test_from)
+        harsh_acc = n_correct/len(test_data)
         acc_excl_nws = n_correct/n_with_seen_words
         print(f'num test points with only seen words: {n_with_seen_words}')
         print(f'harsh acc: {harsh_acc:.3f}\nacc excluding new words: {acc_excl_nws:.3f}')
@@ -1011,7 +1014,10 @@ if __name__ == "__main__":
     all_harsh_accs = []
     all_next_accs = []
     all_next_harsh_accs = []
-    final_chunk = test_data[ARGS.start_test_from:ARGS.n_test]
+    final_chunk = test_data[ARGS.start_test_from:]
+    if ARGS.n_test != -1:
+        final_chunk = test_data[:ARGS.n_test]
+
     for epoch_num in range(ARGS.n_epochs):
         epoch_start_time = time()
         for i,dpoint in enumerate(train_data):
@@ -1044,7 +1050,8 @@ if __name__ == "__main__":
                 new_acc, new_harsh_acc = test(final_chunk)
                 all_accs.append(new_acc)
                 all_harsh_accs.append(new_harsh_acc)
-                new_next_acc, new_next_harsh_acc = test(train_data[i:i+len(final_chunk)])
+                #if i+len(final_chunk) < len(train_data):
+                new_next_acc, new_next_harsh_acc = test(data_to_use[i:i+len(final_chunk)])
                 all_next_accs.append(new_next_acc)
                 all_next_harsh_accs.append(new_next_harsh_acc)
             all_word_order_probs.append(new_probs_with_prior)
@@ -1055,18 +1062,30 @@ if __name__ == "__main__":
         n_correct_parses = 0
 
     final_acc_enws, final_harsh_acc = test(final_chunk)
+    dist_substr = '' if ARGS.n_distractors==0 else f' dist{ARGS.n_distractors}'
+    if final_acc_enws == all_accs[-1] or final_harsh_acc==all_harsh_accs[-1]:
+        breakpoint()
+    xplot = [i for i in range(len(train_data)) if (i+1)%chunk_size == 0 and i+1!=len(train_data)]
+    xplot.append(len(train_data))
     if ARGS.test_incr:
         all_accs.append(final_acc_enws)
         all_harsh_accs.append(final_harsh_acc)
-        xplot = np.arange(0, len(train_data), chunk_size)
-        np.append(xplot, len(train_data))
         plt.plot(xplot, all_accs, color='b', label='no unseen words')
         plt.plot(xplot, all_harsh_accs, color='r', label='all utterances')
+        plt.legend(loc='upper left')
+        plt.title(f'Accuracy on Final 10% of Utterances{dist_substr}')
+        fpath = f'experiments/{ARGS.expname}/test_lf_accs.png'
+        plt.savefig(fpath)
+        os.system(f'/usr/bin/xdg-open {fpath}')
+
+        plt.clf()
+        all_next_accs.append(final_acc_enws)
+        all_next_harsh_accs.append(final_harsh_acc)
         plt.plot(xplot, all_next_accs, color='g', label='no unseen words next chunk')
         plt.plot(xplot, all_next_harsh_accs, color='y', label='all utterances next chunk')
         plt.legend(loc='upper left')
-        plt.title('Accuracy on Final 10% of Utterances')
-        fpath = f'experiments/{ARGS.expname}/test_lf_accs.png'
+        plt.title(f'Accuracy on Next 5% of Utterances{dist_substr}')
+        fpath = f'experiments/{ARGS.expname}/next_lf_accs.png'
         plt.savefig(fpath)
         os.system(f'/usr/bin/xdg-open {fpath}')
     #plt.show()
