@@ -2,13 +2,12 @@ import sys
 from tqdm import tqdm
 import numpy as np
 from dl_utils.misc import check_dir, set_experiment_dir
-from gt_parse_graphs import gts
 import os
 import networkx as nx
 import matplotlib.pyplot as plt
-from pprint import pprint
-from copy import copy
+from copy import copy, deepcopy
 from os.path import join
+import shutil
 import pandas as pd
 from utils import file_print, get_combination, combine_lfs, possible_syncs, infer_slash, lf_cat_congruent, lf_acc, split_respecting_brackets, base_cats_from_str, non_directional, cat_components, is_type_raised, is_atomic, maybe_debrac, IWFF
 #from is_wff import IWFF
@@ -92,6 +91,7 @@ class BaseDirichletProcessLearner(ABC):
         self.buffers = []
         self.long_term_buffer = []
         self.is_training = True
+        self.use_cache = True
 
     def train(self):
         self.alpha = self.base_alpha
@@ -130,10 +130,11 @@ class BaseDirichletProcessLearner(ABC):
         return prob
 
     def prob(self, y, x):
-        if (y,x) in self.prob_cache:
+        if (y,x) in self.prob_cache and self.use_cache:
             return self.prob_cache[(y,x)]
         prob = self._prob(y,x)
-        self.prob_cache[(y,x)] = prob
+        if self.use_cache:
+            self.prob_cache[(y,x)] = prob
         return prob
 
     def _observe(self,y,x,weight):
@@ -281,6 +282,15 @@ class LanguageAcquirer():
         self.beam_size = 10
         self.learners = {'syntax': self.syntaxl, 'shmeaning': self.shmeaningl, 'meaning':self.meaningl, 'word': self.wordl}
         self.iwff = IWFF()
+        self.is_training = True
+
+    def disable_caching(self):
+        for l in self.learners.values():
+            l.use_cache = False
+
+    def enable_caching(self):
+        for l in self.learners.values():
+            l.use_cache = True
 
     def refresh(self):
         for b in self.buffers.values():
@@ -289,12 +299,14 @@ class LanguageAcquirer():
         self.leaf_syncat_memory.memory = {}
 
     def train(self):
+        self.is_training = True
         self.syntaxl.train()
         self.shmeaningl.train()
         self.meaningl.train()
         self.wordl.train()
 
     def eval(self):
+        self.is_training = False
         self.syntaxl.eval()
         self.shmeaningl.eval()
         self.meaningl.eval()
@@ -406,7 +418,7 @@ class LanguageAcquirer():
                 specified_cats = {'VP'}
             elif len(split_respecting_brackets(lf_str))==2 and lf_str.startswith('prep'):
                 specified_cats = {'S|NP|(S|NP)'}
-            elif len(lf_str.split())==2 and lf_str.split()[1].startswith('n|'):
+            elif len(lf_str.split())==2 and lf_str.split()[1].startswith('n|') and not lf_str.startswith('v'):
                 specified_cats = {'NP'}
             else:
                 specified_cats = {'S'}
@@ -433,9 +445,11 @@ class LanguageAcquirer():
             self.parse_node_cache[' '.join([lf_str]+words)] = parse_root
         return parse_root
 
-    def train_one_step(self, lf_strs, words, apply_buffers, put_in_ltbs):
+    def step(self, lf_strs, words, apply_buffers, put_in_ltbs, mode):
         all_descs = []
         root_prob = 0
+        best_lf_prob = 0
+        best_lf = 'none'
         new_problem_list = []
         for lfs in lf_strs:
             try:
@@ -456,11 +470,12 @@ class LanguageAcquirer():
                     breakpoint()
             except CCGLearnerError as e:
                 new_problem_list.append((dpoint,e))
-                print(lfs, e)
+                if mode=='train':
+                    print(lfs, e)
                 continue
-            if root.splits == [] and not ARGS.suppress_prints:
+            if root.splits == [] and not ARGS.suppress_prints and mode=='train':
                 print('no splits :(')
-            if new_root_prob==0:
+            if new_root_prob==0 and mode=='train':
                 print('zero root prob for', lfs, words)
             st=time()
             root.propagate_above_probs(1)
@@ -468,15 +483,17 @@ class LanguageAcquirer():
                 breakpoint()
             root_prob += new_root_prob
             all_descs += root.descs
+            if new_root_prob > best_lf_prob:
+                best_lf_prob = new_root_prob
+                best_lf = lfs
+
+        if mode=='test':
+            return best_lf
         buffers = {x:[] for x in self.learners.keys()}
         st=time()
-        #spc = sorted(prob_cache.items(), key=lambda x:x[1])
-        #print(sum(prob_cache.values()))
         for node in all_descs:
             if node.parent is not None and not node.is_g:
                 update_weight = node.prob / root_prob # for conditional
-                #print(node)
-                #print('update weight:', update_weight)
                 if node.is_fwd:
                     buffers['syntax'].append((f'{node.sync} + {node.sibling.sync}',node.parent.sync, update_weight))
                 else:
@@ -488,10 +505,10 @@ class LanguageAcquirer():
             lf = node.lf.subtree_string(alpha_normalized=True,recompute=True)
             word_str, lf, shell_lf, sem_cats, sync = node.info_if_leaf()
             buffers['syntax'].append(('leaf',sync,leaf_prob))
-            if ARGS.condition_on_syncats:
-                buffers['shmeaning'].append((shell_lf,sync,leaf_prob))
-            else:
+            if ARGS.no_condition_on_syncats:
                 buffers['shmeaning'] += [(shell_lf,sc,leaf_prob) for sc in sem_cats]
+            else:
+                buffers['shmeaning'].append((shell_lf,sync,leaf_prob))
             buffers['meaning'].append((lf,shell_lf,leaf_prob))
             buffers['word'].append((word_str,lf,leaf_prob))
 
@@ -535,16 +552,7 @@ class LanguageAcquirer():
         # it will never have seen this split because disallowed during training
         # so only option is to include prior
         ovs_ = syn_prob_func('S/NP + NP', 'S')*syn_prob_func('NP + S/NP\\NP', 'S/NP')
-        if ARGS.condition_on_syncats:
-            unnormed_probs = pd.Series({
-            'sov': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
-            'svo': svo_*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
-            'vso': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S|NP|NP')),
-            'vos': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
-            'osv': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S|NP|NP')),
-            'ovs': ovs_*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP'))
-            }) + 1e-8
-        else:
+        if ARGS.no_condition_on_syncats:
             comb_obj_first = shm_prob_func('lambda $0.lambda $1.vconst $0 $1', 'S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)', 'S|NP|NP')
             comb_subj_first = shm_prob_func('lambda $0.lambda $1.vconst $1 $0', 'S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)', 'S|NP|NP')
             unnormed_probs = pd.Series({
@@ -555,12 +563,22 @@ class LanguageAcquirer():
             'osv': sov_or_osv*comb_subj_first,
             'ovs': ovs_*comb_obj_first,
             }) + 1e-8
+        else:
+            unnormed_probs = pd.Series({
+            'sov': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
+            'svo': svo_*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
+            'vso': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S|NP|NP')),
+            'vos': vso_or_vos*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP')),
+            'osv': sov_or_osv*(shm_prob_func('lambda $0.lambda $1.vconst $1 $0','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $0 $1)','S|NP|NP')),
+            'ovs': ovs_*(shm_prob_func('lambda $0.lambda $1.vconst $0 $1','S|NP|NP')+shm_prob_func('lambda $0.lambda $1.neg (vconst $1 $0)','S|NP|NP'))
+            }) + 1e-8
 
         return unnormed_probs/unnormed_probs.sum()
 
     def generate_words(self, sync=None, depth=0):
         if sync is None:
-            sync = self.root_sem_cat_memory.sample()
+            while sync in (None, 'Swh'):
+                sync = self.root_sem_cat_memory.sample()
         while True:
             split = self.syntaxl.conditional_sample(sync)
             if split == 'leaf':
@@ -568,11 +586,11 @@ class LanguageAcquirer():
             if all([s in self.syntaxl.memory for s in split.split(' + ') ]):
                 break
         if split=='leaf':
-            if ARGS.condition_on_syncats:
-                shell_lf = self.shmeaningl.conditional_sample(sync)
-            else:
+            if ARGS.no_condition_on_syncats:
                 sem_cat = re.sub(r'[\\/]','|',sync)
                 shell_lf = self.shmeaningl.conditional_sample(sem_cat)
+            else:
+                shell_lf = self.shmeaningl.conditional_sample(sync)
             lf = self.meaningl.conditional_sample(shell_lf)
             words = self.wordl.conditional_sample(lf)
             print(' '*depth + f'lf: {lf}  sync: {sync} words: {words}')
@@ -586,7 +604,7 @@ class LanguageAcquirer():
         self.lf_word_counts =  pd.DataFrame({lf:{w:self.wordl.memory[lf].get(w,0) for w in self.vocab} for lf in self.lf_vocab})
         self.marginal_word_probs = self.lf_word_counts.sum(axis=1)
         self.shell_lf_lf_counts = pd.DataFrame({lfs:{lf:self.meaningl.memory[lfs].get(lf,0) for lf in self.lf_vocab} for lfs in self.shell_lf_vocab})
-        x_for_lfs = self.full_sync_vocab if ARGS.condition_on_syncats else self.sem_cat_vocab
+        x_for_lfs = self.sem_cat_vocab if ARGS.no_condition_on_syncats else self.full_sync_vocab
         #self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync.replace('\\','|').replace('/','|')].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in x_for_lfs})
         self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in x_for_lfs})
         self.sem_word_counts = self.lf_word_counts.dot(self.shell_lf_lf_counts).dot(self.sem_shell_lf_counts)
@@ -623,9 +641,9 @@ class LanguageAcquirer():
         beam = [dict(b,shell_lf=shell_lf,prob=b['prob']*self.meaningl.prob(b['lf'],shell_lf)/self.meaningl.marg_prob(b['lf'])*self.shmeaningl.marg_prob(shell_lf))
             for shell_lf in self.shell_lf_vocab for b in beam]
         beam = self.prune_beam(beam)
+        # shouldn't I be conditioning on syncats here? working fine for now, but look into later
         beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat)/self.shmeaningl.marg_prob(b['shell_lf'])*self.syntaxl.marg_prob(sem_cat))
             for sem_cat in self.sem_cat_vocab for b in beam if sem_cat!='X']
-        #beam = [b for b in beam if 'X' in base_cats_from_str(b['lf'])[0] or b['sem_cat'] in base_cats_from_str(b['lf'])[0]]
         beam = [b for b in beam if lf_basecat_congruent(b['lf'], b['sem_cat'])]
         beam = self.prune_beam(beam)
         beam = [dict(b, sync=ps) for b in beam for ps in possible_syncs(b['sem_cat'])]
@@ -876,7 +894,7 @@ def lf_basecat_congruent(lf, semcat):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cat-to-sample-from", type=str, default='s')
-    parser.add_argument("--condition-on-syncats", action="store_true")
+    parser.add_argument("--no-condition-on-syncats", action="store_true")
     parser.add_argument("--db-after", action="store_true")
     parser.add_argument("--db-at", type=int, default=-1)
     parser.add_argument("--db-before", action="store_true")
@@ -903,8 +921,10 @@ if __name__ == "__main__":
     parser.add_argument("--n-distractors", type=int, default=0)
     parser.add_argument("--n-dpoints", type=int, default=-1)
     parser.add_argument("--n-epochs", type=int, default=1)
-    parser.add_argument("--n-generate", type=int, default=0)
+    parser.add_argument("--n-generate", type=int, default=300)
     parser.add_argument("--n-test", type=int,default=-1)
+    parser.add_argument("--no-test", action="store_true")
+    parser.add_argument("--no-ltbs", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--print-gtparsestrs", action="store_true")
     parser.add_argument("--print-test-parses", action="store_true")
@@ -921,6 +941,7 @@ if __name__ == "__main__":
     parser.add_argument("--suppress-prints", type=int, default=0)
     parser.add_argument("--test-frac", type=float, default=0.1)
     parser.add_argument("--test-incr", action="store_true")
+    parser.add_argument("--test-next-chunk", action="store_true")
     parser.add_argument("--verbose-as", action="store_true")
     parser.add_argument("--vocab-thresh", type=float, default=0.0)
     parser.add_argument("-d", "--dset", type=str, default='adam')
@@ -980,30 +1001,109 @@ if __name__ == "__main__":
     if ARGS.db_before:
         breakpoint()
 
-    def test(testset):
+    nonce_dps = {
+        #'trans': ('the boy dax the baby', ['v|dax (det:art|the n|boy) (det:art|the n|baby)', 'v|dax (det:art|the n|baby) (det:art|the n|boy)']),
+        #'intrans': ('the boy dax', ['v|dax (det:art|the n|boy)', 'lambda $0.v|dax (det:art|the n|boy) $0']),
+        #'modal': ('the boy will dax the baby', ['mod|will (v|dax (det:art|the n|boy) (det:art|the n|baby))', 'mod|will (v|dax (det:art|the n|baby) (det:art|the n|boy))']),
+        #'polarq': ('will the boy dax the baby', ['Q (mod|will (v|dax (det:art|the n|boy) (det:art|the n|baby)))', 'Q (mod|do-past (v|dax (det:art|the n|baby) (det:art|the n|boy)))']),
+        #'prog': ('the boy is dax the baby', ['cop|pres-3s (v|dax (det:art|the n|boy) (det:art|the n|baby))', 'cop|pres-3s (v|dax (det:art|the n|baby) (det:art|the n|boy))']),
+        #'wh': ('what will the boy dax', ['Q (mod|will (v|dax pro:int|WHAT (det:art|the n|boy)))', 'Q (mod|will (v|dax (det:art|the n|boy) pro:int|WHAT))']),
+        #'trans': ('you dax it', ['v|dax pro:per|you pro:per|it', 'v|dax pro:per|it pro:per|you']),
+        #'intrans': ('it dax', ['v|dax pro:per|it', 'lambda $0.v|dax pro:per|it $0']),
+        #'modal': ('you will dax it', ['mod|will (v|dax pro:per|you pro:per|it)', 'mod|will (v|dax pro:per|it pro:per|you)']),
+        #'polarq': ('will you dax it', ['q (mod|will (v|dax pro:per|you pro:per|it))', 'q (mod|do-past (v|dax pro:per|it pro:per|you))']),
+        #'prog': ('you is dax it', ['cop|pres-3s (v|dax pro:per|you pro:per|it)', 'cop|pres-3s (v|dax pro:per|it pro:per|you)']),
+        #'wh': ('who shall you dax', ['q (mod|shall (v|dax pro:int|who pro:per|you))', 'q (mod|shall (v|dax pro:per|you pro:int|who))']),
+        #'wh1': ('who will the pencil dax', ['Q (mod|will (v|dax pro:int|WHO (det:art|the n|pencil)))', 'Q (mod|will (v|dax (det:art|the n|pencil) pro:int|WHO))']),
+        'trans': ('you dax the pencil', ['v|dax pro:per|you (det:art|the n|pencil)', 'v|dax (det:art|the n|pencil) pro:per|you']),
+        'negmod': ('you can n\'t dax the pencil', ['not (mod|can (v|dax pro:per|you (det:art|the n|pencil)))', 'not (mod|can (v|dax (det:art|the n|pencil) pro:per|you))']),
+        'intrans': ('you dax', ['v|dax pro:per|you', 'lambda $0.v|dax pro:per|you $0']),
+        'modal': ('you can dax the pencil', ['mod|can (v|dax pro:per|you (det:art|the n|pencil))', 'mod|can (v|dax (det:art|the n|pencil) pro:per|you)']),
+        'polarq': ('will you dax the pencil', ['Q (mod|will (v|dax pro:per|you (det:art|the n|pencil)))', 'Q (mod|will (v|dax (det:art|the n|pencil) pro:per|you))']),
+        'negpolarq': ('can n\'t you dax the pencil', ['Q (not (mod|can (v|dax pro:per|you (det:art|the n|pencil))))', 'Q (not (mod|can (v|dax (det:art|the n|pencil) pro:per|you)))']),
+        'prog': ('you \'re dax the pencil', ['cop|pres-2s (v|dax pro:per|you (det:art|the n|pencil))', 'cop|pres-2s (v|dax (det:art|the n|pencil) pro:per|you)']),
+        #'wh': ('who will the pencil dax', ['Q (mod|will (v|dax pro:int|WHO (det:art|the n|pencil)))', 'Q (mod|will (v|dax (det:art|the n|pencil) pro:int|WHO))']),
+        #'negwh': ('who can n\'t the pencil dax', ['Q (not (mod|can (v|dax pro:int|WHO (det:art|the n|pencil))))', 'Q (not (mod|can (v|dax (det:art|the n|pencil) pro:int|WHO)))']),
+        'wh': ('who will you dax', ['Q (mod|will (v|dax pro:int|WHO pro:per|you))', 'Q (mod|will (v|dax pro:per|you pro:int|WHO))']),
+        'negwh': ('who can n\'t you dax', ['Q (not (mod|can (v|dax pro:int|WHO pro:per|you)))', 'Q (not (mod|can (v|dax pro:per|you pro:int|WHO)))']),
+        }
+
+    def test_parses(testset):
         la.eval()
         n_correct = 0
+        n_select_correct = 0
         n_with_seen_words = 0
         la.vocab_thresh = 0
+        n_test_dists = 4
         for i, dpoint in enumerate(pbar:=tqdm(testset)):
-            predicted_parse = la.parse(dpoint['words'])
-            correct_pred = predicted_parse['lf'] == dpoint['lf']
             if all(w in la.mwe_vocab for w in dpoint['words']):
                 n_with_seen_words += 1
-                #if not correct_pred:
-                   #print(f'\n**INCORRECT, {predicted_parse["lf"]} should be {dpoint["lf"]}**\n')
-            if correct_pred:
+            predicted_parse = la.parse(dpoint['words'])
+            if predicted_parse['lf'] == dpoint['lf']:
                 n_correct += 1
-            pbar.set_description(f'Acc: {n_correct/(n_with_seen_words+1e-8):.4f}  Harshacc: {n_correct/(i+1):.4f}')
+            start = max(0, i-(n_test_dists//2))
+            stop = min(len(train_data), i+((n_test_dists+1)//2)+1)
+            lf_strs_incl_distractors = [x['lf'] for x in testset[start:stop]]
+            selected_lf = la.step(lf_strs_incl_distractors, dpoint['words'], apply_buffers=False, put_in_ltbs=False, mode='test')
+            if selected_lf == dpoint['lf']:
+                n_select_correct += 1
+            pbar.set_description(f'Acc: {n_correct/(n_with_seen_words+1e-8):.4f}  Harshacc: {n_correct/(i+1):.4f} Selectacc: {n_select_correct/(i+1):.4f}')
         la.vocab_thresh = 1
         if n_with_seen_words == 0:
-            return 0,0
+            return 0,0,0
         harsh_acc = n_correct/len(test_data)
+        select_acc = n_select_correct/len(test_data)
         acc_excl_nws = n_correct/n_with_seen_words
+        if acc_excl_nws > 1:
+            breakpoint()
         print(f'num test points with only seen words: {n_with_seen_words}')
         print(f'harsh acc: {harsh_acc:.3f}\nacc excluding new words: {acc_excl_nws:.3f}')
         la.train()
-        return acc_excl_nws, harsh_acc
+        return acc_excl_nws, harsh_acc, select_acc
+
+    def test_nonce():
+        results = {}
+        before = deepcopy(la.syntaxl.memory)
+        la.save_to('/tmp')
+        la.eval()
+        la.disable_caching()
+        #la.wordl.alpha = 0.05
+        for const_type, (sent, lfs) in nonce_dps.items():
+            la.step(lfs, sent.split(), apply_buffers=True, put_in_ltbs=False, mode='train')
+            daxm = 'lambda $0.v|dax $0' if const_type=='intrans' else 'lambda $0.lambda $1.v|dax $0 $1'
+            la.wordl.alpha = 0.1
+            #la.meaningl.alpha = 0
+            cpp = la.wordl.prob('dax', daxm)# * la.meaningl.marg_prob(daxm)
+            #cpp = la.wordl.prob('dax', daxm)*la.shmeaningl.prob('lambda $0.lambda $1.vconst $0 $1','S\\NP/NP')
+            la.wordl.alpha = 1
+            #la.meaningl.alpha = 1
+            #cpp = la.wordl.memory[daxm]['dax'] / la.wordl.memory[daxm]['COUNT']
+            assert cpp <= 1
+            results[const_type] = cpp
+            print(la.wordl.topk(daxm))
+            la.load_from('/tmp')
+            #shutil.rmtree.remove_dirs('tmp')
+            assert la.syntaxl.memory == before
+        la.train()
+        la.enable_caching()
+        print(results)
+        return results
+
+    def test_word_acc():
+        la.compute_inverse_probs()
+        results_dict = {}
+        for w,gts in all_gt_lexicons[ARGS.dset]:
+            pred_lf = la.lf_word_counts.loc[w].idxmax() if w in la.lf_word_counts.index else 'notseen'
+            pred_syn = max([s for s in la.syn_word_probs.columns if 'X' not in s], key=lambda x: la.syn_word_probs.loc[w][x] if w in la.syn_word_probs.index else 0)
+            lf_correct = any(lf_acc(pred_lf,g.split(' || ')[0]) for g in gts)
+            syn_correct = any(pred_syn==g.split(' || ')[1] for g in gts)
+            both_correct = any(lf_acc(pred_lf,g.split(' || ')[0]) and pred_syn==g.split(' || ')[1] for g in gts)
+            results_dict[w] = {'pred LF':pred_lf, 'pred syncat':pred_syn, 'LF correct':lf_correct, 'syncat correct':syn_correct, 'both correct': both_correct}
+        results = pd.DataFrame(results_dict).T
+        word2lf_acc = results['LF correct'].mean()
+        word2syn_acc = results['syncat correct'].mean()
+        word2both_acc = results['both correct'].mean()
+        return results, word2lf_acc, word2syn_acc, word2both_acc
 
     ltb_idxs = [100, 300, 1000]
     #ltb_idxs = [100]
@@ -1012,148 +1112,183 @@ if __name__ == "__main__":
     gpi = 0
     all_accs = []
     all_harsh_accs = []
+    all_select_accs = []
     all_next_accs = []
     all_next_harsh_accs = []
+    all_next_select_accs = []
+    all_w2lf_accs = []
+    all_w2syn_accs = []
+    all_w2both_accs = []
+    all_nonce_results = {k:[] for k in nonce_dps.keys()}
     final_chunk = test_data[ARGS.start_test_from:]
     if ARGS.n_test != -1:
         final_chunk = test_data[:ARGS.n_test]
 
-    for epoch_num in range(ARGS.n_epochs):
-        epoch_start_time = time()
-        for i,dpoint in enumerate(train_data):
-            if i in ARGS.exclude_points:
-                continue
-            words = dpoint['words']
-            if ARGS.remove_vowels:
-                words = [remove_vowels(w) for w in words]
-            if words[-1] == '?':
-                words = words[:-1]
-            if i == ARGS.db_at:
-                breakpoint()
-            start = max(0, i-(ARGS.n_distractors//2))
-            stop = min(len(train_data), i+((ARGS.n_distractors+1)//2)+1)
-            lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
-            if not ARGS.suppress_prints:
-                print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
-            buffers = i>=ARGS.n_distractors
-            n_words_seen = sum(w in la.vocab for w in words)
-            frac_words_seen = n_words_seen/len(words)
-            ltbs = i>= ltb_idxs[0]
-            la.train_one_step(lf_strs_incl_distractors, words, buffers, ltbs)
-            if i in ltb_idxs[1:]:
-                for b in la.learners.values():
-                    b.refresh()
-            la.eval()
-            new_probs_with_prior = la.probs_of_word_orders(False)
-            new_probs_without_prior = la.probs_of_word_orders(True)
-            if ARGS.test_incr and (i+1)%chunk_size == 0 and i+1!=len(train_data):
-                new_acc, new_harsh_acc = test(final_chunk)
+    train_start_time = time()
+    for i,dpoint in enumerate(train_data):
+        words = dpoint['words']
+        if ARGS.remove_vowels:
+            words = [remove_vowels(w) for w in words]
+        if i == ARGS.db_at:
+            breakpoint()
+        start = max(0, i-(ARGS.n_distractors//2))
+        stop = min(len(train_data), i+((ARGS.n_distractors+1)//2)+1)
+        lf_strs_incl_distractors = [x['lf'] for x in train_data[start:stop]]
+        if not ARGS.suppress_prints:
+            print(f'{i}th dpoint: {words}, {lf_strs_incl_distractors}')
+        buffers = i>=ARGS.n_distractors
+        n_words_seen = sum(w in la.vocab for w in words)
+        ltbs = i>= ltb_idxs[0]
+        la.step(lf_strs_incl_distractors, words, buffers, ltbs, mode='train')
+        if i in ltb_idxs[1:] and not ARGS.no_ltbs:
+            for b in la.learners.values():
+                b.refresh()
+        la.eval()
+        new_probs_with_prior = la.probs_of_word_orders(False)
+        if (i+1)%chunk_size == 0 and i+1!=len(train_data):
+            _, w2lf, w2s, w2b = test_word_acc()
+            nonce_results = test_nonce()
+            for k,v in nonce_results.items():
+                all_nonce_results[k].append(v)
+            all_w2lf_accs.append(w2lf); all_w2syn_accs.append(w2s); all_w2both_accs.append(w2b)
+            if ARGS.test_incr:
+                new_acc, new_harsh_acc, new_select_acc = test_parses(final_chunk)
                 all_accs.append(new_acc)
                 all_harsh_accs.append(new_harsh_acc)
-                #if i+len(final_chunk) < len(train_data):
-                new_next_acc, new_next_harsh_acc = test(data_to_use[i:i+len(final_chunk)])
-                all_next_accs.append(new_next_acc)
-                all_next_harsh_accs.append(new_next_harsh_acc)
-            all_word_order_probs.append(new_probs_with_prior)
-            la.train()
-        time_per_dpoint = (time()-epoch_start_time)/len(d['data'])
-        print(f'Time per dpoint: {time_per_dpoint:.6f}')
-        final_parses = {}
-        n_correct_parses = 0
+                all_select_accs.append(new_select_acc)
+                check_dir(f'experiments/{ARGS.expname}/gens')
+                with open(f'experiments/{ARGS.expname}/gens/gens{i}.txt', 'w') as f:
+                    for _ in range(ARGS.n_generate):
+                        try:
+                            generated = la.generate_words()
+                            if any([x['words']==generated.split() for x in d['data']]):
+                                f.write(f'{generated}: seen during training\n')
+                            else:
+                                f.write(f'{generated}: NOT seen during training\n')
+                        except KeyError: # means Swh came up
+                            pass
+                if ARGS.test_next_chunk:
+                    next_data = data_to_use[i:i+len(final_chunk)]
+                    new_next_acc, new_next_harsh_acc, new_next_select_acc = test_parses(next_data)
+                    all_next_accs.append(new_next_acc)
+                    all_next_harsh_accs.append(new_next_harsh_acc)
+                    all_next_select_accs.append(new_next_select_acc)
+        all_word_order_probs.append(new_probs_with_prior)
+        la.train()
 
-    final_acc_enws, final_harsh_acc = test(final_chunk)
-    dist_substr = '' if ARGS.n_distractors==0 else f' dist{ARGS.n_distractors}'
-    if final_acc_enws == all_accs[-1] or final_harsh_acc==all_harsh_accs[-1]:
-        breakpoint()
-    xplot = [i for i in range(len(train_data)) if (i+1)%chunk_size == 0 and i+1!=len(train_data)]
-    xplot.append(len(train_data))
-    if ARGS.test_incr:
-        all_accs.append(final_acc_enws)
-        all_harsh_accs.append(final_harsh_acc)
-        plt.plot(xplot, all_accs, color='b', label='no unseen words')
-        plt.plot(xplot, all_harsh_accs, color='r', label='all utterances')
-        plt.legend(loc='upper left')
-        plt.title(f'Accuracy on Final 10% of Utterances{dist_substr}')
-        fpath = f'experiments/{ARGS.expname}/test_lf_accs.png'
-        plt.savefig(fpath)
-        os.system(f'/usr/bin/xdg-open {fpath}')
-
-        plt.clf()
-        all_next_accs.append(final_acc_enws)
-        all_next_harsh_accs.append(final_harsh_acc)
-        plt.plot(xplot, all_next_accs, color='g', label='no unseen words next chunk')
-        plt.plot(xplot, all_next_harsh_accs, color='y', label='all utterances next chunk')
-        plt.legend(loc='upper left')
-        plt.title(f'Accuracy on Next 5% of Utterances{dist_substr}')
-        fpath = f'experiments/{ARGS.expname}/next_lf_accs.png'
-        plt.savefig(fpath)
-        os.system(f'/usr/bin/xdg-open {fpath}')
-    #plt.show()
-    inverse_probs_start_time = time()
+    time_per_dpoint = (time()-train_start_time)/len(d['data'])
+    print(f'Time per dpoint: {time_per_dpoint:.6f}')
     if len(train_data) > 0:
         la.compute_inverse_probs()
+    inverse_probs_start_time = time()
     print(f'Time to compute inverse probs: {time()-inverse_probs_start_time:.3f}s')
+
     if ARGS.jreload_from is not None:
         df_prior = pd.read_csv(f'experiments/{ARGS.jreload_from}/{ARGS.jreload_from}_word_order_probs.csv', index_col=0)
     else:
         la.save_to(f'experiments/{ARGS.expname}')
         print(df_prior:=pd.DataFrame(all_word_order_probs))
         df_prior.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_word_order_probs.csv')
-    cs = ['r','g','b','y','orange','brown']
 
-    def plot_df(df, info=''):
-        if info != '':
-            info = f' {info}'
-        for i,c in enumerate(df.columns):
-            plt.plot(np.arange(len(df)), df[c], label=c, color=cs[i])
-        plt.legend(loc='upper right')
-        plt.xlabel('Num Training Points')
-        plt.ylabel('Relative Probability')
-        plt.title(f'Word Order Probs{info}')
-        check_dir('plotted_figures')
-        fpath = f'experiments/{ARGS.expname}/word_order_probs{info.replace(" ","_").lower()}.png'
-        plt.savefig(fpath)
-        if ARGS.show_plots:
-            os.system(f'/usr/bin/xdg-open {fpath}')
-        plt.clf()
-
-    if ARGS.expname_for_plot_titles is not None:
-        dn_info = ARGS.expname_for_plot_titles
-    else:
-        dn = ARGS.dset[0].upper() + ARGS.dset[1:]
-        dn_info = dn if ARGS.n_distractors==0 else f'{dn} {ARGS.n_distractors} distractors'
-        dn_info = f'{dn_info} {ARGS.expname[:-1]}'.replace('_',' ')
+    with open(f'experiments/{ARGS.expname}/test-gens.txt', 'w') as f:
+        for _ in range(300):
+            f.write(la.generate_words() + '\n')
+    cs = ['r','g','b','y','orange','brown', 'm', 'c', 'k']
     if ARGS.jreload_from is None:
-        plot_df(df_prior, dn_info)
+        results_df, word2lf_acc, word2syn_acc, word2both_acc = test_word_acc()
+        all_w2lf_accs.append(word2lf_acc); all_w2syn_accs.append(word2syn_acc); all_w2both_accs.append(word2both_acc)
+        if not ARGS.no_test:
+            final_acc_enws, final_harsh_acc, final_select_acc = test_parses(final_chunk)
+        dist_substr = '' if ARGS.n_distractors==0 else f' dist{ARGS.n_distractors}'
+        xplot = [i for i in range(len(train_data)) if (i+1)%chunk_size == 0 and i+1!=len(train_data)]
+        xplot.append(len(train_data))
+        plt.plot(xplot, all_w2lf_accs, color='darkorange', label='word meaning')
+        plt.plot(xplot, all_w2syn_accs, color='r', label='word category')
+        plt.plot(xplot, all_w2both_accs, color='g', label='both')
+        plt.xlabel('Num Training Points')
+        plt.ylabel(f'Relative Probability')
+        plt.legend(loc='upper left')
+        plt.title(f'Learned lexical entries{dist_substr}')
+        fpath = f'experiments/{ARGS.expname}/{ARGS.expname}_test_word_accs.png'
+        plt.savefig(fpath)
+        plt.clf()
+        os.system(f'/usr/bin/xdg-open {fpath}')
 
-    gt_lexicon = all_gt_lexicons[ARGS.dset]
-    results_dict = {}
-    for w,gts in gt_lexicon:
-        pred_lf = la.lf_word_counts.loc[w].idxmax() if w in la.lf_word_counts.index else 'notseen'
-        pred_syn = max([s for s in la.syn_word_probs.columns if 'X' not in s], key=lambda x: la.syn_word_probs.loc[w][x] if w in la.syn_word_probs.index else 0)
-        lf_correct = any(lf_acc(pred_lf,g.split(' || ')[0]) for g in gts)
-        syn_correct = any(pred_syn==g.split(' || ')[1] for g in gts)
-        both_correct = any(lf_acc(pred_lf,g.split(' || ')[0]) and pred_syn==g.split(' || ')[1] for g in gts)
-        results_dict[w] = {'pred LF':pred_lf, 'pred syncat':pred_syn, 'LF correct':lf_correct, 'syncat correct':syn_correct, 'both correct': both_correct}
-    results = pd.DataFrame(results_dict).T
+        final_nonce_results = test_nonce()
+        for k,v in final_nonce_results.items():
+            all_nonce_results[k].append(v)
+        for const_type, colour in zip(nonce_dps.keys(), cs):
+            plt.plot(xplot, all_nonce_results[const_type], color=colour, label=const_type)
+        plt.xlabel('Num Training Points')
+        plt.ylabel(f'Correct Parse Probability (CPP)')
+        plt.legend(loc='upper left')
+        plt.title(f'One-trial Learning Ability{dist_substr}')
+        fpath = f'experiments/{ARGS.expname}/{ARGS.expname}_one-trials.png'
+        plt.savefig(fpath)
+        plt.clf()
+        os.system(f'/usr/bin/xdg-open {fpath}')
+
+        if ARGS.test_incr:
+            all_accs.append(final_acc_enws); all_harsh_accs.append(final_harsh_acc); all_select_accs.append(final_select_acc)
+            plt.plot(xplot, all_accs, color='b', label='no unseen words')
+            plt.plot(xplot, all_harsh_accs, color='r', label='all utterances')
+            plt.plot(xplot, all_select_accs, color='y', label='select acc')
+            plt.xlabel('Num Training Points')
+            plt.ylabel('Relative Probability')
+            plt.legend(loc='upper left')
+            plt.title(f'Accuracy on Final 10% of Utterances{dist_substr}')
+            fpath = f'experiments/{ARGS.expname}/{ARGS.expname}_test_lf_accs.png'
+            plt.savefig(fpath)
+            plt.clf()
+            os.system(f'/usr/bin/xdg-open {fpath}')
+
+            if ARGS.test_next_chunk:
+                all_next_accs.append(final_acc_enws); all_next_harsh_accs.append(final_harsh_acc); all_next_select_accs.append(final_select_acc)
+                plt.plot(xplot, all_next_accs, color='b', label='no unseen words next chunk')
+                plt.plot(xplot, all_next_harsh_accs, color='r', label='all utterances next chunk')
+                plt.plot(xplot, all_next_select_accs, color='y', label='select acc next chunk')
+                plt.xlabel('Num Training Points')
+                plt.ylabel('Relative Probability')
+                plt.legend(loc='upper left')
+                plt.title(f'Accuracy on Next 5% of Utterances{dist_substr}')
+                fpath = f'experiments/{ARGS.expname}/{ARGS.expname}_next_lf_accs.png'
+                plt.savefig(fpath)
+                plt.clf()
+                os.system(f'/usr/bin/xdg-open {fpath}')
+        #plt.show()
+
+        def plot_df(df, info=''):
+            if info != '':
+                info = f' {info}'
+            for i,c in enumerate(df.columns):
+                plt.plot(np.arange(len(df)), df[c], label=c, color=cs[i])
+            plt.legend(loc='upper right')
+            plt.xlabel('Num Training Points')
+            plt.ylabel('Relative Probability')
+            plt.title(f'Word Order Probs{info}')
+            check_dir('plotted_figures')
+            fpath = f'experiments/{ARGS.expname}/word_order_probs{info.replace(" ","_").lower()}.png'
+            plt.savefig(fpath)
+            plt.clf()
+            if ARGS.show_plots:
+                os.system(f'/usr/bin/xdg-open {fpath}')
+
+        if ARGS.expname_for_plot_titles is not None:
+            dn_info = ARGS.expname_for_plot_titles
+        else:
+            dn = ARGS.dset[0].upper() + ARGS.dset[1:]
+            dn_info = dn if ARGS.n_distractors==0 else f'{dn} {ARGS.n_distractors} distractors'
+            dn_info = f'{dn_info} {ARGS.expname[:-1]}'.replace('_',' ')
+        if ARGS.jreload_from is None:
+            plot_df(df_prior, dn_info)
+
     if ARGS.print_word_acc:
-        print(results)
-    word2lf_acc = results['LF correct'].mean()
-    word2syn_acc = results['syncat correct'].mean()
-    word2both_acc = results['both correct'].mean()
-    la.generate_words('S')
+        print(results_df)
     if ARGS.db_after:
         breakpoint()
-    results.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_full_preds_and_scores.csv')
+    test_nonce()
+    results_df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_full_preds_and_scores.csv')
     with open(f'experiments/{ARGS.expname}/{ARGS.expname}_summary.txt','w') as f:
-        if ARGS.n_generate > 0:
-            file_print(f'\nSamples for type {ARGS.cat_to_sample_from}:',f)
-        for _ in range(ARGS.n_generate):
-            generated = la.generate_words(ARGS.cat_to_sample_from)
-            if any([x['words'][:-1]==generated.split() for x in d['data']]):
-                file_print(f'{generated}: seen during training',f)
-            else:
-                file_print(f'{generated}: not seen during training',f)
         file_print(f'Total run time: {time()-start_time:.3f}s',f)
         file_print(f'Word to LF accuracy: {word2lf_acc:.4f}',f)
         file_print(f'Word to syncat accuracy: {word2syn_acc:.4f}',f)

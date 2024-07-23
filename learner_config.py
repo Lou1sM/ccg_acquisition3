@@ -42,7 +42,7 @@ chiltag_to_node_types = {
 
 pos_marking_dict = {
                     'adj':set(['N|N']),
-                    'adv':set(['S|S','(S|NP)|(S|NP)|(S|NP|NP)|(S|NP|NP)']),
+                    'adv':set(['S|S','VP|VP', 'S|NP|(S|NP)']),
                     'adv:int':set(['X']),
                     'adv:tem':set(['X']),
                     'aux':set(['X']),
@@ -50,7 +50,7 @@ pos_marking_dict = {
                     #'co':set(['S']),
                     'co':set(['X']),
                     'conj':set(['S|S|S']),
-                    'coord':set(['S|S|S','NP|NP|NP','N|N|N','(S|NP)|(S|NP)|(S|NP)']), # don't have schemas yet]), minimal list for now
+                    'coord':set(['S|S|S','NP|NP|NP','N|N|N','VP|VP|VP']), # don't have schemas yet]), minimal list for now
                     'cop':set(['S|NP|VP', 'Sq|VP|NP','S|NP|(N|N)', 'Sq|(N|N)|NP']),
                     'det':set(['NP|N']),
                     'det:art':set(['NP|N']),
@@ -66,18 +66,18 @@ pos_marking_dict = {
                     'n:let':set(['NP']),
                     'n:prop':set(['NP']),
                     'n:pt':set(['N']), # seems to be for nouns with plural morph.]), like scissors
-                    #'neg':set(['(S|NP)|(S|NP)', 'VP|VP', '(Sq|NP)|(Sq|NP), Sq|VP|NP|(Sq|VP|NP)']),
-                    #'neg':set(['S|S','(S|NP)|(S|NP)','(S|NP|NP)|(S|NP|NP)']), # ?
+                    #'neg':set(['VP|VP', 'VP|VP', '(Sq|NP)|(Sq|NP), Sq|VP|NP|(Sq|VP|NP)']),
+                    #'neg':set(['S|S','VP|VP','VP|NP)|VP|NP)']), # ?
                     'on':set(['X']),
                     'part':set(['X']),
                     'poss':set(['X']),
                     'post':set(['S|S']), # ?
                     #'prep':set(['S|NP|NP', 'S|S|NP','NP|NP|NP','S|NP']),
-                    'prep':set(['S|NP|(S|NP)|NP']),
+                    'prep':set(['S|NP|VP|NP']),
                     'pro:dem':set(['NP']), # ?
                     'pro:exist':set(['NP']),
                     'pro:indef':set(['NP']),
-                    #'pro:int':set(['NP', 'Swhq|(S|NP)']),
+                    #'pro:int':set(['NP', 'Swhq|VP']),
                     'pro:int':set(['Swhq|(Sq|NP)', 'NP']),
                     'pro:obj':set(['NP']),
                     'pro:per':set(['NP']),
@@ -102,54 +102,54 @@ base_lexicon['hasproperty'] = set(['S|NP|(N|N)'])
 base_lexicon['not'] = set(['X'])
 
 agt_lexicon =[
-        ("'ll", ['lambda $0.lambda $1.mod|~will ($0 $1) || S\\NP/(S\\NP)']),# ?
-        ("'re",['lambda $0.lambda $1.v|hasproperty $1 $0 || S\\NP/NP','lambda $0.lambda $1.v|equals $1 $0 || S\\NP/NP', 'lambda $0.lambda $1.v|hasproperty $0 $1 || Sq/NP/NP','lambda $0.lambda $1.v|equals $0 $1 || Sq/NP/NP']),
-        ("'s", ['lambda $0.lambda $1.v|equals $1 $0 || S\\NP/NP','lambda $0.lambda $1.v|hasproperty $1 $0 || S\\NP/NP']),
+        ("'ll", ['lambda $0.lambda $1.mod|will ($0 $1) || S\\NP/VP', 'lambda $0.lambda $1.mod|will ($1 $0) || S/NP/VP']),# ?
+        ("'re",['lambda $0.lambda $1.v|hasproperty $0 $1 || S\\NP/NP','lambda $0.lambda $1.v|equals $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|hasproperty $0 $1 || Sq/NP/NP','lambda $0.lambda $1.v|equals $0 $1 || Sq/NP/NP', 'lambda $0.lambda $1.v|hasproperty $0 $1 || Sq/NP/NP','lambda $0.lambda $1.cop|pres-2s ($0 $1) || S\\NP/VP']),
+        ("'s", ['lambda $0.lambda $1.v|equals $0 $1 || S\\NP/NP','lambda $0.lambda $1.v|hasproperty $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|hasproperty $0 $1 || Sq/NP/NP','lambda $0.lambda $1.cop|pres-3s ($0 $1) || S\\NP/VP']),
         ('Adam', ['n:prop|adam || NP']),
         ('I', ['pro:sub|i || NP']),
         ('a', ['lambda $0.det:art|a $0 || NP/N']),
         ('an', ['lambda $0.det:art|a $0 || NP/N']),
         ('another', ['lambda $0.qn|another $0 || NP/N']),
-        ('are', ['lambda $0.lambda $1.v|equals $0 $1 || S\\NP/NP','lambda $0.lambda $1.v|hasproperty $1 $0 || S\\NP/NP']),
-        ('break', ['lambda $0.lambda $1.v|break $1 $0 || S\\NP/NP']),
-        ('can', ['lambda $0.lambda $1.mod|can ($0 $1) || S\\NP/(S\\NP)','lambda $0.lambda $1.mod|can ($1 $0) || S/NP/(S|NP)']),
-        ('d', ['lambda $0.lambda $1.mod|do ($0 $1) || S\\NP/(S|NP)','lambda $0.lambda $1.mod|do ($1 $0) || S/NP/(S|NP)']),
-        ('did', ['lambda $0.lambda $1.mod|do-past ($0 $1) || S\\NP/(S|NP)','lambda $0.lambda $1.mod|do-past ($1 $0) || S/(S|NP)/NP']),
-        ('do', ['lambda $0.lambda $1.v|do $1 $0 || S\\NP/NP', 'lambda $0.lambda $1.mod|do $0 $1 || S\\NP/(S|NP)','lambda $0.lambda $1.mod|do ($1 $0) || S/NP/(S|NP)']),
-        ('does', ['lambda $0.lambda $1.mod|do-3s ($0 $1) || S\\NP/(S|NP)','lambda $0.lambda $1.mod|do-3s ($1 $0) || S/NP/(S|NP)']), #?
-        ('dropped', ['lambda $0.lambda $1.v|drop-past $1 $0 || S\\NP/NP']),
-        ('have', ['lambda $0.lambda $1.v|have $1 $0 || S\\NP/NP']),
+        ('are', ['lambda $0.lambda $1.v|equals $0 $1 || S\\NP/NP','lambda $0.lambda $1.hasproperty $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|equals $0 $1 || VP/NP','lambda $0.lambda $1.hasproperty $0 $1 || VP/NP', 'lambda $0.lambda $1.v|equals $1 $0 || Sq/NP/NP','lambda $0.lambda $1.hasproperty $1 $0 || Sq/NP/NP']),
+        ('break', ['lambda $0.lambda $1.v|break $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|break $0 $1 || VP/NP']),
+        ('can', ['lambda $0.lambda $1.mod|can ($0 $1) || S\\NP/VP','lambda $0.lambda $1.mod|can ($1 $0) || Sq/VP/NP']),
+        ('d', ['lambda $0.lambda $1.mod|do ($0 $1) || S\\NP/VP','lambda $0.lambda $1.mod|do ($1 $0) || Sq/VP/NP']),
+        ('did', ['lambda $0.lambda $1.mod|do-past ($0 $1) || S\\NP/VP','lambda $0.lambda $1.mod|do-past ($1 $0) || Sq/VP/NP']),
+        ('do', ['lambda $0.lambda $1.v|do $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.mod|do $0 $1 || S\\NP/VP','lambda $0.lambda $1.mod|do ($1 $0) || Sq/VP/NP']),
+        ('does', ['lambda $0.lambda $1.mod|do-3s ($0 $1) || S\\NP/VP','lambda $0.lambda $1.mod|do-3s ($1 $0) || Sq/VP/NP']), #?
+        ('dropped', ['lambda $0.lambda $1.v|drop-past $0 $1 || S\\NP/NP']),
+        ('have', ['lambda $0.lambda $1.v|have $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|have $0 $1 || VP/NP']),
         ('he', ['pro:sub|he || NP']),
         ('his', ['lambda $0.det:poss|his $0 || NP/N','pro:poss|his || NP']),
-        ('hurt', ['lambda $0.lambda $1.v|hurt-zero $1 $0 || S\\NP/NP']),
-        ('in', ['lambda $0.lambda $1.prep|in ($1 $0) || S\\NP\\(S\\NP)/NP','lambda $0.prep|in $0 || S/S']), #?
-        ('is', ['lambda $0.lambda $1.v|equals $0 $1 || S\\NP/NP','lambda $0.lambda $1.v|hasproperty $1 $0 || S\\NP/NP']),
+        ('hurt', ['lambda $0.lambda $1.v|hurt-zero $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|hurt-zero $0 $1 || VP/NP']),
+        ('in', ['lambda $0.lambda $1.prep|in ($0 $1) || S\\NP\\(S\\NP)/NP','lambda $0.prep|in $0 || S/S']), #?
+        ('is', ['lambda $0.lambda $1.v|equals $0 $1 || S\\NP/NP','lambda $0.lambda $1.v|hasproperty $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|equals $1 $0 || Sq/NP/NP','lambda $0.lambda $1.hasproperty $1 $0 || Sq/NP/NP']),
         ('it', ['pro:per|it || NP']),
-        ('like', ['lambda $0.lambda $1.v|like $1 $0 || S\\NP/NP']),
-        ('lost', ['lambda $0.lambda $1.v|lose-past $1 $0 || S\\NP/NP']),
-        ('may', ['lambda $0.lambda $1.mod|may ($0 $1) || S\\NP/(S\\NP)']),
-        ('missed', ['lambda $0.v|miss-past $0 || S\\NP','lambda $0.lambda $1.v|miss-past $1 $0 || S\\NP/NP']),
+        ('like', ['lambda $0.lambda $1.v|like $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|like $0 $1 || VP/NP']),
+        ('lost', ['lambda $0.lambda $1.v|lose-past $0 $1 || S\\NP/NP']),
+        ('may', ['lambda $0.lambda $1.mod|may ($0 $1) || S\\NP/VP', 'lambda $0.lambda $1.mod|may ($1 $0) || Sq/VP/NP']),
+        ('missed', ['lambda $0.v|miss-past $0 || S\\NP','lambda $0.lambda $1.v|miss-past $0 $1 || S\\NP/NP']),
         ('my', ['lambda $0.det:poss|my $0 || NP/N']),
         ('name', ['n|name || N']),
-        ('need', ['lambda $0.lambda $1.v|need $1 $0 || S\\NP/NP']),
+        ('need', ['lambda $0.lambda $1.v|need $0 $1 || S\\NP/NP']),
         ('no', ['lambda $0.qn|no $0 || NP/N']),
         ('not', ['lambda $0.lambda $1.not ($0 $1) || S\\NP/(S\\NP)\\(S\\NP/(S\\NP))']), #?
         ('on', ['lambda $0.prep|on $0 || S\\NP\\(S\\NP)/NP']),
         ('one', ['pro:indef|one || NP']),
         ('pencil', ['n|pencil || N']),
-        ('say', ['lambda $0.lambda $1.v|say $1 $0 || S\\NP/NP']),
-        ('see', ['lambda $0.lambda $1.v|see $1 $0 || S\\NP/NP']),
-        ('shall', ['lambda $0.lambda $1.mod|shall ($0 $1) || S\\NP/(S|NP)','lambda $0.lambda $1.mod|shall ($1 $0) || S/(S|NP)/NP']),
+        ('say', ['lambda $0.lambda $1.v|say $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|say $0 $1 || VP/NP']),
+        ('see', ['lambda $0.lambda $1.v|see $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|see $0 $1 || VP/NP']),
+        ('shall', ['lambda $0.lambda $1.mod|shall ($0 $1) || S\\NP/VP','lambda $0.lambda $1.mod|shall ($1 $0) || Sq/VP/NP']),
         ('some', ['lambda $0.qn|some $0 || NP/N']),
         ('that', ['pro:dem|that || NP','lambda $0.pro:det|that $0 || NP/N']),
         ('the', ['lambda $0.det:art|the $0 || NP/N']),
         ('they', ['pro:sub|they || NP']),
         ('this', ['pro:dem|this || NP','lambda $0.pro:det|this $0 || NP/N']),
         ('those', ['pro:dem|those || NP','lambda $0.pro:det|those $0 || NP/N']),
-        ('was', ['lambda $0.lambda $1.v|equals $0 $1 || S\\NP/NP','lambda $0.lambda $1.v|hasproperty $1 $0 || S\\NP/NP']),
+        ('was', ['lambda $0.lambda $1.v|equals-past $0 $1 || S\\NP/NP','lambda $0.lambda $1.v|hasproperty-past $0 $1 || S\\NP/NP', 'lambda $0.lambda $1.v|equals-past $1 $0 || Sq/NP/NP','lambda $0.lambda $1.v|hasproperty-past $1 $0 || Sq/NP/NP']),
         ('we', ['pro:sub|we || NP']),
-        ('what', ['pro:int|WHAT || Swhq/Sq/NP','pro:int|WHAT || NP']),
-        ('who', ['pro:int|WHO || Swhq/Sq/NP','pro:int|WHO || NP']),
+        ('what', ['lambda $0.$0 pro:int|WHAT || Swhq/(Sq/NP)','pro:int|WHAT || NP']),
+        ('who', ['lambda $0.$0 pro:int|WHO || Swhq/(Sq/NP)','pro:int|WHO || NP']),
         ('you', ['pro:per|you || NP']),
         ('your', ['lambda $0.det:poss|your $0 || NP/N'])]
 
@@ -162,7 +162,7 @@ hgt_lexicon = [
         ('huʔ', ['pro:per|huʔ || NP',]),
         ('loʔ', ['lambda $0.lambda $1.not ($0 $1) || S\\NP/(S\\NP)\\(S\\NP/(S\\NP))',]),
         ('bōʔi', ['v|baʔ you || S',]),
-        ('rocā', ['lambda $0.lambda $1.v|racā $1 $0 || S\\NP/NP',]),
+        ('rocā', ['lambda $0.lambda $1.v|racā $0 $1 || S\\NP/NP',]),
         ('ʔanī', ['pro:per|ʔanī || NP',]),
         ('ʔābaʔ', ['n:prop|ʔābaʔ || NP',]),
         ('qxi', ['v|laqāx you || S',]),

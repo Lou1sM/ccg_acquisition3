@@ -226,7 +226,7 @@ direct_take_lf_from_sents = {
     "call Robin doctor": 'lambda $0.n|call n:prop|robin n|doctor-BARE $0',
     "is he alright": 'Q (hasproperty adj|alright pro:sub|he)',
     "let go": 'lambda $0.v|let-go $0',
-    "did it pop": 'Q (mod|do-past (v|pop pro:per|it)',
+    "did it pop": 'Q (mod|do-past (v|pop pro:per|it))',
     }
 
 sent_fixes = {

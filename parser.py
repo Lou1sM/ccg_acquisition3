@@ -34,7 +34,7 @@ refwdfwdtranscat = re.compile(r'S/[A-Za-z\(\|\\\/)]+/NP$')
 iwff = IWFF()
 
 class LogicalForm:
-    def __init__(self,defining_string,idx_in_tree=[],caches={'splits':{},'cats':{}},parent=None,dblfs=None,dbsss=None, verbose_as=False, specified_cats=None):
+    def __init__(self,defining_str,idx_in_tree=[],caches={'splits':{},'cats':{}},parent=None,dblfs=None,dbsss=None, verbose_as=False, specified_cats=None):
         """Specified cats can come either from traising or if root."""
         self.verbose_as = verbose_as
         if dblfs is not None:
@@ -46,7 +46,7 @@ class LogicalForm:
             assert debug_set_cats in (None, dbsss)
             debug_set_cats = dbsss
         assert isinstance(idx_in_tree,list)
-        assert iwff.is_wellformed_lf(defining_string)
+        assert iwff.is_wellformed_lf(defining_str)
         assert specified_cats != {'X'}
         had_surrounding_brackets = False
         self.sibling = None
@@ -63,18 +63,18 @@ class LogicalForm:
         self.ud_pos = ''
         self.was_cached = False
         self.specified_cats = specified_cats
-        defining_string = maybe_debrac(defining_string)
+        defining_str = maybe_debrac(defining_str)
         if parent == 'START':
             self.sem_cats = set('X')
-        if defining_string.startswith('BARE'):
-            print('\n'+defining_string+'\n')
+        if defining_str.startswith('BARE'):
+            print('\n'+defining_str+'\n')
             raise SemCatError()
-        if defining_string=='not':
+        if defining_str=='not':
             self.node_type = 'neg'
             self.string = 'not'
             self.is_leaf = True
-        elif bool(lambda_match(defining_string)):
-            lambda_string, _, remaining_string = defining_string.partition('.')
+        elif bool(lambda_match(defining_str)):
+            lambda_string, _, remaining_string = defining_str.partition('.')
             variable_index = lambda_string.partition('_')[0][7:]
             self.is_leaf = False
             self.string = lambda_string
@@ -85,20 +85,20 @@ class LogicalForm:
                 if d.node_type == 'unbound_var' and d.string == variable_index:
                     d.binder = self
                     d.node_type = 'bound_var'
-        elif bool(reQmatch.match(defining_string)):
+        elif bool(reQmatch.match(defining_str)):
             self.node_type = 'Q'
             self.string = 'Q'
-            self.children = [self.spawn_child(defining_string[3:-1],0)]
+            self.children = [self.spawn_child(defining_str[3:-1],0)]
             self.is_leaf = False
-        elif ' ' in defining_string:
+        elif ' ' in defining_str:
             self.string = ''
-            arguments = split_respecting_brackets(defining_string)
-            assert not any(a==defining_string for a in arguments)
+            arguments = split_respecting_brackets(defining_str)
+            assert not any(a==defining_str for a in arguments)
             assert arguments != [self] # would enter a loop if so
-            if len(arguments) == 1 and is_bracketed(defining_string):
+            if len(arguments) == 1 and is_bracketed(defining_str):
                 had_surrounding_brackets = True
-                assert not is_bracketed(defining_string[1:-1])
-                #arguments = split_respecting_brackets(defining_string[1:-1])
+                assert not is_bracketed(defining_str[1:-1])
+                #arguments = split_respecting_brackets(defining_str[1:-1])
             #left = ' '.join(arguments[:-1])
             #right = arguments[-1]
             self.children = [self.spawn_child(a,i) for i,a in enumerate(arguments)]
@@ -109,7 +109,7 @@ class LogicalForm:
                 self.node_type = 'composite'
             self.is_leaf = False
         else:
-            self.string = defining_string
+            self.string = defining_str
             self.is_leaf = True
             if self.string.startswith('$'):
                 self.node_type = 'unbound_var'
@@ -118,26 +118,26 @@ class LogicalForm:
                 self.node_type = 'connective'
             elif self.string == 'prog':
                 self.node_type = 'prog'
-            elif pos_marking_dict.get(defining_string,None) == 'N':
+            elif pos_marking_dict.get(defining_str,None) == 'N':
                 breakpoint()
                 self.node_type = 'noun'
-            elif defining_string.split('|')[0] == 'mod':
+            elif defining_str.split('|')[0] == 'mod':
                 self.node_type = 'raise'
-            elif (sds:=strip_string(defining_string)) in ['WHAT', 'WHO']:
+            elif (sds:=strip_string(defining_str)) in ['WHAT', 'WHO']:
                 self.node_type = 'WH'
             elif sds in ['you', 'equals', 'hasproperty', 'equals-past', 'hasproperty-past']:
                 self.node_type = sds
             elif sds == '':
                 self.node_type = 'null'
-            elif rechiltagmatch.match(defining_string):
-                chiltag = defining_string.split('|')[0]
-                if chiltag=='n' and defining_string.endswith('BARE'):
+            elif rechiltagmatch.match(defining_str):
+                chiltag = defining_str.split('|')[0]
+                if chiltag=='n' and defining_str.endswith('BARE'):
                     self.node_type = 'entity'
-                elif chiltag=='n:prop' and defining_string.endswith('\'s'):
+                elif chiltag=='n:prop' and defining_str.endswith('\'s'):
                     self.node_type = 'quant'
                 elif chiltag not in chiltag_to_node_types:
                     if chiltag not in ['part','aux','on','poss','pro:exist','post']:
-                        print(defining_string)
+                        print(defining_str)
                     self.node_type = chiltag
                 else:
                     self.node_type = chiltag_to_node_types[chiltag]
@@ -148,9 +148,9 @@ class LogicalForm:
             self.children = []
 
         if had_surrounding_brackets:
-            assert self.subtree_string() == defining_string
+            assert self.subtree_string() == defining_str
         else:
-            if not self.subtree_string() == defining_string:
+            if not self.subtree_string() == defining_str:
                 breakpoint()
 
         self.set_cats()
@@ -418,14 +418,14 @@ class LogicalForm:
             existing_app_splits, existin_cmp_splits, existing_sem_cats = self.caches['splits'].get(self.lf_str, ({},{},{}))
             self.caches['splits'][self.lf_str] = self.app_splits.union(existing_app_splits), self.cmp_splits.union(existin_cmp_splits), self.sem_cats.union(existing_sem_cats)
 
-    def spawn_child(self,defining_string,sibling_idx):
+    def spawn_child(self,defining_str,sibling_idx):
         """Careful, this means a child in the tree of one logical form, not a possible split."""
-        return LogicalForm(defining_string,idx_in_tree=self.idx_in_tree+[sibling_idx],caches=self.caches,parent=self, verbose_as=self.verbose_as)
+        return LogicalForm(defining_str,idx_in_tree=self.idx_in_tree+[sibling_idx],caches=self.caches,parent=self, verbose_as=self.verbose_as)
 
-    def spawn_self_like(self,defining_string,idx_in_tree=None):
+    def spawn_self_like(self,defining_str,idx_in_tree=None):
         if idx_in_tree is None:
             idx_in_tree = self.idx_in_tree
-        new = LogicalForm(defining_string,idx_in_tree=idx_in_tree,caches=self.caches,parent=self.parent, verbose_as=self.verbose_as)
+        new = LogicalForm(defining_str,idx_in_tree=idx_in_tree,caches=self.caches,parent=self.parent, verbose_as=self.verbose_as)
         new.sem_cats = self.sem_cats
         return new
 

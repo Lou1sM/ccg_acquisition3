@@ -2,7 +2,7 @@ import json
 from pprint import pprint as pp
 import numpy as np
 import re
-from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, is_wellformed_lf, new_var_num, alpha_normalize, all_lambda_body_splits, de_q, add_q, add_not, add_whq
+from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, IWFF, new_var_num, alpha_normalize, all_lambda_body_splits, de_q, add_q, add_not, add_whq
 from converter_config import manual_ida_fixes, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes, neg_conts, direct_take_lf_from_sents
 from learner_config import pos_marking_dict
 
@@ -13,6 +13,8 @@ cw_words = set(sorted(re.findall(fr'(?<=co\|)[{he_chars}]+(?=\()',d)))
 
 ings = []
 falseings = []
+
+iwff = IWFF()
 
 maybe_det_str = fr'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|[\w{he_chars}]*\'s'
 #maybe_det_str = fr'pro:\w*\|that_\d|qn\|[\w{he_chars}]*|det:\w*\|[\w{he_chars}]*|det\|ha|det\|\~ha|BARE|n:prop\|\w*\'s'
@@ -296,7 +298,7 @@ def reformat_cop(lf, sent):
         breakpoint()
     if lf.count('cop')==2:
         breakpoint()
-    assert is_wellformed_lf(lf)
+    assert iwff.is_wellformed_lf(lf)
     return lf
 
 def sent_preproc(lf, sent):
