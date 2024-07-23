@@ -321,7 +321,7 @@ class LanguageAcquirer():
         return [k for k,v in self.meaningl.memory.items()]
 
     @property
-    def full_sem_cat_vocab(self):
+    def full_syn_cat_vocab(self):
         return [k for k,v in self.shmeaningl.memory.items()]
 
     @property
@@ -345,7 +345,7 @@ class LanguageAcquirer():
         return [k for k,v in self.meaningl.memory.items() if v['COUNT']>self.vocab_thresh]
 
     @property
-    def sem_cat_vocab(self):
+    def syn_cat_vocab(self):
         return [k for k,v in self.shmeaningl.memory.items() if v['COUNT']>self.vocab_thresh]
 
     @property
@@ -593,10 +593,10 @@ class LanguageAcquirer():
                 shell_lf = self.shmeaningl.conditional_sample(sync)
             lf = self.meaningl.conditional_sample(shell_lf)
             words = self.wordl.conditional_sample(lf)
-            print(' '*depth + f'lf: {lf}  sync: {sync} words: {words}')
+            #print(' '*depth + f'lf: {lf}  sync: {sync} words: {words}')
             return words
         else:
-            print(' '*depth + f'sync: {sync}')
+            #print(' '*depth + f'sync: {sync}')
             f,g = split.split(' + ')
             return f'{self.generate_words(f, depth+1)} {self.generate_words(g, depth+1)}'
 
@@ -604,7 +604,7 @@ class LanguageAcquirer():
         self.lf_word_counts =  pd.DataFrame({lf:{w:self.wordl.memory[lf].get(w,0) for w in self.vocab} for lf in self.lf_vocab})
         self.marginal_word_probs = self.lf_word_counts.sum(axis=1)
         self.shell_lf_lf_counts = pd.DataFrame({lfs:{lf:self.meaningl.memory[lfs].get(lf,0) for lf in self.lf_vocab} for lfs in self.shell_lf_vocab})
-        x_for_lfs = self.sem_cat_vocab if ARGS.no_condition_on_syncats else self.full_sync_vocab
+        x_for_lfs = self.syn_cat_vocab if ARGS.no_condition_on_syncats else self.full_sync_vocab
         #self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync.replace('\\','|').replace('/','|')].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in x_for_lfs})
         self.sem_shell_lf_counts = pd.DataFrame({sync:{lfs:self.shmeaningl.memory[sync].get(lfs,0) for lfs in self.shell_lf_vocab} for sync in x_for_lfs})
         self.sem_word_counts = self.lf_word_counts.dot(self.shell_lf_lf_counts).dot(self.sem_shell_lf_counts)
@@ -642,12 +642,12 @@ class LanguageAcquirer():
             for shell_lf in self.shell_lf_vocab for b in beam]
         beam = self.prune_beam(beam)
         # shouldn't I be conditioning on syncats here? working fine for now, but look into later
-        beam = [dict(b,sem_cat=sem_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],sem_cat)/self.shmeaningl.marg_prob(b['shell_lf'])*self.syntaxl.marg_prob(sem_cat))
-            for sem_cat in self.sem_cat_vocab for b in beam if sem_cat!='X']
-        beam = [b for b in beam if lf_basecat_congruent(b['lf'], b['sem_cat'])]
+        beam = [dict(b,sync=syn_cat,prob=b['prob']*self.shmeaningl.prob(b['shell_lf'],syn_cat)/self.shmeaningl.marg_prob(b['shell_lf'])*self.syntaxl.marg_prob(syn_cat))
+            for syn_cat in self.syn_cat_vocab for b in beam if syn_cat!='X']
+        beam = [b for b in beam if lf_basecat_congruent(b['lf'], non_directional(b['sync']))]
         beam = self.prune_beam(beam)
-        beam = [dict(b, sync=ps) for b in beam for ps in possible_syncs(b['sem_cat'])]
-        beam = self.prune_beam(beam)
+        #beam = [dict(b, sync=ps) for b in beam for ps in possible_syncs(b['syn_cat'])]
+        #beam = self.prune_beam(beam)
         beam = [dict(b,prob=b['prob']*self.syntaxl.prob('leaf',b['sync'])) for b in beam]
         beam = self.prune_beam(beam)
         if any(x['lf'] == 'Q (mod|do-past pro:per|you) n|name' for x in beam):
@@ -693,17 +693,19 @@ class LanguageAcquirer():
                             continue
                         if not lf_cat_congruent(lf, combined):
                             continue
-                        for csync in possible_syncs(combined, allow_vps=False):
+                        #for csync in possible_syncs(combined, allow_vps=False):
                             #lsync, rsync = infer_slash(left_option['sem_cat'],right_option['sem_cat'],csync,rule)
-                            lsync, rsync = left_option['sync'], right_option['sync']
-                            split = lsync + ' + ' + rsync
-                            mem_correction_semcat = self.syntaxl.marg_prob(csync)/self.syntaxl.marg_prob(left_option['sem_cat'])/self.syntaxl.marg_prob(right_option['sem_cat'])
-                            prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,csync)*mem_correction_semcat
-                            bckpntr = (k,j,left_idx), (i-k,j+k,right_idx)
-                            #backpointer contains the coords in probs_table (except x is +1), and the idx in the
-                            #beam, of the two locations that the current one could be split into
-                            pn = {'sem_cat':combined,'lf':lf,'backpointer':bckpntr,'rule':rule,'prob':prob,'words':word_span,'sync':csync}
-                            possible_nexts.append(pn)
+                        #if left_option['lf'] == 'lambda $0.Q (mod|can ($0 pro:per|you))' and left_option['sync'] == 'Sq/VP' and left_option['words'] == 'can you' and right_option['lf'] == 'lambda $0.lambda $1.v|see $0 $1' and right_option['sync']=='VP/NP' and right_option['words']=='see':
+                            #breakpoint()
+                        lsync, rsync = left_option['sync'], right_option['sync']
+                        split = lsync + ' + ' + rsync
+                        mem_correction_sync = self.syntaxl.marg_prob(combined)/self.syntaxl.marg_prob(left_option['sync'])/self.syntaxl.marg_prob(right_option['sync'])
+                        prob = left_option['prob']*right_option['prob']*self.syntaxl.prob(split,combined)*mem_correction_sync
+                        bckpntr = (k,j,left_idx), (i-k,j+k,right_idx)
+                        #backpointer contains the coords in probs_table (except x is +1), and the idx in the
+                        #beam, of the two locations that the current one could be split into
+                        pn = {'lf':lf,'backpointer':bckpntr,'rule':rule,'prob':prob,'words':word_span,'sync':combined}
+                        possible_nexts.append(pn)
             to_add = []
             for lf, sync in set((x['lf'], x['sync']) for x in possible_nexts):
                 matching_examples = [x for x in possible_nexts if x['lf']==lf and x['sync']==sync]
@@ -719,7 +721,7 @@ class LanguageAcquirer():
 
         for pn in probs_table[N-1,0]:
             if pn is not None:
-                pn['sync'] = pn['sem_cat']
+                #pn['sync'] = pn['sem_cat']
                 pn['prob'] = pn['prob']*self.root_sem_cat_memory.prob(pn['sync'])
 
         probs_table[N-1, 0] = self.prune_beam(probs_table[N-1,0])
@@ -796,6 +798,7 @@ class LanguageAcquirer():
         for j,tree_level in enumerate(all_tree_levels):
             for i,node in enumerate(tree_level):
                 hor_pos = node['hor_pos']
+                print(hor_pos)
                 if node['rule'] == 'leaf':
                     combined = 'leaf'
                 else:
@@ -814,13 +817,17 @@ class LanguageAcquirer():
         n_leaves = len(leaves)
         posses_so_far = nx.get_node_attributes(G,'pos')
         def condense(s):
-            return s.replace('lambda ','\u03BB').replace('$0', 'x').replace('$1', 'y').replace('$2', 'z')
+            s = s.replace('lambda ','\u03BB').replace('$0', 'x').replace('$1', 'y').replace('$2', 'z')
+            #if '|' in s:
+                #breakpoint()
+            s = re.sub(r'[a-z:]*?\|', '', s)
+            return s
 
         for i,node in enumerate(leaves):
             hor_pos = posses_so_far[node['idx']][0]
             condensed_shell_lf = condense(node['shell_lf'])
             G.add_node(treesize+i,pos=(hor_pos,-n_leaves),label=condensed_shell_lf)
-            shell_lf_prob = self.shmeaningl.prob(node['shell_lf'],node['sem_cat'])
+            shell_lf_prob = self.shmeaningl.prob(node['shell_lf'],node['sync'])
             G.add_edge(treesize+i,node['idx'],weight=round(shell_lf_prob,3))
 
             condensed_lf = condense(node['lf'])
@@ -836,7 +843,7 @@ class LanguageAcquirer():
         edge_labels = {k:round(v,2) for k,v in nx.get_edge_attributes(G,'weight').items()}
         node_labels = nx.get_node_attributes(G,'label')
         pos = nx.get_node_attributes(G,'pos')
-        nx.draw(G, pos, labels=node_labels, node_color='pink')
+        nx.draw(G, pos, labels=node_labels, node_color='#d3ffce')
         edge_labels = nx.get_edge_attributes(G,'weight')
         nx.draw_networkx_edge_labels(G,pos,edge_labels=edge_labels,rotate=False)
         if is_gt:
@@ -845,6 +852,11 @@ class LanguageAcquirer():
         else:
             plt.title('PRED')
         check_dir(graph_dir:=f'experiments/{ARGS.expname}/plotted_graphs')
+        plt.axis('off')
+        axis = plt.gca()
+        axis.set_xlim([1.1*x for x in axis.get_xlim()])
+        #axis.set_ylim([1.1*y for y in axis.get_ylim()])
+        plt.tight_layout()
         plt.savefig(f'{graph_dir}/{fname}.png')
         plt.clf()
         if ARGS.show_graphs:
@@ -924,6 +936,7 @@ if __name__ == "__main__":
     parser.add_argument("--n-generate", type=int, default=300)
     parser.add_argument("--n-test", type=int,default=-1)
     parser.add_argument("--no-test", action="store_true")
+    parser.add_argument("--no-one-trial", action="store_true")
     parser.add_argument("--no-ltbs", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--print-gtparsestrs", action="store_true")
@@ -1281,13 +1294,18 @@ if __name__ == "__main__":
             dn_info = f'{dn_info} {ARGS.expname[:-1]}'.replace('_',' ')
         if ARGS.jreload_from is None:
             plot_df(df_prior, dn_info)
+        results_df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_full_preds_and_scores.csv')
 
+    la.parse('what does that say'.split())
+    la.parse('what d you need'.split())
+    breakpoint()
+    for x in test_data:
+        if x['words'][0].startswith('wh'):
+            la.parse(x['words'])
     if ARGS.print_word_acc:
         print(results_df)
     if ARGS.db_after:
         breakpoint()
-    test_nonce()
-    results_df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_full_preds_and_scores.csv')
     with open(f'experiments/{ARGS.expname}/{ARGS.expname}_summary.txt','w') as f:
         file_print(f'Total run time: {time()-start_time:.3f}s',f)
         file_print(f'Word to LF accuracy: {word2lf_acc:.4f}',f)
