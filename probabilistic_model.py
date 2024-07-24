@@ -454,7 +454,6 @@ class LanguageAcquirer():
         for lfs in lf_strs:
             try:
                 root = self.make_parse_node(lfs,words) # words is a list
-                st=time()
                 new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                            self.meaningl,self.wordl,split_prob=1,is_map=False)
                 if ARGS.print_train_interps:
@@ -464,9 +463,14 @@ class LanguageAcquirer():
                     print(gtparsestr)
                 if lfs == ARGS.dbr or (ARGS.dbw is not None and ARGS.dbw in ' '.join(words)):
                     if not ARGS.print_train_interps:
+                        self.eval()
+                        self.disable_caching()
                         self.test_with_gt(lfs, words)
+                        self.enable_caching()
+                        self.train()
                     gtparsestr, is_good, is_root_good = root.gt_parse()
                     print(gtparsestr)
+                    self.test_with_gt_graphical(lfs, words, 9, False)
                     breakpoint()
             except CCGLearnerError as e:
                 new_problem_list.append((dpoint,e))
@@ -477,7 +481,6 @@ class LanguageAcquirer():
                 print('no splits :(')
             if new_root_prob==0 and mode=='train':
                 print('zero root prob for', lfs, words)
-            st=time()
             root.propagate_above_probs(1)
             if words == ARGS.dbsent.split():
                 breakpoint()
@@ -490,7 +493,6 @@ class LanguageAcquirer():
         if mode=='test':
             return best_lf
         buffers = {x:[] for x in self.learners.keys()}
-        st=time()
         for node in all_descs:
             if node.parent is not None and not node.is_g:
                 update_weight = node.prob / root_prob # for conditional
@@ -740,7 +742,6 @@ class LanguageAcquirer():
                     (left_len,left_pos,left_idx), (right_len,right_pos,right_idx) = backpointer
                     left_split = probs_table[left_len-1,left_pos][left_idx]
                     right_split = probs_table[right_len-1,right_pos][right_idx]
-                    #lsync, rsync = infer_slash(left_split['sem_cat'],right_split['sem_cat'],item['sync'],item['rule'])
                     lsync, rsync = left_split['sync'], right_split['sync']
                     left_split = dict(left_split,idx=item['idx'][:-1] + '01',sync=lsync, parent=item)
                     right_split = dict(right_split,idx=item['idx'][:-1] + '21', sync=rsync, parent=item)
@@ -779,7 +780,7 @@ class LanguageAcquirer():
             breakpoint()
         return probs_table[-1,0][-1]
 
-    def draw_graph(self,all_tree_levels,is_gt=False):
+    def draw_graph(self,all_tree_levels,is_gt=False, node_color='#d3ffce', fs=12, clip=True):
         leaves = [n for level in all_tree_levels for n in level if n['rule']=='leaf']
         leaves.sort(key=lambda x:x['idx'])
         for i,leaf in enumerate(leaves):
@@ -798,7 +799,6 @@ class LanguageAcquirer():
         for j,tree_level in enumerate(all_tree_levels):
             for i,node in enumerate(tree_level):
                 hor_pos = node['hor_pos']
-                print(hor_pos)
                 if node['rule'] == 'leaf':
                     combined = 'leaf'
                 else:
@@ -821,6 +821,7 @@ class LanguageAcquirer():
             #if '|' in s:
                 #breakpoint()
             s = re.sub(r'[a-z:]*?\|', '', s)
+            s = s.replace('-zero', '')
             return s
 
         for i,node in enumerate(leaves):
@@ -843,9 +844,9 @@ class LanguageAcquirer():
         edge_labels = {k:round(v,2) for k,v in nx.get_edge_attributes(G,'weight').items()}
         node_labels = nx.get_node_attributes(G,'label')
         pos = nx.get_node_attributes(G,'pos')
-        nx.draw(G, pos, labels=node_labels, node_color='#d3ffce')
+        nx.draw(G, pos, labels=node_labels, node_color=node_color, font_size=fs)
         edge_labels = nx.get_edge_attributes(G,'weight')
-        nx.draw_networkx_edge_labels(G,pos,edge_labels=edge_labels,rotate=False)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, rotate=False, font_size=fs)
         if is_gt:
             fname = fname + 'GT'
             plt.title('GT')
@@ -853,8 +854,9 @@ class LanguageAcquirer():
             plt.title('PRED')
         check_dir(graph_dir:=f'experiments/{ARGS.expname}/plotted_graphs')
         plt.axis('off')
+        contract_ratio = 1 if n_leaves==1 or (not clip) else 1.1
         axis = plt.gca()
-        axis.set_xlim([1.1*x for x in axis.get_xlim()])
+        axis.set_xlim([contract_ratio*x for x in axis.get_xlim()])
         #axis.set_ylim([1.1*y for y in axis.get_ylim()])
         plt.tight_layout()
         plt.savefig(f'{graph_dir}/{fname}.png')
@@ -879,6 +881,43 @@ class LanguageAcquirer():
 
         st = _simple_draw_graph(root, 0)
         print(st)
+
+    def test_with_gt_graphical(self, lf, words, font_size, clip):
+        root = la.make_parse_node(lf, words)
+        root.propagate_below_probs(la.syntaxl,la.shmeaningl,la.meaningl,la.wordl,split_prob=1,is_map=True)
+        def _graph_dict_from_node(x):
+            shell_lf = x.lf.subtree_string(as_shell=True, alpha_normalized=True)
+            z = {'sync':x.sync, 'words':' '.join(x.words), 'lf':x.lf_str, 'shell_lf':shell_lf}
+            z['rule'] = 'leaf' if x.best_split[0]=='leaf' else 'nonleaf'
+            return z
+
+        root_graph_dict = dict(_graph_dict_from_node(root), parent='ROOT', idx='1')
+        all_tree_levels = [[root_graph_dict]]
+        frontier = [(root, root_graph_dict)]
+        for i in range(len(root.words)):
+            new_frontier = []
+            tree_level = []
+            for pnode, pnode_dict in frontier:
+                if pnode.is_leaf:
+                    continue
+                left_child, right_child, _ = pnode.best_split
+                assert (left_child=='leaf') == (right_child=='leaf')
+                if left_child == 'leaf':
+                    continue
+                left_split = dict(_graph_dict_from_node(left_child), idx=pnode_dict['idx'][:-1] + '01', parent='nonroot')
+                right_split = dict(_graph_dict_from_node(right_child), idx=pnode_dict['idx'][:-1] + '21', parent='nonroot')
+                assert 'sync' in left_split.keys() and 'sync' in right_split.keys()
+                pnode_dict['left_child'] = left_split
+                pnode_dict['right_child'] = right_split
+                tree_level.append(left_split)
+                tree_level.append(right_split)
+                new_frontier.append((left_child, left_split)); new_frontier.append((right_child, right_split))
+            all_tree_levels.append(tree_level)
+            frontier = new_frontier
+            if all([x['rule']=='leaf' for x in tree_level]):
+                break
+        assert all(isinstance(x, dict) for tl in all_tree_levels for x in tl)
+        self.draw_graph(all_tree_levels, node_color='pink', fs=font_size, clip=clip)
 
 def remove_vowels(w):
     for v in ('a','e','i','o','u'):
@@ -1004,7 +1043,6 @@ if __name__ == "__main__":
     else:
         train_data = [] if ARGS.jreload_from is not None else data_to_use[:int(len(data_to_use)*(1-ARGS.test_frac))]
         test_data = train_data if ARGS.is_test else data_to_use[int(len(data_to_use)*(1-ARGS.test_frac)):]
-    #test_data = [x for x in test_data if all(any(w in prev['words'] for prev in train_data) for w in x['words'])] # to use if we want a fixed test-set for all increments
     vt = 1 if ARGS.n_dpoints==-1 else ARGS.n_dpoints/len(all_data)
     la = LanguageAcquirer(ARGS.lr, vt)
     if ARGS.reload_from is not None:
@@ -1015,19 +1053,6 @@ if __name__ == "__main__":
         breakpoint()
 
     nonce_dps = {
-        #'trans': ('the boy dax the baby', ['v|dax (det:art|the n|boy) (det:art|the n|baby)', 'v|dax (det:art|the n|baby) (det:art|the n|boy)']),
-        #'intrans': ('the boy dax', ['v|dax (det:art|the n|boy)', 'lambda $0.v|dax (det:art|the n|boy) $0']),
-        #'modal': ('the boy will dax the baby', ['mod|will (v|dax (det:art|the n|boy) (det:art|the n|baby))', 'mod|will (v|dax (det:art|the n|baby) (det:art|the n|boy))']),
-        #'polarq': ('will the boy dax the baby', ['Q (mod|will (v|dax (det:art|the n|boy) (det:art|the n|baby)))', 'Q (mod|do-past (v|dax (det:art|the n|baby) (det:art|the n|boy)))']),
-        #'prog': ('the boy is dax the baby', ['cop|pres-3s (v|dax (det:art|the n|boy) (det:art|the n|baby))', 'cop|pres-3s (v|dax (det:art|the n|baby) (det:art|the n|boy))']),
-        #'wh': ('what will the boy dax', ['Q (mod|will (v|dax pro:int|WHAT (det:art|the n|boy)))', 'Q (mod|will (v|dax (det:art|the n|boy) pro:int|WHAT))']),
-        #'trans': ('you dax it', ['v|dax pro:per|you pro:per|it', 'v|dax pro:per|it pro:per|you']),
-        #'intrans': ('it dax', ['v|dax pro:per|it', 'lambda $0.v|dax pro:per|it $0']),
-        #'modal': ('you will dax it', ['mod|will (v|dax pro:per|you pro:per|it)', 'mod|will (v|dax pro:per|it pro:per|you)']),
-        #'polarq': ('will you dax it', ['q (mod|will (v|dax pro:per|you pro:per|it))', 'q (mod|do-past (v|dax pro:per|it pro:per|you))']),
-        #'prog': ('you is dax it', ['cop|pres-3s (v|dax pro:per|you pro:per|it)', 'cop|pres-3s (v|dax pro:per|it pro:per|you)']),
-        #'wh': ('who shall you dax', ['q (mod|shall (v|dax pro:int|who pro:per|you))', 'q (mod|shall (v|dax pro:per|you pro:int|who))']),
-        #'wh1': ('who will the pencil dax', ['Q (mod|will (v|dax pro:int|WHO (det:art|the n|pencil)))', 'Q (mod|will (v|dax (det:art|the n|pencil) pro:int|WHO))']),
         'trans': ('you dax the pencil', ['v|dax pro:per|you (det:art|the n|pencil)', 'v|dax (det:art|the n|pencil) pro:per|you']),
         'negmod': ('you can n\'t dax the pencil', ['not (mod|can (v|dax pro:per|you (det:art|the n|pencil)))', 'not (mod|can (v|dax (det:art|the n|pencil) pro:per|you))']),
         'intrans': ('you dax', ['v|dax pro:per|you', 'lambda $0.v|dax pro:per|you $0']),
@@ -1035,12 +1060,11 @@ if __name__ == "__main__":
         'polarq': ('will you dax the pencil', ['Q (mod|will (v|dax pro:per|you (det:art|the n|pencil)))', 'Q (mod|will (v|dax (det:art|the n|pencil) pro:per|you))']),
         'negpolarq': ('can n\'t you dax the pencil', ['Q (not (mod|can (v|dax pro:per|you (det:art|the n|pencil))))', 'Q (not (mod|can (v|dax (det:art|the n|pencil) pro:per|you)))']),
         'prog': ('you \'re dax the pencil', ['cop|pres-2s (v|dax pro:per|you (det:art|the n|pencil))', 'cop|pres-2s (v|dax (det:art|the n|pencil) pro:per|you)']),
-        #'wh': ('who will the pencil dax', ['Q (mod|will (v|dax pro:int|WHO (det:art|the n|pencil)))', 'Q (mod|will (v|dax (det:art|the n|pencil) pro:int|WHO))']),
-        #'negwh': ('who can n\'t the pencil dax', ['Q (not (mod|can (v|dax pro:int|WHO (det:art|the n|pencil))))', 'Q (not (mod|can (v|dax (det:art|the n|pencil) pro:int|WHO)))']),
         'wh': ('who will you dax', ['Q (mod|will (v|dax pro:int|WHO pro:per|you))', 'Q (mod|will (v|dax pro:per|you pro:int|WHO))']),
         'negwh': ('who can n\'t you dax', ['Q (not (mod|can (v|dax pro:int|WHO pro:per|you)))', 'Q (not (mod|can (v|dax pro:per|you pro:int|WHO)))']),
         }
 
+    const_types = ('other', 'intrans', 'trans', 'ditrans', 'mod', 'q', 'whq', 'prog', 'neg', 'imp')
     def test_parses(testset):
         la.eval()
         n_correct = 0
@@ -1048,31 +1072,68 @@ if __name__ == "__main__":
         n_with_seen_words = 0
         la.vocab_thresh = 0
         n_test_dists = 4
+        acc_by_type = {k:[] for k in const_types}
         for i, dpoint in enumerate(pbar:=tqdm(testset)):
-            if all(w in la.mwe_vocab for w in dpoint['words']):
+            lf, words = dpoint['lf'], dpoint['words']
+            if all(w in la.mwe_vocab for w in words):
                 n_with_seen_words += 1
-            predicted_parse = la.parse(dpoint['words'])
-            if predicted_parse['lf'] == dpoint['lf']:
+            predicted_parse = la.parse(words)
+            cts = []
+            if any(x in lf for x in ['adv|', 'part']):
+                cts.append('other')
+            if lf.startswith('Q'):
+                if 'WH' in lf:
+                    cts.append('whq')
+                else:
+                    cts.append('q')
+            if 'prog' in lf:
+                cts.append('prog')
+                if 'not' in lf:
+                    cts.append('neg')
+            if 'mod' in lf:
+                cts.append('mod')
+                if 'not' in lf:
+                    cts.append('neg')
+            if 'v|' in lf:
+                splits = split_respecting_brackets(lf)
+                if len(splits) == 2:
+                    cts.append('intrans')
+                elif len(splits) == 3:
+                    cts.append('trans')
+                elif len(splits) == 4:
+                    cts.append('ditrans')
+                else:
+                    breakpoint()
+                    cts.append('other')
+                if lf.startswith('lambda $0.'):
+                    cts.append('imp')
+            if cts==[]:
+                cts.append('other')
+
+            if (is_correct:=predicted_parse['lf'] == lf):
                 n_correct += 1
+            for ct in cts:
+                acc_by_type[ct].append(is_correct)
             start = max(0, i-(n_test_dists//2))
             stop = min(len(train_data), i+((n_test_dists+1)//2)+1)
             lf_strs_incl_distractors = [x['lf'] for x in testset[start:stop]]
-            selected_lf = la.step(lf_strs_incl_distractors, dpoint['words'], apply_buffers=False, put_in_ltbs=False, mode='test')
-            if selected_lf == dpoint['lf']:
+            selected_lf = la.step(lf_strs_incl_distractors, words, apply_buffers=False, put_in_ltbs=False, mode='test')
+            if selected_lf == lf:
                 n_select_correct += 1
             pbar.set_description(f'Acc: {n_correct/(n_with_seen_words+1e-8):.4f}  Harshacc: {n_correct/(i+1):.4f} Selectacc: {n_select_correct/(i+1):.4f}')
         la.vocab_thresh = 1
         if n_with_seen_words == 0:
-            return 0,0,0
+            return 0,0,0,{k:0 for k in const_types}
         harsh_acc = n_correct/len(test_data)
         select_acc = n_select_correct/len(test_data)
         acc_excl_nws = n_correct/n_with_seen_words
+        acc_by_type = {k:np.array(v).mean() for k,v in acc_by_type.items()}
         if acc_excl_nws > 1:
             breakpoint()
         print(f'num test points with only seen words: {n_with_seen_words}')
         print(f'harsh acc: {harsh_acc:.3f}\nacc excluding new words: {acc_excl_nws:.3f}')
         la.train()
-        return acc_excl_nws, harsh_acc, select_acc
+        return acc_excl_nws, harsh_acc, select_acc, acc_by_type
 
     def test_nonce():
         results = {}
@@ -1133,6 +1194,7 @@ if __name__ == "__main__":
     all_w2syn_accs = []
     all_w2both_accs = []
     all_nonce_results = {k:[] for k in nonce_dps.keys()}
+    all_accs_by_type = {k:[] for k in const_types}
     final_chunk = test_data[ARGS.start_test_from:]
     if ARGS.n_test != -1:
         final_chunk = test_data[:ARGS.n_test]
@@ -1160,15 +1222,17 @@ if __name__ == "__main__":
         new_probs_with_prior = la.probs_of_word_orders(False)
         if (i+1)%chunk_size == 0 and i+1!=len(train_data):
             _, w2lf, w2s, w2b = test_word_acc()
-            nonce_results = test_nonce()
-            for k,v in nonce_results.items():
-                all_nonce_results[k].append(v)
+            #nonce_results = test_nonce()
+            #for k,v in nonce_results.items():
+                #all_nonce_results[k].append(v)
             all_w2lf_accs.append(w2lf); all_w2syn_accs.append(w2s); all_w2both_accs.append(w2b)
             if ARGS.test_incr:
-                new_acc, new_harsh_acc, new_select_acc = test_parses(final_chunk)
+                new_acc, new_harsh_acc, new_select_acc, acc_by_type = test_parses(final_chunk)
                 all_accs.append(new_acc)
                 all_harsh_accs.append(new_harsh_acc)
                 all_select_accs.append(new_select_acc)
+                for k,v in acc_by_type.items():
+                    all_accs_by_type[k].append(v)
                 check_dir(f'experiments/{ARGS.expname}/gens')
                 with open(f'experiments/{ARGS.expname}/gens/gens{i}.txt', 'w') as f:
                     for _ in range(ARGS.n_generate):
@@ -1211,7 +1275,9 @@ if __name__ == "__main__":
         results_df, word2lf_acc, word2syn_acc, word2both_acc = test_word_acc()
         all_w2lf_accs.append(word2lf_acc); all_w2syn_accs.append(word2syn_acc); all_w2both_accs.append(word2both_acc)
         if not ARGS.no_test:
-            final_acc_enws, final_harsh_acc, final_select_acc = test_parses(final_chunk)
+            final_acc_enws, final_harsh_acc, final_select_acc, acc_by_type = test_parses(final_chunk)
+            for k,v in acc_by_type.items():
+                all_accs_by_type[k].append(v)
         dist_substr = '' if ARGS.n_distractors==0 else f' dist{ARGS.n_distractors}'
         xplot = [i for i in range(len(train_data)) if (i+1)%chunk_size == 0 and i+1!=len(train_data)]
         xplot.append(len(train_data))
@@ -1223,6 +1289,17 @@ if __name__ == "__main__":
         plt.legend(loc='upper left')
         plt.title(f'Learned lexical entries{dist_substr}')
         fpath = f'experiments/{ARGS.expname}/{ARGS.expname}_test_word_accs.png'
+        plt.savefig(fpath)
+        plt.clf()
+        os.system(f'/usr/bin/xdg-open {fpath}')
+
+        for (k,v), colour in zip(all_accs_by_type.items(), cs):
+            plt.plot(xplot, v, color=colour, label=k)
+        plt.xlabel('Num Training Points')
+        plt.ylabel(f'Select Acc')
+        plt.legend(loc='upper left')
+        plt.title(f'Acc on Final 10% by Utterance Type{dist_substr}')
+        fpath = f'experiments/{ARGS.expname}/{ARGS.expname}_acc-by-type.png'
         plt.savefig(fpath)
         plt.clf()
         os.system(f'/usr/bin/xdg-open {fpath}')
@@ -1296,12 +1373,13 @@ if __name__ == "__main__":
             plot_df(df_prior, dn_info)
         results_df.to_csv(f'experiments/{ARGS.expname}/{ARGS.expname}_full_preds_and_scores.csv')
 
-    la.parse('what does that say'.split())
-    la.parse('what d you need'.split())
-    breakpoint()
-    for x in test_data:
-        if x['words'][0].startswith('wh'):
-            la.parse(x['words'])
+    la.test_with_gt_graphical(test_data[10]['lf'], test_data[10]['words'], 12, True)
+    #la.parse('what does that say'.split())
+    #la.parse('what d you need'.split())
+    #la.parse('what \'s he doing'.split())
+    #la.parse('it wo n\'t hurt you'.split())
+    #la.parse("do n't you see it".split())
+    #la.parse("shall I help you".split())
     if ARGS.print_word_acc:
         print(results_df)
     if ARGS.db_after:
