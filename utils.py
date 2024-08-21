@@ -485,11 +485,13 @@ def non_directional(cat):
 
 def get_combination(left_cat,right_cat):
     """Inputs can be either syncats or semcats"""
+    if left_cat == 'NP\\N' or right_cat == 'NP/N':
+        return None, None
     if is_atomic(left_cat) and is_atomic(right_cat):
         return None, None
-    elif re.search(fr'[/|\\]\({re.escape(right_cat)}\)$',left_cat):
+    elif re.search(fr'[/|]\({re.escape(right_cat)}\)$',left_cat):
         combined, rule = left_cat[:-len(right_cat)-3],'fwd_app'
-    elif re.search(fr'[/|\\]{re.escape(right_cat)}$',left_cat) and is_atomic(right_cat):
+    elif re.search(fr'[/|]{re.escape(right_cat)}$',left_cat) and is_atomic(right_cat):
         combined, rule = left_cat[:-len(right_cat)-1],'fwd_app'
     elif re.search(fr'[\\|]\({re.escape(left_cat)}\)$',right_cat):
         combined, rule = right_cat[:-len(left_cat)-3],'bck_app'
@@ -502,10 +504,10 @@ def get_combination(left_cat,right_cat):
         right_out, right_slash, right_in = cat_components(right_cat)
         #if left_slash != right_slash and '|' not in [left_slash ,right_slash]: # skip crossed composition
             #return None, None
-        if maybe_debrac(left_in) == maybe_debrac(right_out):
-            combined, rule = ''.join((left_out, left_slash, right_in)), 'fwd_cmp'
-        elif maybe_debrac(left_out) == maybe_debrac(right_in):
-            combined, rule = ''.join((right_out, right_slash, left_in)), 'bck_cmp'
+        if maybe_debrac(left_in) == maybe_debrac(right_out) and left_slash=='/':
+            combined, rule = ''.join((left_out, right_slash, right_in)), 'fwd_cmp'
+        elif maybe_debrac(left_out) == maybe_debrac(right_in) and right_slash=='\\':
+            combined, rule = ''.join((right_out, left_slash, left_in)), 'bck_cmp'
         else:
             return None,None
     if combined in ['S|N','S|N|NP']:
