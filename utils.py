@@ -156,13 +156,13 @@ def base_cats_from_str(unstripped_str):
                     sem_cats = {'VP'}
                 else:
                     breakpoint()
-            elif pos_marking == 'pro:int':
-                if n_lambda_binders(unstripped_str) == 1:
-                    sem_cats = {'Swhq|(Sq|NP)'}
-                else:
-                    #if not ( ss!='pro:int|WHAT' or n_lambda_binders(unstripped_str) == 0):
-                        #print(f'wh-string appearing with spuriously many lambdas: {unstripped_str}')
-                    sem_cats = {'NP'}
+            #elif pos_marking == 'pro:int':
+            #    if n_lambda_binders(unstripped_str) == 1:
+            #        sem_cats = {'Swhq|(Sq|NP)'}
+            #    else:
+            #        #if not ( ss!='pro:int|WHAT' or n_lambda_binders(unstripped_str) == 0):
+            #            #print(f'wh-string appearing with spuriously many lambdas: {unstripped_str}')
+            #        sem_cats = {'NP'}
 
         else:
             word_level_form = ss.split('_')[0] if '_' in ss else ss
@@ -298,8 +298,8 @@ def first_lambda_body_split(lf):
 def all_lambda_body_splits(lf):
     """lambda_binder has the dot on the end"""
     try:
-        #lambda_binder = re.match(r'(lambda \$\d{1,2}?+\.)*',lf).group(0)
-        lambda_binder = re.match(r'(lambda \$\d{1,2}(_\{[er]\})?\.)*',lf).group(0)
+        #lambda_binder = re.match(r'(lambda \$\d{1,2}(_\{[er]\})?\.)*',lf).group(0)
+        lambda_binder= re.match(r'(lambda \$\d{1,2}(_\{(e|r|<<e,e>,e>)\})?\.)*',lf).group(0)
     except AttributeError: #there's no lambda binder in the lf
         return '', lf
     body = lf[len(lambda_binder):]
