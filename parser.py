@@ -28,8 +28,8 @@ debug_set_cats = None
 reQmatch = re.compile(r'^Q \(.*\)$')
 rechiltagmatch = re.compile(r'[\w:]+\|')
 revarmatch = re.compile(r'\$\d{1,2}')
-rebckbcktranscat = re.compile(r'S\\[A-Za-z\(\|\)]+\\NP$')
-refwdfwdtranscat = re.compile(r'S/[A-Za-z\(\|\\\/)]+/NP$')
+rebckbcktranscat = re.compile(r'Sq?\\[A-Za-z\(\|\)]+\\NP$')
+refwdfwdtranscat = re.compile(r'Sq?/[A-Za-z\(\|\\\/)]+/NP$')
 
 iwff = IWFF()
 
@@ -256,7 +256,7 @@ class LogicalForm:
             new_entry_point_in_f_as_str = ' '.join([f'${self.new_var_num}'] + list([f'${v}' for v in reversed(ordered_g_var_descs)]))
             removee.__init__(new_entry_point_in_f_as_str, self.idx_in_tree, removee.caches)
             f = f.lambda_abstract(self.new_var_num)
-            x,_,y = f.lf_str.rpartition('.')
+            x,_,y = f.subtree_string(recompute=True).rpartition('.')
             if set(revarmatch.findall(x)) != set(revarmatch.findall(y)):
                 breakpoint()
             if ('mod|' in f.lf_str or 'prog' in f.lf_str) and g.is_leaf and g.lf_str.startswith('v|'):
@@ -265,7 +265,11 @@ class LogicalForm:
                     if re.search(fr'[\.\(]{re.escape(g.lf_str)}', self.lf_str):
                         g = g.spawn_self_like(f'lambda $0.{g.subtree_string()} $0')
             self.add_split(f, g, 'app')
-            if g.node_type == 'entity' or (g.node_type == 'WH' and 'lambda' not in self.lf_str):
+            if (g.node_type == 'WH' and 'lambda' not in self.lf_str):
+                fcmp = LogicalForm(logical_type_raise(g.lf_str))
+                gcmp = LogicalForm(f.lf_str)
+                self.add_split(fcmp, gcmp, 'app')
+            elif g.node_type == 'entity':
                 combine_opts = set([can_compose_traised(fsc, gsc) for fsc in f.sem_cats for gsc in g.sem_cats])
                 if combine_opts == {'no'}:
                     continue

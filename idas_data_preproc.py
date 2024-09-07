@@ -5,6 +5,7 @@ import re
 from utils import split_respecting_brackets, is_bracketed, outermost_first_chunk, maybe_debrac, IWFF, new_var_num, alpha_normalize, all_lambda_body_splits, de_q, add_q, add_not, add_whq
 from converter_config import manual_ida_fixes, he_chars, exclude_lfs, exclude_sents, premanual_ida_fixes, manual_sent_fixes, sent_fixes, neg_conts, direct_take_lf_from_sents
 from learner_config import pos_marking_dict
+from manual_which_dict import manual_which_dict
 
 
 with open('data/hagar_comma_format.txt') as f:
@@ -64,7 +65,9 @@ def decommafy(parse, debrac=False):
         suffix += ')'
     inner_lf = _decommafy_inner(body)
     splits = split_respecting_brackets(inner_lf)
-    if len(splits)==3:
+    if inner_lf.startswith('v|equals'):
+        print(inner_lf)
+    if len(splits)==3 and not inner_lf.startswith('v|equals'):
         inner_lf = f'{splits[0]} {splits[2]} {splits[1]}'
     if len(splits)==4 and inner_lf.startswith('v|'):
         inner_lf = f'{splits[0]} {splits[3]} {splits[2]} {splits[1]}'
@@ -173,30 +176,31 @@ def lf_preproc(lf, sent):
     assert not ('n:prop|ʔābaʔ' in lf or 'n:prop|ʔīmaʔ' in lf) or not ('det|ha' in lf or 'det|~ha' in lf)
     lf = fix_posses(lf, sent)
     if 'lambda $0' in lf.rpartition('.')[0]:
-        lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','')
+        lf = lf.replace('lambda $0_{r}.','').replace('lambda $0_{<r,t>}.','').replace('lambda $0_{<<e,e>,e>}.','')
         lf = lf.replace(',$0','').replace(',$0','').replace('($0)','')
     maybe_wh_lambda_match = re.match(r'^lambda (\$\d)_\{(r|e|<<e,e>,e>)}\.',lf)
     if is_wh:=(bool(maybe_wh_lambda_match)):
         wh_var_with_num = maybe_wh_lambda_match.groups()[0]
         wh_word = sent.split()[0]
         if ARGS.dset == 'hagar':
-            replacer = 'WH'
+            replacer_word = 'WH'
         elif (wh_word in ['what','who']):
-            replacer = wh_word.upper()
+            replacer_word = wh_word.upper()
         elif wh_word == 'which':
-            replacer = 'det:dem|WHICH'
+            replacer_word = 'WHICH'
         elif 'what' in sent: # for in-situs
-            replacer = 'WHAT'
+            replacer_word = 'WHAT'
         elif 'who' in sent: # for in-situs
-            replacer = 'WHO'
+            replacer_word = 'WHO'
         elif 'which' in sent: # for in-situs
-            replacer = 'det:dem|WHICH'
+            replacer_word = 'WHICH'
         elif wh_word not in ['why', 'how']:
             breakpoint()
         if wh_word not in ['why', 'how']:
             matched = maybe_wh_lambda_match.group()
             lf = lf.replace(matched,'')
-            lf = 'Q(' + lf.replace(wh_var_with_num,f'pro:int|{replacer}') + ')'
+            lf = 'Q(' + lf.replace(wh_var_with_num,f'pro:int|{replacer_word}') + ')'
+            #lf = 'Q(' + lf.replace(wh_var_with_num, replacer_word) + ')'
 
     if re.search(r'(?<![a-zA-Z])v\|(?!do)', lf):
         lf = re.sub(r'(?<![a-zA-Z])v\|do(?![a-zA-Z])','mod|do',lf)
@@ -212,6 +216,7 @@ def lf_preproc(lf, sent):
         print(sent, lf)
         #lf.replace('v|tire-past', 'adj|tired').replace('part|tire-pastp', 'adj|tired')
     dlf = decommafy(lf, debrac=True)
+
     if 'was' in sent or 'were' in sent or '\'re' in sent:
         dlf = dlf.replace('hasproperty', 'hasproperty-past')
         dlf = dlf.replace('equals', 'equals-past')
@@ -344,7 +349,7 @@ def sent_preproc(lf, sent):
     sent = ' '.join(neg_conts.get(w,w) for w in sent.split(' '))
     #if had_neg: print('-->', sent)
     sent = sent.removeprefix('alright ')
-    sent = [w for w in sent.split() if f'co|{w}' not in lf and not(w=='we' and w not in lf)]
+    sent = [w for i,w in enumerate(sent.split()) if (f'co|{w}' not in lf and not(w=='we' and w not in lf)) or w=='like' and i==len(sent.split())-1] # simple hack that 'like' at end is v
     if len(sent)>0 and sent[0] == 'ʔavāl' and 'ʔavāl' not in lf:
         sent = sent[1:]
     if sent == '':
@@ -357,7 +362,7 @@ def sent_preproc(lf, sent):
         sent = manual_sent_fixes[' '.join(sent)].split()
     return sent
 
-def decide_if_question(lf, sent, udtags):
+def decide_if_question(lf, sent:list, udtags:list):
     conjs = ('but', 'and', 'or')
     wh_words = ('what', 'who', 'how', 'where', 'when', 'which')
     if udtags[0] == 'CONJ' and sent[0] not in conjs:
@@ -370,9 +375,9 @@ def decide_if_question(lf, sent, udtags):
                 assert lf.starswith(f'{conj} (') and lf.endswith(')')
                 lf = lf[len(conj)+2:-1]
     assert not bool(re.search(r'(?<!pro:per\|)you(?![a-z])', lf))
-    if udtags[0] in ('AUX') or sent[0] in ('is' 'are', 'was', 'were'):
+    if udtags[0] in ('AUX') or sent[0] in ('is', 'are', 'was', 'were'):
         lf = add_q(lf)
-    elif sent[0] in wh_words and not (udtags[-1] in ('AUX') or sent[-1] in ('is' '\'s', 'are', '\'re', 'was', 'were')):
+    elif sent[0] in wh_words and not (udtags[-1] in ('AUX') or sent[-1] in ('is', '\'s', 'are', '\'re', 'was', 'were')):
         lf = add_q(lf)
     return lf, sent
 
@@ -426,6 +431,14 @@ if __name__ == '__main__':
 
     for dpoint in dset:
         sent, lf, udtags = dpoint['idasent'], dpoint['idalf'], dpoint['udtags']
+        if 'which' in sent:
+            ps, pl = manual_which_dict[sent]
+            ps = ps.split()
+            if pl != 'EXCL':
+                dset_data.append({'lf':pl, 'words':ps})
+            continue
+        if 'else' in sent: # and 'else' not in lf:, always wrong in the lf
+            continue
         if sent[:-2] in exclude_sents:
             n_excluded+=1
             continue

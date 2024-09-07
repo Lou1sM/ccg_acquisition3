@@ -179,6 +179,11 @@ exclude_sents = [
     "who is this sitting up here", # LF doesn't match
     "I 'll come and do it", # LF doesn't match
     "if you 're", # LF doesn't match
+    "who", # not sure what LF should be
+    "what is that you 're using", # not sure what LF should be
+    "what did your grandmother get on", # not sure what LF should be
+    "what does it sound like", # not sure what LF should be
+    "what 's", # not sure what LF should be
     # Hagar
     'huʔ racā xavitā loʔ melafefōn' # lf doesn't match
     #'ʔābaʔ ʔat rocā' # lf doesn't match--one that Mark says should be wh-movement
@@ -202,7 +207,7 @@ direct_take_lf_from_sents = {
     'that \'s dressing': 'v|equals n|dressing-BARE pro:dem|that',
     'it must be Robin \'s': 'mod|must (v|equals n:prop|robin\'s pro:per|it)',
     'you \'re getting it': 'cop|pres (v|get-prog pro:per|you pro:per|it)',
-    'what are you reading': 'Q (cop|pres (v|read-prog pro:per|you pro:int|WHAT))',
+    'what are you reading': 'Q (cop|pres (v|read-prog pro:int|WHAT pro:per|you))',
     'are you reading a book': 'cop|pres (v|read-prog pro:per|you (det:art|a n|book))',
     'doing tricks': 'lambda $0.v|do-prog n|trick-pl-BARE $0',
     'what happens': 'Q (v|happens pro:int|WHAT)',
@@ -227,6 +232,7 @@ direct_take_lf_from_sents = {
     "is he alright": 'Q (hasproperty adj|alright pro:sub|he)',
     "let go": 'lambda $0.v|let-go $0',
     "did it pop": 'Q (mod|do-past (v|pop pro:per|it))',
+    "what is that turning": 'Q (cop|pres (v|turn-prog pro:int|WHAT pro:per|that))',
     }
 
 sent_fixes = {
@@ -316,6 +322,7 @@ manual_ida_fixes = { # applied after conversion to no-comma form
     'hasproperty pro:dem|this adj|ice+cream': 'v|equals n|ice-BARE pro:dem|this',
     'Q (mod|do-past (n|miss pro:indef|one pro:per|you))': 'Q (mod|do-past (v|miss pro:indef|one pro:per|you))',
     'v|have-3s det:poss|his n:prop|paul': 'v|have-3s pro:poss|his n:prop|paul',
+    'Q (mod|do-3s (adj|mean pro:int|WHAT pro:dem|this))': 'Q (mod|do-3s (v|mean pro:int|WHAT pro:dem|this))', # pos of mean to v|
     #'cop|~be (qn|another n|story)': 'v|exist (qn|another n|story)', # v|exist
     # Hagar
     'v|ciyēr pro:per|ʔat n|ʕigūl-BARE': 'v|ciyēr you n|ʕigūl-BARE', # split anything into two words like it is in the sent (which may well be mistranscribed)
