@@ -368,7 +368,7 @@ class LanguageAcquirer():
     def vocab(self):
         return list(set([w for x in self.wordl.memory.values() for w in x.keys() if ' ' not in w]))
 
-    def load_from(self,fpath):
+    def load_from(self, fpath, full_counts=False):
         distributions_fpath = join(fpath,'distributions.json')
         with open(distributions_fpath) as f:
             to_load = json.load(f)
@@ -379,13 +379,14 @@ class LanguageAcquirer():
         self.root_sem_cat_memory.memory = to_load['root_sem_cat']
         self.leaf_syncat_memory.memory = to_load['leaf_sync']
 
-        self.lf_word_counts = pd.read_pickle(join(fpath,'lf_word_counts.pkl'))
-        self.shell_lf_lf_counts = pd.read_pickle(join(fpath,'shell_lf_lf_counts.pkl'))
-        self.sem_shell_lf_counts = pd.read_pickle(join(fpath,'sem_shell_lf_counts.pkl'))
-        self.sem_word_counts = pd.read_pickle(join(fpath,'sem_word_counts.pkl'))
-        self.syn_word_probs = pd.read_pickle(join(fpath,'syn_word_probs.pkl'))
+        if full_counts:
+            self.lf_word_counts = pd.read_pickle(join(fpath,'lf_word_counts.pkl'))
+            self.shell_lf_lf_counts = pd.read_pickle(join(fpath,'shell_lf_lf_counts.pkl'))
+            self.sem_shell_lf_counts = pd.read_pickle(join(fpath,'sem_shell_lf_counts.pkl'))
+            self.sem_word_counts = pd.read_pickle(join(fpath,'sem_word_counts.pkl'))
+            self.syn_word_probs = pd.read_pickle(join(fpath,'syn_word_probs.pkl'))
 
-    def save_to(self,fpath):
+    def save_to(self, fpath, full_counts=False):
         to_dump = {'syntax': {'memory':self.syntaxl.memory,
                   'base_distribution_cache':self.syntaxl.base_distribution_cache},
                   'shmeaningl': {'memory':self.shmeaningl.memory,
@@ -401,11 +402,12 @@ class LanguageAcquirer():
         with open(distributions_fpath,'w') as f:
             json.dump(to_dump,f)
 
-        self.lf_word_counts.to_pickle(join(fpath,'lf_word_counts.pkl'))
-        self.shell_lf_lf_counts.to_pickle(join(fpath,'shell_lf_lf_counts.pkl'))
-        self.sem_shell_lf_counts.to_pickle(join(fpath,'sem_shell_lf_counts.pkl'))
-        self.sem_word_counts.to_pickle(join(fpath,'sem_word_counts.pkl'))
-        self.syn_word_probs.to_pickle(join(fpath,'syn_word_probs.pkl'))
+        if full_counts:
+            self.lf_word_counts.to_pickle(join(fpath,'lf_word_counts.pkl'))
+            self.shell_lf_lf_counts.to_pickle(join(fpath,'shell_lf_lf_counts.pkl'))
+            self.sem_shell_lf_counts.to_pickle(join(fpath,'sem_shell_lf_counts.pkl'))
+            self.sem_word_counts.to_pickle(join(fpath,'sem_word_counts.pkl'))
+            self.syn_word_probs.to_pickle(join(fpath,'syn_word_probs.pkl'))
 
     def get_lf(self, lf_str, words):
         if lf_str in self.full_lfs_cache:
@@ -461,7 +463,7 @@ class LanguageAcquirer():
                 root = self.make_parse_node(lfs,words) # words is a list
                 new_root_prob = root.propagate_below_probs(self.syntaxl,self.shmeaningl,
                            self.meaningl,self.wordl,split_prob=1,is_map=False)
-                if print_train_interps or 'what' in words:
+                if print_train_interps or 'prog' in lfs:
                     _, leaf_cats = self.test_with_gt(lfs, words)
                     print(leaf_cats)
                 #if ARGS.print_gtparsestrs:
@@ -986,7 +988,6 @@ class LanguageAcquirer():
             stop = min(len(train_data), i+((n_test_dists+1)//2)+1)
             lf_strs_incl_distractors = [x['lf'] for x in testset[start:stop]]
             selected_lf = self.step(lf_strs_incl_distractors, words, apply_buffers=False, put_in_ltbs=False, mode='test', print_train_interps=ARGS.print_train_interps)
-            print(selected_lf, lf)
             if selected_lf == lf:
                 n_select_correct += 1
             if all(w in self.mwe_vocab for w in words):
@@ -1003,11 +1004,10 @@ class LanguageAcquirer():
         acc_by_type = {k:np.array(v).mean() for k,v in acc_by_type.items()}
         if acc_excl_nws > 1:
             breakpoint()
-        print(f'num test points with only seen words: {n_with_seen_words}')
-        print(f'harsh acc: {harsh_acc:.3f}\nacc excluding new words: {acc_excl_nws:.3f}')
+        #print(f'num test points with only seen words: {n_with_seen_words}')
+        #print(f'harsh acc: {harsh_acc:.3f}\nacc excluding new words: {acc_excl_nws:.3f}')
         self.train()
-        print(n_unseen_select_correct/(len(test_data)-n_with_seen_words))
-        breakpoint()
+        #print(n_unseen_select_correct/(len(test_data)-n_with_seen_words))
         return acc_excl_nws, harsh_acc, select_acc, acc_by_type
 
     def test_wh_words(self, testset):
@@ -1044,7 +1044,7 @@ class LanguageAcquirer():
                         n_correct += 1
                     else:
                         n_wrong += 1
-                        print(leaf_cats)
+                        #print(leaf_cats)
                     #if gt_whw_cat != 'other': denom += 1
                 if len(pred_whw_cat_as_list_wgt) > 0:
                     pred_whw_cat_wgt = pred_whw_cat_as_list_wgt[0]
@@ -1052,7 +1052,7 @@ class LanguageAcquirer():
                     if pred_whw_cat_wgt == gt_whw_cat:
                         n_correct_wgt += 1
                     else:
-                        print('WITH GT:', leaf_cats_wgt)
+                        #print('WITH GT:', leaf_cats_wgt)
                         n_wrong_wgt += 1
                     #if gt_whw_cat != 'other':
                         #denom_wgt += 1
@@ -1070,7 +1070,7 @@ class LanguageAcquirer():
             breakpoint()
         return n_correct/(denom+1e-9), n_correct_wgt/(denom+1e-9), preds, preds_wgt, gts, gt_words
 
-    def test_nonce(self):
+    def old_test_nonce(self):
         results = {}
         before = deepcopy(self.syntaxl.memory)
         self.save_to('/tmp')
@@ -1092,6 +1092,64 @@ class LanguageAcquirer():
             results[const_type] = cpp
             #print(self.wordl.topk(daxm))
             self.load_from('/tmp')
+            #shutil.rmtree.remove_dirs('tmp')
+            assert self.syntaxl.memory == before
+        self.train()
+        self.enable_caching()
+        print(results)
+        return results
+
+    def test_nonce(self):
+        results = {}
+        before = deepcopy(self.syntaxl.memory)
+        self.save_to('/tmp', full_counts=False)
+        self.eval()
+        self.disable_caching()
+        #self.wordl.alpha = 0.05
+        for const_type, (orig_sent, orig_lfs, daxm) in nonce_dps.items():
+            all_cpps = []
+            print(const_type)
+            all_subjs = ('I', 'you', 'it') if ARGS.vary_subj else ['you']
+            all_obj_dets = ('a', 'the') if ARGS.vary_obj_det else ['the']
+            all_obj_nouns = ('pencil', 'name') if ARGS.vary_obj_det else ['pencil']
+            for subj in all_subjs:#
+                for obj_det in all_obj_dets:
+                    for obj_noun in all_obj_nouns:
+                        sent = orig_sent.replace('SUBJ', subj)
+                        lfs = [x.replace('SUBJ', subj.lower()) for x in orig_lfs]
+                        sent = sent.replace('OBJDET', obj_det)
+                        lfs = [x.replace('OBJDET', obj_det) for x in lfs]
+                        sent = sent.replace('OBJNOUN', obj_noun)
+                        lfs = [x.replace('OBJNOUN', obj_noun) for x in lfs]
+                        if const_type=='prog':
+                            if subj=='I':
+                                sent = sent.replace('COP', "'m'")
+                                lfs = [x.replace('NUM', '1') for x in lfs]
+                            elif subj=='you':
+                                sent = sent.replace('COP', "'re'")
+                                lfs = [x.replace('NUM', '2') for x in lfs]
+                            elif subj=='it':
+                                sent = sent.replace('COP', "'s'")
+                                lfs = [x.replace('NUM', '3') for x in lfs]
+                        #if (lfs, sent) == (['v|dax pro:per|you (det:art|the n|pencil)', 'v|dax (det:art|the n|pencil) pro:per|you'], 'you dax the pencil'):
+                            #breakpoint()
+                        self.step(lfs, sent.split(), apply_buffers=True, put_in_ltbs=False, mode='train', print_train_interps=ARGS.print_train_interps)
+                        print(lfs, sent, daxm)
+                        if const_type=='prog':
+                            print(self.wordl.topk(daxm))
+                        #daxm = 'lambda $0.v|dax $0' if const_type=='intrans' else 'lambda $0.lambda $1.v|dax $0 $1'
+                        self.wordl.alpha = 0.0
+                        #self.meaningl.alpha = 0
+                        cpp = self.wordl.prob('dax', daxm)# * self.meaningl.marg_prob(daxm)
+                        #cpp = self.wordl.prob('dax', daxm)*self.shmeaningl.prob('lambda $0.lambda $1.vconst $0 $1','S\\NP/NP')
+                        self.wordl.alpha = 1
+                        #self.meaningl.alpha = 1
+                        #cpp = self.wordl.memory[daxm]['dax'] / self.wordl.memory[daxm]['COUNT']
+                        assert cpp <= 1
+                        all_cpps.append(cpp)
+                        self.load_from('/tmp', full_counts=False)
+            results[const_type] = np.array(all_cpps).mean()
+            #print(self.wordl.topk(daxm))
             #shutil.rmtree.remove_dirs('tmp')
             assert self.syntaxl.memory == before
         self.train()
@@ -1194,6 +1252,9 @@ if __name__ == "__main__":
     parser.add_argument("--test-nonce", action="store_true")
     parser.add_argument("--test-parses", action="store_true")
     parser.add_argument("--verbose-as", action="store_true")
+    parser.add_argument("--vary-subj", action="store_true")
+    parser.add_argument("--vary-obj-det", action="store_true")
+    parser.add_argument("--vary-obj-noun", action="store_true")
     parser.add_argument("--vocab-thresh", type=float, default=0.0)
     parser.add_argument("-d", "--dset", type=str, default='adam')
     parser.add_argument("-t","--is-test", action="store_true")
@@ -1254,15 +1315,27 @@ if __name__ == "__main__":
         breakpoint()
 
     nonce_dps = {
-        'trans': ('you dax the pencil', ['v|dax pro:per|you (det:art|the n|pencil)', 'v|dax (det:art|the n|pencil) pro:per|you']),
-        'negmod': ('you can n\'t dax the pencil', ['not (mod|can (v|dax pro:per|you (det:art|the n|pencil)))', 'not (mod|can (v|dax (det:art|the n|pencil) pro:per|you))']),
-        'intrans': ('you dax', ['v|dax pro:per|you', 'lambda $0.v|dax pro:per|you $0']),
-        'modal': ('you can dax the pencil', ['mod|can (v|dax pro:per|you (det:art|the n|pencil))', 'mod|can (v|dax (det:art|the n|pencil) pro:per|you)']),
-        'polarq': ('will you dax the pencil', ['Q (mod|will (v|dax pro:per|you (det:art|the n|pencil)))', 'Q (mod|will (v|dax (det:art|the n|pencil) pro:per|you))']),
-        'negpolarq': ('can n\'t you dax the pencil', ['Q (not (mod|can (v|dax pro:per|you (det:art|the n|pencil))))', 'Q (not (mod|can (v|dax (det:art|the n|pencil) pro:per|you)))']),
-        'prog': ('you \'re dax the pencil', ['cop|pres-2s (v|dax pro:per|you (det:art|the n|pencil))', 'cop|pres-2s (v|dax (det:art|the n|pencil) pro:per|you)']),
-        'wh': ('who will you dax', ['Q (mod|will (v|dax pro:int|WHO pro:per|you))', 'Q (mod|will (v|dax pro:per|you pro:int|WHO))']),
-        'negwh': ('who can n\'t you dax', ['Q (not (mod|can (v|dax pro:int|WHO pro:per|you)))', 'Q (not (mod|can (v|dax pro:per|you pro:int|WHO)))']),
+        'trans': ('you dax the pencil', ['v|dax pro:per|you (det:art|the n|pencil)', 'v|dax (det:art|the n|pencil) pro:per|you'], 'lambda $0. lambda $1.v|dax $0 $1'),
+        'negmod': ('you can n\'t dax the pencil', ['not (mod|can (v|dax pro:per|you (det:art|the n|pencil)))', 'not (mod|can (v|dax (det:art|the n|pencil) pro:per|you))'], 'lambda $0. lambda $1.v|dax $0 $1'),
+        'intrans': ('you dax', ['v|dax pro:per|you', 'lambda $0.v|dax pro:per|you $0'], 'lambda $0.v|dax'),
+        'modal': ('you can dax the pencil', ['mod|can (v|dax pro:per|you (det:art|the n|pencil))', 'mod|can (v|dax (det:art|the n|pencil) pro:per|you)'], 'lambda $0. lambda $1.v|dax $0 $1'),
+        'polarq': ('will you dax the pencil', ['Q (mod|will (v|dax pro:per|you (det:art|the n|pencil)))', 'Q (mod|will (v|dax (det:art|the n|pencil) pro:per|you))'], 'lambda $0. lambda $1.v|dax $0 $1'),
+        'negpolarq': ('can n\'t you dax the pencil', ['Q (not (mod|can (v|dax pro:per|you (det:art|the n|pencil))))', 'Q (not (mod|can (v|dax (det:art|the n|pencil) pro:per|you)))'], 'lambda $0. lambda $1.v|dax $0 $1'),
+        'prog': ('you \'re dax the pencil', ['cop|pres-2s (v|dax pro:per|you (det:art|the n|pencil))', 'cop|pres-2s (v|dax (det:art|the n|pencil) pro:per|you)'], 'lambda $0. lambda $1.v|dax-prog $0 $1'),
+        'wh': ('who will you dax', ['Q (mod|will (v|dax pro:int|WHO pro:per|you))', 'Q (mod|will (v|dax pro:per|you pro:int|WHO))'], 'lambda $0. lambda $1.v|dax $0 $1'),
+        'negwh': ('who can n\'t you dax', ['Q (not (mod|can (v|dax pro:int|WHO pro:per|you)))', 'Q (not (mod|can (v|dax pro:per|you pro:int|WHO)))'], 'lambda $0. lambda $1.v|dax $0 $1'),
+        }
+
+    nonce_dps = {
+        'trans': ('SUBJ dax OBJDET OBJNOUN', ['v|dax pro:per|SUBJ (det:art|OBJDET n|OBJNOUN)', 'v|dax (det:art|OBJDET n|OBJNOUN) pro:per|SUBJ'], 'lambda $0.lambda $1.v|dax $0 $1'),
+        'negmod': ('SUBJ can n\'t dax OBJDET OBJNOUN', ['not (mod|can (v|dax pro:per|SUBJ (det:art|the n|OBJNOUN)))', 'not (mod|can (v|dax (det:art|the n|OBJNOUN) pro:per|SUBJ))'], 'lambda $0.lambda $1.v|dax $0 $1'),
+        'intrans': ('SUBJ dax', ['v|dax pro:per|SUBJ', 'lambda $0.v|dax pro:per|SUBJ $0'], 'lambda $0.v|dax $0'),
+        'modal': ('SUBJ can dax OBJDET OBJNOUN', ['mod|can (v|dax pro:per|SUBJ (det:art|the n|OBJNOUN))', 'mod|can (v|dax (det:art|the n|OBJNOUN) pro:per|SUBJ)'], 'lambda $0.lambda $1.v|dax $0 $1'),
+        'polarq': ('will SUBJ dax OBJDET OBJNOUN', ['Q (mod|will (v|dax pro:per|SUBJ (det:art|the n|OBJNOUN)))', 'Q (mod|will (v|dax (det:art|the n|OBJNOUN) pro:per|SUBJ))'], 'lambda $0.lambda $1.v|dax $0 $1'),
+        'negpolarq': ('can n\'t SUBJ dax OBJDET OBJNOUN', ['Q (not (mod|can (v|dax pro:per|SUBJ (det:art|the n|OBJNOUN))))', 'Q (not (mod|can (v|dax (det:art|the n|OBJNOUN) pro:per|SUBJ)))'], 'lambda $0.lambda $1.v|dax $0 $1'),
+        'prog': ('SUBJ COP dax OBJDET OBJNOUN', ['cop|pres-2s (v|dax-prog pro:per|SUBJ (det:art|the n|OBJNOUN))', 'cop|pres-NUMs (v|dax-prog (det:art|the n|OBJNOUN) pro:per|SUBJ)'], 'lambda $0.lambda $1.v|dax-prog $0 $1'),
+        'wh': ('who will SUBJ dax', ['Q (mod|will (v|dax pro:int|WHO pro:per|SUBJ))', 'Q (mod|will (v|dax pro:per|SUBJ pro:int|WHO))'], 'lambda $0.lambda $1.v|dax $0 $1'),
+        'negwh': ('who can n\'t SUBJ dax', ['Q (not (mod|can (v|dax pro:int|WHO pro:per|SUBJ)))', 'Q (not (mod|can (v|dax pro:per|SUBJ pro:int|WHO)))'], 'lambda $0.lambda $1.v|dax $0 $1'),
         }
 
     const_types = ('other', 'intrans', 'trans', 'ditrans', 'mod', 'q', 'whq', 'prog', 'neg', 'imp')
@@ -1316,7 +1389,7 @@ if __name__ == "__main__":
                 b.refresh()
         la.eval()
         new_probs_with_prior = la.probs_of_word_orders(False)
-        if ((i+1)%chunk_size == 0 and i+1!=len(train_data) and not ARGS.is_test) or (ARGS.is_test and i+1==len(train_data)):
+        if ((i)%chunk_size == 0 and i+1!=len(train_data) and not ARGS.is_test) or (ARGS.is_test and i+1==len(train_data)):
             if len(la.lf_vocab)==0 or len(la.mwe_vocab)==0 or len(la.shell_lf_vocab)==0 or len(la.sync_vocab)==0:
                 w2lf, w2s, w2b = 0, 0, 0
             else:
@@ -1386,7 +1459,7 @@ if __name__ == "__main__":
         if ARGS.is_test:
             xplot = np.arange(len(all_w2lf_accs))
         else:
-            xplot = [i for i in range(len(train_data[:ARGS.break_train_at])) if (i+1)%chunk_size == 0 and i+1!=len(train_data[:ARGS.break_train_at])]
+            xplot = [i for i in range(len(train_data[:ARGS.break_train_at])) if (i)%chunk_size == 0 and i+1!=len(train_data[:ARGS.break_train_at])]
             xplot.append(len(train_data[:ARGS.break_train_at]))
         whw_preds_df = pd.DataFrame(all_whw_preds, index=xplot+['gt'])
         whw_preds_df_wgt = pd.DataFrame(all_whwwgt_preds, index=xplot+['gt'])
@@ -1432,7 +1505,6 @@ if __name__ == "__main__":
         plt.savefig(fpath)
         plt.clf()
         os.system(f'/usr/bin/xdg-open {fpath}')
-        breakpoint()
 
         if ARGS.test_nonce:
             final_nonce_results = la.test_nonce()
@@ -1549,7 +1621,6 @@ if __name__ == "__main__":
     get_changes(whw_preds_df)
     print('WITH GT')
     get_changes(whw_preds_df_wgt)
-    breakpoint()
 
     la.parse("what wo n't you eat".split())
     la.test_wh_words(test_data)
