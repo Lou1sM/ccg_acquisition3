@@ -276,7 +276,7 @@ class LogicalForm:
                 #traised_gstr = de_q(f.lf_str)
                 traised_gstr = f.lf_str
                 traised_fstr = logical_type_raise(g.lf_str)
-                if self.sem_cats == {'Swhq'}:
+                if self.sem_cats == {'Swhq'}: # can't remember why this doesn't show up in the f_cats def in below cond. block
                     f_cats = {'Swhq|(Sq|NP)'}
                     traised_f = LogicalForm(traised_fstr, caches=self.caches, verbose_as=self.verbose_as, specified_cats=f_cats)
                     #if has_q:
