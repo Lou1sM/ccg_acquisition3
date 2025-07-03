@@ -1,6 +1,7 @@
 import sys
 from tqdm import tqdm
 import numpy as np
+from tqdm import tqdm
 from dl_utils.misc import check_dir, set_experiment_dir
 import os
 import networkx as nx
@@ -944,6 +945,7 @@ class LanguageAcquirer():
         self.draw_graph(all_tree_levels, fs=font_size, clip=clip, show_graph=show_graph)
 
     def test_parses(self, testset):
+        const_types = ('other', 'intrans', 'trans', 'ditrans', 'mod', 'q', 'whq', 'prog', 'neg', 'imp')
         self.eval()
         n_correct = 0
         n_select_correct = 0

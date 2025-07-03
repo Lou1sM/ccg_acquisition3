@@ -605,7 +605,7 @@ class LogicalForm:
         return self.sem_cats != set(['X'])
 
 class ParseNode():
-    def __init__(self, lf, words, node_type, sync, parent=None, sibling=None):
+    def __init__(self, lf, words, node_type, sync, parent=None, sibling=None, offset=0):
         self.lf = lf
         self.words = words
         self.splits = []
@@ -620,6 +620,7 @@ class ParseNode():
             "you're trying to specify a sibling for the root node"
         self.sem_cats = self.lf.sem_cats
         self.sync = sync
+        self.offset = offset
         self.is_leaf = self.lf.is_semantic_leaf or len(self.words) == 1
         if not self.is_leaf:
             for split_point in range(1,len(self.words)):
@@ -674,16 +675,16 @@ class ParseNode():
                         breakpoint()
                     if combines_subj_first(fshell) and not bool(refwdfwdtranscat.match(fsc)):
                         continue
-                    g_child = ParseNode(g,right_words,parent=self,node_type='right_fwd_app', sync=gsc)
-                    f_child = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',sync=fsc)
+                    g_child = ParseNode(g,right_words,parent=self,node_type='right_fwd_app', sync=gsc, offset=self.offset+len(left_words))
+                    f_child = ParseNode(f,left_words,parent=self,node_type='left_fwd_app',sync=fsc, offset=self.offset)
                     self.append_split(f_child, g_child, 'fwd_app')
             else:
                 assert direction=='bck'
                 for fsc in possible_f_syncs:
                     if combines_subj_first(fshell) and not bool(rebckbcktranscat.match(fsc)):
                         continue
-                    g_child = ParseNode(g,left_words,parent=self,node_type='left_bck_app', sync=gsc)
-                    f_child = ParseNode(f,right_words,parent=self,node_type='right_bck_app',sync=fsc)
+                    g_child = ParseNode(g,left_words,parent=self,node_type='left_bck_app', sync=gsc, offset=self.offset)
+                    f_child = ParseNode(f,right_words,parent=self,node_type='right_bck_app',sync=fsc, offset=self.offset+len(left_words))
                     self.append_split(g_child, f_child, 'bck_app')
 
     def append_split(self,left,right,combinator):
